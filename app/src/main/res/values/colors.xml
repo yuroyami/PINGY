@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="main1">#23f49b</color>
+    <color name="main2">#68f9af</color>
+    <color name="main_bg">#09954C</color>
+    <color name="sgn1">#EAEAEA</color>
+    <color name="sgn2">#808080</color>
+    <color name="sgn3">#474747</color>
+    <color name="sgn_highlight">#A6FFCA</color>
+    <color name="sgn_shade">#5CFF7F</color>
+    <color name="sgn_screener">#00870D</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="sgn4">#EAEAEA</color>
+    <color name="sgn5">#808080</color>
+    <color name="sgn6">#474747</color>
+
+    <color name="text1">#7a7a7a</color>
+    <color name="text2">#555555</color>
+</resources>
