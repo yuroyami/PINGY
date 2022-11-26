@@ -25,22 +25,6 @@ import kotlin.math.pow
 
 object PingGraph {
 
-    /** The width of a single ping line, in pixels */
-    private const val PING_WIDTH = 4f
-
-    /** The most important pings to put horizontal lines on (for distinguishment)
-       This can be a list of any number of values, but I prefer to keep it like this */
-    private val landMarks = mutableListOf(10f, 20f, 30f, 50f, 70f, 100f, 150f, 200f, 300f, 400f, 500f, 1000f)
-
-    /** Describes the angle of attack for the expontential graph.
-     * Higher values mean less zoom on smaller pings, but more zoom on bigger pings.
-     * The default is 8.0 which makes smaller pings stand out and doesn't cast much light on big values
-     * 8.0 is only ideal because our max ping is 1000f. It should be changed when choosing other max vals */
-    private const val PING_ZOOM_FACTOR = 8.0
-
-    /** Describes the highest ping value possible on the graph, default is 1000 */
-    private const val PING_MAX_VAL = 1000f
-
     /** Our custom Composable function (which is the equivalent of a custom view in XML)
      * @param modifier Our Composable will follow this modifier's measurements to draw itself,
      * think of it as layout parameters when it comes to XML.
@@ -57,8 +41,8 @@ object PingGraph {
             drawImage(image = img, dstSize = IntSize(size.width.toInt(), size.height.toInt()))
 
             /* Drawing line indicators for each ping value milestone (20, 50, 100, etc) */
-            for (y in landMarks) {
-                val h = calculatePingY(y.toInt(), size.height)
+            for (y in panel.landMarks) {
+                val h = calculatePingY(y.toInt(), size.height, panel.mxpc.value.toFloat(), panel.angleOfAttack.value)
                 drawLine(
                     start = Offset(0f, size.height - h),
                     end = Offset(size.width, size.height - h),
@@ -69,20 +53,20 @@ object PingGraph {
             }
 
             /* Drawing all pings */
-            val maxPings = size.width / PING_WIDTH
+            val maxPings = size.width / panel.pingWidth.value
             val displayablePings = (if (maxPings > pings.size) pings.size-1 else maxPings).toInt()
 
             if (pings.size != 0) {
                 for (i in (0 until displayablePings)) {
                     try {
-                        val x = size.width - (displayablePings * PING_WIDTH) + (PING_WIDTH * i) //quick maths xD
+                        val x = size.width - (displayablePings * panel.pingWidth.value) + (panel.pingWidth.value * i) //quick maths xD
                         val p = pings[pings.size - displayablePings + i]
-                        val y = calculatePingY(p, size.height)
+                        val y = calculatePingY(p, size.height, panel.mxpc.value.toFloat(), panel.angleOfAttack.value)
 
                         drawLine(
                             end = Offset(x, size.height - y),
                             color = calcPingColor(p),
-                            strokeWidth = PING_WIDTH,
+                            strokeWidth = panel.pingWidth.value.toFloat(),
                             start = Offset(x, size.height),
                         )
                     } catch (e: IndexOutOfBoundsException) {
@@ -95,16 +79,16 @@ object PingGraph {
             /* Drawing line indicator texts (must be declared here to be drawn above pings) */
             val textPaint = Paint().asFrameworkPaint().apply {
                 isAntiAlias = true
-                textSize = 9.sp.toPx()
-                color = Color(255, 255, 255, 100).toArgb()
+                textSize = 7.sp.toPx()
+                color = Color(200, 200, 220, 160).toArgb()
                 typeface = Typeface.create("inter", Typeface.NORMAL)
             }
 
             drawIntoCanvas {
-                for (y in landMarks) {
-                    val h = calculatePingY(y.toInt(), size.height)
+                for (y in panel.landMarks) {
+                    val h = calculatePingY(y.toInt(), size.height, panel.mxpc.value.toFloat(), panel.angleOfAttack.value)
                     it.nativeCanvas.drawText(
-                        "${y.toInt()}ms", 20f, size.height - h - 12f,
+                        "${y.toInt()}", 20f, size.height - h - 4f,
                         textPaint)
                 }
             }
@@ -127,15 +111,15 @@ object PingGraph {
      * @param [x] value to expontentialize.
      * @param [f] expontentialization factor.
      * */
-    fun exponentialize(x: Float, f: Float): Double {
+    fun exponentialize(x: Float, f: Float, zoomFactor: Float): Double {
         if (x == f) return f.toDouble()
-        return  f.toDouble() * ( 1.0 - 2.0.pow((   -x.toDouble() * PING_ZOOM_FACTOR /  f.toDouble() )))
+        return  f.toDouble() * ( 1.0 - 2.0.pow((   -x.toDouble() * zoomFactor /  f.toDouble() )))
     }
 
     /** Calculates a ping height on the current panel based on its value
      * This calls [exponentialize] internally then linearalize it according to our panel height */
-    fun calculatePingY(ping: Int, panelHeight: Float): Float {
-        return (exponentialize(ping.toFloat(), PING_MAX_VAL) * (panelHeight.toDouble()/ PING_MAX_VAL)).toFloat()
+    fun calculatePingY(ping: Int, panelHeight: Float, pingMaxVal: Float, zoomFactor: Float): Float {
+        return (exponentialize(ping.toFloat(), pingMaxVal, zoomFactor) * (panelHeight.toDouble()/ pingMaxVal)).toFloat()
     }
 
     //

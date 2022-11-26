@@ -73,33 +73,10 @@ dependencies {
     /* Android AppCompat Library */
     implementation 'androidx.appcompat:appcompat:1.7.0-alpha01'
 
-    /* Material Components */
-    implementation 'com.google.android.material:material:1.8.0-alpha02'
-
-    /* ConstraintLayout */
-    implementation 'androidx.constraintlayout:constraintlayout:2.2.0-alpha04'
-
-    /* ViewPager */
-    implementation 'androidx.viewpager2:viewpager2:1.1.0-beta01'
-
-    /* Preference Screen */
-    implementation 'androidx.preference:preference-ktx:1.2.0'
-
-    /* Custom Popup Dialog */
-    implementation 'io.github.razerdp:BasePopup:3.2.0'
-
-    /* Glide for Image-Processing */
-    implementation 'com.github.bumptech.glide:glide:4.13.2'
-
     /* ViewModel and LiveData */
     implementation 'androidx.lifecycle:lifecycle-livedata-ktx:2.6.0-alpha03'
     implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.0-alpha03'
-
-    /* gson for JSON (de)serialization */
-    implementation 'com.google.code.gson:gson:2.10'
-
-    /* SAF manager */
-    implementation "androidx.documentfile:documentfile:1.0.1"
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.6.0-alpha03'
 
     /* Miscellaneous Utils */
     implementation 'com.blankj:utilcodex:1.31.1'
@@ -111,21 +88,25 @@ dependencies {
     /* Now we move onto declaring Jetpack Compose libraries one by one */
     /* It's worth noting that there are only a few mandatory classes which are foundation and UI */
     /* Material3 is built on top of them, so, you can include foundation and UI instead */
-    implementation 'androidx.compose.material:material' //Material3 + Foundation + UI (core)
-    implementation "com.google.android.material:compose-theme-adapter:1.2.0" //Theme adapter
+    implementation 'androidx.compose.material3:material3' //Material3 + Foundation + UI (core)
+    implementation "com.google.android.material:compose-theme-adapter-3:1.1.0" //Theme adapter
 
     implementation 'androidx.compose.ui:ui-tooling-preview'
-    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.5.1'
     debugImplementation 'androidx.compose.ui:ui-tooling'
 
     implementation 'androidx.compose.material:material-icons-core' //Material3 doesn't have icons
     implementation 'androidx.compose.material:material-icons-extended' //More Icons
-    //implementation 'androidx.compose.material3:material3-window-size-class' //Window size utils
+    implementation 'androidx.compose.material3:material3-window-size-class' //Window size utils
+    implementation 'androidx.compose.material:material-ripple'
+
     implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.5.1' //ViewModel compatibility
     implementation 'androidx.activity:activity-compose:1.6.1' //Activity compatibility
     implementation 'androidx.compose.runtime:runtime-livedata' //LiveData compatibility
 
-    implementation "com.google.accompanist:accompanist-pager:0.27.1" //Accompanist
+    def accompanist = "0.27.1"
+    implementation "com.google.accompanist:accompanist-flowlayout:$accompanist"
+
+    //implementation "com.google.accompanist:accompanist-pager:0.27.1" //Accompanist
 
     debugImplementation 'androidx.compose.ui:ui-test-manifest'
 

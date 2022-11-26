@@ -3,7 +3,6 @@ package app.utils
 import android.annotation.TargetApi
 import android.app.Activity
 import android.content.Context
-import android.graphics.Color
 import android.os.Build
 import android.util.DisplayMetrics
 import android.util.Log
@@ -14,7 +13,6 @@ import androidx.annotation.ColorInt
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import androidx.preference.PreferenceManager
 import java.io.*
 import java.nio.charset.StandardCharsets.UTF_8
 import java.security.MessageDigest
@@ -146,13 +144,6 @@ object PingyUtils {
             window.attributes?.layoutInDisplayCutoutMode =
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER
         }
-    }
-
-    /** Returns a hexadecimal color code from a preference ColorInt **/
-    fun getColorCode(key: String, context: Context): String {
-        @ColorInt val color =
-            PreferenceManager.getDefaultSharedPreferences(context).getInt(key, Color.BLACK)
-        return String.format("#%06X", 0xFFFFFF and color)
     }
 
     /** This basically just changes the Status Bar color [Unused]*/

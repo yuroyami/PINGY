@@ -22,7 +22,6 @@
             android:exported="true"
             android:imeOptions="flagNoExtractUi"
             android:screenOrientation="fullSensor"
-            android:keepScreenOn="true"
             android:fitsSystemWindows="true"
             android:windowSoftInputMode="adjustNothing">
             <intent-filter>

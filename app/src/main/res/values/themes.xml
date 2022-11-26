@@ -1,14 +1,15 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
-    <style name="Theme.app" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+    <style name="Theme.app" parent="Theme.Material3.DayNight.NoActionBar">
         <!-- Primary brand color. -->
-        <item name="colorPrimary">@color/sgn1</item>
+        <item name="colorPrimary">@color/main1</item>
         <item name="colorPrimaryVariant">@color/sgn2</item>
         <item name="colorOnPrimary">@color/text1</item>
         <!-- Secondary brand color. -->
-        <item name="colorSecondary">@color/sgn2</item>
+        <item name="colorSecondary">@color/main2</item>
         <item name="colorSecondaryVariant">@color/sgn3</item>
         <item name="colorOnSecondary">@color/text1</item>
+        <item name="colorTertiary">@color/sgn_highlight</item>
         <!-- System bar properties -->
         <item name="android:statusBarColor">@color/main_bg</item>
         <item name="android:windowLightStatusBar" tools:targetApi="m">true</item>
@@ -23,7 +24,7 @@
         <item name="android:windowContentOverlay">@null</item>
         <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="p">default</item>
         <item name="android:fontFamily">@font/inter</item>
-        <item name="android:windowBackground">#00ffffff</item>
+        <item name="android:windowBackground">#ff888888</item>
     </style>
 
     <!---  -->`
