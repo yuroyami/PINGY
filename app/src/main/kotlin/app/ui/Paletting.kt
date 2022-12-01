@@ -25,4 +25,7 @@ object Paletting {
     val B_LIGHT_COLOR = Color(255,255,255)
     val B_DARK_COLOR = Color(199,199,199)
 
+    /** Sgn Shade */
+    val SGN = Color(92, 255, 127)
+    val SGN2 = Color(92, 200, 90)
 }

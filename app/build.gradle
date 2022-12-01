@@ -47,7 +47,6 @@ android {
         jvmTarget = '1.8'
     }
     buildFeatures {
-        viewBinding true /* Replacing findViewById by viewbinding generated classes */
         compose true /* Enabling Jetpack Compose to replace classic views with composeviews */
     }
     lintOptions {
@@ -78,9 +77,6 @@ dependencies {
     implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.0-alpha03'
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.6.0-alpha03'
 
-    /* Miscellaneous Utils */
-    implementation 'com.blankj:utilcodex:1.31.1'
-
     /*------------------- Jetpack Compose related libraries ----------------- */
     /* Jetpack Compose BOM chooses libraries' versions for us so we don't have to specify them */
     implementation platform('androidx.compose:compose-bom:2022.11.00')
@@ -88,7 +84,7 @@ dependencies {
     /* Now we move onto declaring Jetpack Compose libraries one by one */
     /* It's worth noting that there are only a few mandatory classes which are foundation and UI */
     /* Material3 is built on top of them, so, you can include foundation and UI instead */
-    implementation 'androidx.compose.material3:material3' //Material3 + Foundation + UI (core)
+    implementation 'androidx.compose.material3:material3:1.1.0-alpha02' //Material3 + Foundation + UI (core)
     implementation "com.google.android.material:compose-theme-adapter-3:1.1.0" //Theme adapter
 
     implementation 'androidx.compose.ui:ui-tooling-preview'

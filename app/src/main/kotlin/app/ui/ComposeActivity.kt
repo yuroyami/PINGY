@@ -1,23 +1,25 @@
-package app
+package app.ui
 
+import android.annotation.SuppressLint
 import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.consumedWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Addchart
@@ -46,12 +48,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -61,24 +68,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.PopupProperties
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import app.ui.compose.PingGraph
-import app.utils.Constants
-import app.utils.Panel
+import app.R
+import app.logic.Constants
+import app.logic.Panel
 import com.google.accompanist.flowlayout.FlowRow
 import com.google.accompanist.flowlayout.MainAxisAlignment
 import kotlinx.coroutines.launch
-import kotlin.properties.Delegates
 
 class ComposeActivity : ComponentActivity() {
 
     /** Defines the operating PingGraph [Panel]s but in a mutable state (so it can be observed) */
     val panels = mutableStateListOf<Panel>()
 
-    /* Screen Measurements, to be calculated later, and used in some UI functions */
-    var screenWidth by Delegates.notNull<Int>()
-    var screenHeight by Delegates.notNull<Int>()
-
-    @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+    @SuppressLint("CoroutineCreationDuringComposition")
+    @OptIn(ExperimentalMaterial3Api::class, ExperimentalTextApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -90,16 +93,19 @@ class ComposeActivity : ComponentActivity() {
         /** Decoding is heavy, we do it once and pass it to composables */
         val panelBG = BitmapFactory.decodeResource(resources, R.drawable.panel_bg).asImageBitmap()
 
-        /** First main panel (unremovable) */
-        panels.add(Panel(ip = "1.1.1.1"))
+        panels.add(Panel(ip = "1.1.1.1",
+            h = resources.displayMetrics.heightPixels.toFloat(),
+            w = resources.displayMetrics.widthPixels.toFloat()))
 
         /** Starting our Jetpack Compose visual symphony, let's conduct ! */
         setContent {
             /** Getting screen properties */
             val configuration = LocalConfiguration.current
             val density = LocalDensity.current
-            screenHeight = with(density) { configuration.screenHeightDp.dp.roundToPx() }
-            screenWidth = with(density) { configuration.screenHeightDp.dp.roundToPx() }
+            val screenHeightDp = configuration.screenHeightDp.dp
+            val screenWidthDp = configuration.screenWidthDp.dp
+            val screenHeightPx = with(density) { screenHeightDp.roundToPx() }
+            val screenWidthPx = with(density) { screenWidthDp.roundToPx() }
 
             /** Remembering stuff like scope for onClicks, snackBar host state for snackbars ... etc */
             val scope = rememberCoroutineScope()
@@ -108,9 +114,6 @@ class ComposeActivity : ComponentActivity() {
             /** Doing 'remember' on a mutable state means that the system will recompose
              * any view that is using this rememberable */
             val panelsRememberable = remember { panels }
-
-            /** Colors */
-            val color1 = Color(resources.getColor(R.color.sgn_shade))
 
             /** Starting the UI composition with a scaffold that lays everything out */
             Scaffold(
@@ -124,7 +127,7 @@ class ComposeActivity : ComponentActivity() {
                                 .wrapContentHeight(),
                             shape = RoundedCornerShape(topEnd = 0.dp, topStart = 0.dp, bottomEnd = 12.dp, bottomStart = 12.dp),
                             colors = CardDefaults.cardColors(containerColor = Color.LightGray),
-                            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 12.dp),
+                            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 12.dp)
                         ) {
 
                             Column(
@@ -137,6 +140,46 @@ class ComposeActivity : ComponentActivity() {
                                 /** ROW acts like a linear layout with horizontal orientation */
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Box(modifier = Modifier.padding(6.dp)) {
+                                        Text(
+                                            modifier = Modifier.wrapContentWidth(),
+                                            text = "PINGY",
+                                            letterSpacing = 1.sp,
+                                            style = TextStyle(
+                                                color = Color.Black,
+                                                drawStyle = Stroke(
+                                                    miter = 0f,
+                                                    width = 5f,
+                                                    join = StrokeJoin.Round
+                                                ),
+                                                fontFamily = FontFamily(Font(R.font.inter)),
+                                                fontSize = 24.sp,
+                                            )
+                                        )
+                                        Text(
+                                            modifier = Modifier.wrapContentWidth(),
+                                            text = "PINGY",
+                                            letterSpacing = 1.sp,
+                                            style = TextStyle(
+                                                brush = Brush.linearGradient(
+                                                    colors = listOf(Paletting.A_LIGHT_COLOR, Paletting.SGN, Paletting.A_LIGHT_COLOR)
+                                                ),
+                                                shadow = Shadow(
+                                                    color = Paletting.SGN,
+                                                    offset = Offset(1f, 1f),
+                                                    blurRadius = 10f
+                                                ),
+                                                fontFamily = FontFamily(Font(R.font.inter)),
+                                                fontSize = 24.sp,
+                                            )
+                                        )
+                                    }
+                                }
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier
                                         .fillMaxWidth(0.95f)
                                         .padding(vertical = 12.dp)
@@ -146,7 +189,7 @@ class ComposeActivity : ComponentActivity() {
                                     val txt = remember { mutableStateOf(Constants.iplist[0]) }
 
                                     val digitalTxt = TextStyle(
-                                        color = color1, textAlign = TextAlign.Center,
+                                        color = Paletting.SGN, textAlign = TextAlign.Center,
                                         fontSize = 24.sp, fontFamily = FontFamily(Font(R.font.digital))
                                     )
                                     TextField(
@@ -192,7 +235,7 @@ class ComposeActivity : ComponentActivity() {
                                     }
 
                                     /** The button that adds panels, I like it being a FAB for the style */
-                                    FloatingActionButton(modifier = Modifier.fillMaxWidth(), containerColor = color1,
+                                    FloatingActionButton(modifier = Modifier.fillMaxWidth(), containerColor = Paletting.SGN,
                                         onClick = {
                                             if (txt.value.isNotBlank()) {
                                                 for (panel in panelsRememberable) {
@@ -203,7 +246,7 @@ class ComposeActivity : ComponentActivity() {
                                                         return@FloatingActionButton
                                                     }
                                                 }
-                                                panels.add(Panel(ip = txt.value.trim()))
+                                                panels.add(Panel(ip = txt.value.trim(), screenHeightPx.toFloat(), screenWidthPx.toFloat()))
                                                 txt.value = ""
                                             } else {
                                                 scope.launch {
@@ -242,32 +285,22 @@ class ComposeActivity : ComponentActivity() {
                     }
                 },
                 content = {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(it)
-                            .background(color = Color.Gray)
-                            .consumedWindowInsets(it)
+                    val scrolling = remember { mutableStateOf(true) }
+                    LazyColumn(modifier = Modifier.fillMaxSize()
+                        .padding(it)
+                        .background(color = Color.Gray),
+                        userScrollEnabled = scrolling.value
+                       // .consumedWindowInsets(it))
                     ) {
-                        for (panel in panelsRememberable) {
-                            Row(modifier = Modifier.onGloballyPositioned {
-                                //scaffoldMaxHeight.value = with(density) { (it.size.height.toDp().value + 18f) * panelsRememberable.size }
-                            }) {
-                                PingGraph.PingGraphView(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(150.dp)
-                                        .padding(20.dp),
-                                    panel,
-                                    panelBG
-                                )
-                            }
+                        items(panelsRememberable) { panel ->
+                            PingGraph.PingGraphView(
+                                panel = panel,
+                                img = panelBG
+                            )
                         }
                     }
-
-                },
-
-                )
+                }
+            )
         }
     }
 

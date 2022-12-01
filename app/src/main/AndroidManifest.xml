@@ -17,7 +17,7 @@
         android:theme="@style/Theme.splash">
 
         <activity
-            android:name=".ComposeActivity"
+            android:name=".ui.ComposeActivity"
             android:configChanges="orientation|keyboardHidden|screenSize"
             android:exported="true"
             android:imeOptions="flagNoExtractUi"

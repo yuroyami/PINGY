@@ -1,4 +1,4 @@
-package app.utils
+package app.logic
 
 import android.annotation.TargetApi
 import android.app.Activity
@@ -20,40 +20,45 @@ import java.sql.Timestamp
 
 object PingyUtils {
 
-
     /** This function is used to calculate the ICMP Ping to a certain server or end host.
      * This is basically the most important function in our entire app **/
     fun pingIcmp(host: String, packet: Int): Double {
-        var result = 0.13
+        val result: Double
         try {
-            val pingprocess: Process? =
-                Runtime.getRuntime().exec("/system/bin/ping -c 1 -w 1 -s $packet $host")
-            //Reading the Output with BufferedReader
-            val bufferedReader = BufferedReader(InputStreamReader(pingprocess?.inputStream))
-            //Parsing the result in a string variable.
-            val logger: StringBuilder = StringBuilder()
-            var line: String? = ""
-            while (line != null) {
-                line = bufferedReader.readLine()
-                logger.append(line + "\n")
-            }
-            val pingoutput = logger.toString()
-
-            //Now reading what we have in pingResult and storing it as an Int value.
+            val p = Runtime.getRuntime().exec("/system/bin/ping -c 1 -w 1 -s $packet $host")
+            val i = p.inputStream
+            val s = i.reader().readText()
             result = when {
-                pingoutput.contains("100% packet loss") -> {
-                    0.0
+                s.contains("100% packet loss") -> {
+                    -1.0
                 }
                 else -> {
-                    ((pingoutput.substringAfter("time=").substringBefore(" ms").trim()
+                    ((s.substringAfter("time=").substringBefore(" ms").trim()
                         .toDouble()))
                 }
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
+        } catch (_: Exception) {
+            return -1.0
         }
         return result
     }
+
+    /** Looks for the smallest minimum ping in a ping list, except for -1 which equals an undefined ping.
+     * We use our own implementation of 'List().min()' because Kotlin's min() will return -1 if it exists
+     * in the list, while our implementation should ignore a -1 if found */
+    fun List<Int>.minPing(): Int {
+        var min = 1000
+        for (p in this) {
+            if (p > 0) {
+                if (p < min) {
+                    min = p
+                }
+            }
+        }
+        return min
+    }
+
+
 
     /** This function is used to print/format the timestamp used in determining video values
      * @param seconds Unix epoch timestamp in seconds
