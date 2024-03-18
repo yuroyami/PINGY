@@ -1,0 +1,27 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme. -->
+    <style name="Theme.app" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <!-- System bar properties -->
+        <item name="android:statusBarColor">@color/main_bg</item>
+        <item name="android:windowLightStatusBar" tools:targetApi="m">true</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- Globalizing text colors. -->
+        <item name="android:textColor">@color/sgn_shade</item>
+        <item name="android:textColorSecondary">@color/text2</item>
+        <!-- More theme options -->
+        <item name="android:windowNoTitle">true</item>
+        <item name="windowActionBar">false</item>
+        <item name="android:windowFullscreen">false</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="p">default</item>
+        <item name="android:windowBackground">#232323</item>
+    </style>
+
+    <!---  -->`
+<!--    <item name="android:windowBackground">@drawable/bg_gradient</item>-->
+    <style name="Theme.splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+        <item name="windowSplashScreenBackground">#232323</item>
+        <item name="postSplashScreenTheme">@style/Theme.app</item>
+    </style>
+</resources>
