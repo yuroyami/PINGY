@@ -3,13 +3,11 @@ package com.yuroyami.pingy.logic
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import com.yuroyami.pingy.ui.viewmodel
-import com.yuroyami.pingy.utils.generateTimestampMillis
 import com.yuroyami.pingy.utils.loggy
 import com.yuroyami.pingy.utils.pingIcmp
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.roundToInt
+import kotlin.time.TimeSource
 
 /** Wrapper Model class for a single Ping graph panel and its current parameters */
 data class PingPanel(
@@ -20,9 +18,9 @@ data class PingPanel(
     val pings = mutableStateListOf<Ping>()
 
     /** Pinging Parameters */
-    private var isPinging = mutableStateOf(true) /* Defines whether this panel is showing and doing pings or not */
+    var isPinging = mutableStateOf(true) /* Defines whether this panel is showing and doing pings or not */
     private var packetsize = mutableStateOf(32) /* Packet size for pinging (Minimum is 32, default is 64) */
-    private var interval = mutableStateOf(50L) /* Interval of pinging, in milliseconds, default is 50ms */
+    var interval = mutableStateOf(50L) /* Interval of pinging, in milliseconds, default is 50ms */
 
     /** UI-related parameters */
     var widthette = mutableStateOf(3) /* Ping line width in pixels, default is 4 */
@@ -47,17 +45,15 @@ data class PingPanel(
     /**
      * Perform ping operations and emit Ping objects to the shared flow.
      */
-    suspend fun ping() {
+    private suspend fun ping() {
         while (true) {
             if (isPinging.value) {
                 try {
-                    val p = withTimeoutOrNull(timeMillis = interval.value * 2) {
-                        pingIcmp(host = ip, packetSize = packetsize.value)?.roundToInt()
-                    }
+                    val p = pingIcmp(host = ip, packetSize = packetsize.value)?.roundToInt()
 
                     val ping = Ping(
                         value = p,
-                        timestamp = generateTimestampMillis()
+                        timestamp = TimeSource.Monotonic.markNow()
                     )
 
                     pings.add(ping)
@@ -68,7 +64,8 @@ data class PingPanel(
                     loggy(e.stackTraceToString())
                 }
             }
-            delay(50)
         }
     }
+
+
 }

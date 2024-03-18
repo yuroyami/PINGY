@@ -81,9 +81,6 @@ val LocalScreenSize = compositionLocalOf<ScreenSizeInfo> { error("No Screen Size
 @Composable
 fun ScreenUI() {
     CompositionLocalProvider(LocalScreenSize provides getScreenSizeInfo()) {
-        /** Getting screen properties */
-        val screenResolution = LocalScreenSize.current
-
         /** Remembering stuff like scope for onClicks, snackBar host state for snackbars ... etc */
         val scope = rememberCoroutineScope()
         val snackbarHostState = remember { SnackbarHostState() }
