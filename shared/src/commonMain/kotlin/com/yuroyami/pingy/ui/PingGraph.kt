@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -27,12 +28,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
@@ -159,6 +157,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 .fillMaxWidth()
                 .height(screensize.hDP / 5)
                 .clip(RoundedCornerShape(16.dp))
+                .border(1.dp, color = Color.White, RoundedCornerShape(16.dp))
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = rememberRipple(color = Paletting.SGN)
@@ -212,35 +211,6 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 }
             }
 
-
-//            pingStock.value = (size.width / widthette.value).roundToInt() //max pings a panel can show (depends on width)
-//            val showablePings = (if (pingStock.value > pingsSent.value) pingsSent.value - 1 else pingStock.value).toInt()
-//
-//            if (pingsSent.value != 0) {
-//                for (i in (0 until showablePings)) {
-//                    try {
-//                        //Position X of the ping (Depends on the position index in the list)
-//                        val x = size.width - (showablePings * widthette.value) + (widthette.value * i) //quick maths
-//
-//                        //The ping in question
-//                        val p = pings[pingsSent.value - showablePings + i]
-//
-//                        //Height of the ping (Depends on ping value)
-//                        val y = calculatePingY(p.value ?: 0, size.height, roof.value.toFloat(), angleOfAttack.value)
-//
-//                        drawLine(
-//                            end = Offset(x, size.height - y),
-//                            color = calcPingColor(p.value ?: 0),
-//                            strokeWidth = widthette.value.toFloat(),
-//                            start = Offset(x, size.height),
-//                        )
-//                    } catch (e: IndexOutOfBoundsException) {
-//                        e.printStackTrace()
-//                        continue
-//                    }
-//                }
-//            }
-
             /* Drawing line indicator texts (must be declared here to be drawn above pings) */
             for (y in landMarks.value) {
                 val h = calculatePingY(y.toInt(), size.height, roof.value.toFloat(), angleOfAttack.value)
@@ -254,14 +224,6 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                     )
                 )
             }
-
-            /* Drawing a rectangle with round corners. Must be the last to draw (so it's on top of others */
-            drawRoundRect(
-                color = Color.LightGray,
-                style = Stroke(12f),
-                size = Size(size.width - 2f, size.height - 2f),
-                cornerRadius = CornerRadius(48f, 48f) //dp x 3 altho idk why
-            )
         }
 
     }

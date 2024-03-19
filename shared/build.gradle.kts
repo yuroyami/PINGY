@@ -43,7 +43,7 @@ kotlin {
         browser()
         binaries.executable()
     }
-    
+
     sourceSets {
         all {
             languageSettings {
@@ -110,6 +110,19 @@ compose.desktop {
         mainClass = "MainKt"
 
         nativeDistributions {
+            modules("jdk.crypto.ec")
+
+            macOS {
+                infoPlist {
+                    extraKeysRawXml = """
+                        <key>NSAppTransportSecurity</key>
+                            <dict>
+                                <key>NSAllowsArbitraryLoads</key>
+                                <true/>
+                            </dict>
+                    """.trimIndent()
+                }
+            }
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "com.yuroyami.pingy.desktopApp"
             packageVersion = "1.0.0"
