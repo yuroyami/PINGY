@@ -1,10 +1,5 @@
 package com.yuroyami.pingy.utils
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.dp
 import java.io.IOException
 
 actual suspend fun pingIcmp(host: String, ttl: Int, packetSize: Int): Double? {
@@ -20,24 +15,5 @@ actual suspend fun pingIcmp(host: String, ttl: Int, packetSize: Int): Double? {
     } catch (e: IOException) {
         loggy(e.stackTraceToString())
         null
-    }
-}
-
-actual fun generateTimestampMillis() = System.currentTimeMillis()
-
-@Composable
-actual fun getScreenSizeInfo(): ScreenSizeInfo {
-    val density = LocalDensity.current
-    val config = LocalConfiguration.current
-    val hDp = config.screenHeightDp.dp
-    val wDp = config.screenWidthDp.dp
-
-    return remember(density, config) {
-        ScreenSizeInfo(
-            hPX = with(density) { hDp.roundToPx() },
-            wPX = with(density) { wDp.roundToPx() },
-            hDP = hDp,
-            wDP = wDp
-        )
     }
 }

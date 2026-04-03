@@ -1,4 +1,4 @@
-package com.yuroyami.pingy.ui
+package com.yuroyami.pingy.ui.main.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.shrinkVertically
@@ -17,13 +17,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -32,6 +33,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
@@ -42,6 +44,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastMapNotNull
 import com.yuroyami.pingy.logic.Ping
 import com.yuroyami.pingy.logic.PingPanel
+import com.yuroyami.pingy.ui.Paletting
+import com.yuroyami.pingy.ui.main.LocalPanelBackground
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.Font
 import pingy.shared.generated.resources.Inter_Regular
@@ -59,7 +63,8 @@ import kotlin.time.TimeSource.Monotonic.markNow
 fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
     val bg = LocalPanelBackground.current
     val textMeasurer = rememberTextMeasurer() //To draw text inside DrawScopes
-    val screensize = LocalScreenSize.current
+    val windowInfo = LocalWindowInfo.current
+    val hDP by derivedStateOf {  windowInfo.containerDpSize.height }
 
     val pings = remember { pings }
 
@@ -107,7 +112,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
             Column(
                 modifier = modifier.fillMaxWidth()
             ) {
-                Spacer(modifier = Modifier.height((screensize.hDP / 5) - 12.dp))
+                Spacer(modifier = Modifier.height((hDP / 5) - 12.dp))
 
                 Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                     Card(
@@ -156,7 +161,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
         Canvas(
             modifier = modifier
                 .fillMaxWidth()
-                .height(screensize.hDP / 5)
+                .height(hDP / 5)
                 .clip(RoundedCornerShape(16.dp))
                 .border(1.dp, color = Color.White, RoundedCornerShape(16.dp))
                 .clickable(

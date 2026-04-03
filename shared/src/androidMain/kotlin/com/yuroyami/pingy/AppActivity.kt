@@ -7,7 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import com.yuroyami.pingy.ui.ScreenUI
+import com.yuroyami.pingy.ui.adam.AdamScreenUI
 
 class AppActivity : ComponentActivity() {
 
@@ -21,20 +21,7 @@ class AppActivity : ComponentActivity() {
 
         /** Jetpack Compose */
         setContent {
-//            val isDark = isSystemInDarkTheme()
-//            val view = LocalView.current
-//            val systemBarColor = Color.Transparent.toArgb()
-//            LaunchedEffect(isDark) {
-//                val window = (view.context as Activity).window
-//                WindowCompat.setDecorFitsSystemWindows(window, false)
-//                window.statusBarColor = systemBarColor
-//                window.navigationBarColor = systemBarColor
-//                WindowCompat.getInsetsController(window, window.decorView).apply {
-//                    isAppearanceLightStatusBars = isDark
-//                    isAppearanceLightNavigationBars = isDark
-//                }
-//            }
-            ScreenUI()
+            AdamScreenUI()
         }
     }
 }

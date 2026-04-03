@@ -1,8 +1,8 @@
 package com.yuroyami.pingy.logic
 
-import kotlin.time.TimeSource
+import kotlin.time.TimeMark
 
 data class Ping(
     val value: Int?,
-    val timestamp: TimeSource.Monotonic.ValueTimeMark
+    val timestamp: TimeMark
 )
