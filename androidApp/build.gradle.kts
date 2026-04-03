@@ -1,55 +1,90 @@
 plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.compose")
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.compose.plugin)
+    alias(libs.plugins.compose.compiler)
+}
+
+kotlin {
+    jvmToolchain(AppConfig.javaVersion)
 }
 
 android {
     namespace = "com.yuroyami.pingy.android"
-    compileSdk = 34
+    compileSdk = AppConfig.compileSdk
+
     signingConfigs {
-        create("github") {
-            storeFile = file("${rootDir}/keystore/keystore.jks")
-            keyAlias = "keystore"
-            keyPassword = "az90az09"
-            storePassword = "az90az09"
+        file("${rootDir}/keystore/pingykey.jks").takeIf { it.exists() }?.let { keystoreFile ->
+            create("pingy_keystore") {
+                storeFile = keystoreFile
+                AppConfig.localProperties.apply {
+                    keyAlias = getProperty("yuroyami.keyAlias")
+                    keyPassword = getProperty("yuroyami.keyPassword")
+                    storePassword = getProperty("yuroyami.storePassword")
+                }
+            }
         }
     }
 
     defaultConfig {
-        minSdk = 24
-        targetSdk = 34
+        applicationId = "com.yuroyami.pingy"
+        minSdk = AppConfig.minSdk
+        targetSdk = AppConfig.compileSdk
+        versionCode = AppConfig.versionCode
+        versionName = AppConfig.versionName
 
-        applicationId = "com.yuroyami.pingy.android"
-        versionCode = 1000100
-        versionName = "0.1.0"
-        signingConfig = signingConfigs.getByName("github")
+        manifestPlaceholders["appName"] = AppConfig.appName
+
+        proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+
+        signingConfigs.findByName("pingy_keystore")?.let { config ->
+            signingConfig = config
+        }
     }
-    buildFeatures {
-        compose = true
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.toVersion(AppConfig.javaVersion)
+        targetCompatibility = JavaVersion.toVersion(AppConfig.javaVersion)
+        isCoreLibraryDesugaringEnabled = true
     }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.10"
+
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+        }
+        debug {
+            applicationIdSuffix = ".dev"
+        }
     }
+
     packaging {
+        jniLibs.useLegacyPackaging = true
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            pickFirsts += "META-INF/INDEX.LIST"
+            pickFirsts += "META-INF/versions/9/previous-compilation-data.bin"
+            pickFirsts += "META-INF/io.netty.versions.properties"
+            excludes += "META-INF/license/**"
+            excludes += "META-INF/native-image/**"
+
         }
     }
-    buildTypes {
-        getByName("release") {
-            isMinifyEnabled = false
-        }
+
+    dependenciesInfo {
+        // Disables dependency metadata when building APKs & Android App Bundles.
+        includeInApk = false
+        includeInBundle = false
     }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
-    }
-    kotlinOptions {
-        jvmTarget = "1.8"
+
+    // This block strips out odd, unused artifacts that the google-shortcuts library brings along,
+    // none of which are needed for its main features.
+    // This will remove them also from any other library that might use them
+    configurations.all {
+        exclude(group = "com.google.crypto.tink", module = "tink-android")
+        exclude(group = "com.google.android.gms")
     }
 }
 
 dependencies {
+    coreLibraryDesugaring(libs.desugaring)
     implementation(projects.shared)
 }

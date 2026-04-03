@@ -1,33 +1,40 @@
-import org.jetbrains.compose.desktop.application.dsl.TargetFormat
-
 plugins {
-    id("org.jetbrains.kotlin.multiplatform")
-    id("org.jetbrains.kotlin.native.cocoapods")
-    id("org.jetbrains.compose")
-    id("com.android.library")
-
+    alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.kotlin.cocoapods)
+    alias(libs.plugins.android.kmp.library)
+    alias(libs.plugins.compose.plugin)
+    alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.buildConfig)
 }
 
 kotlin {
-    applyDefaultHierarchyTemplate()
+    jvmToolchain(AppConfig.javaVersion)
 
-    androidTarget {
-        compilations.all {
-            kotlinOptions {
-                jvmTarget = "1.8"
+    android {
+        namespace = "com.yuroyami.pingy"
+        compileSdk = AppConfig.compileSdk
+        minSdk = AppConfig.minSdk
+        androidResources { enable = true }
+    }
+
+    // Activating iOS targets (iosMain)
+    listOf(
+        iosSimulatorArm64(), //We enable this only if we're planning to test on a simulator
+        iosArm64()
+    ).forEach {
+        it.compilations.getByName("main") {
+            @Suppress("unused") val nsKVO by cinterops.creating {
+                defFile("src/nativeInterop/cinterop/NSKeyValueObserving.def")
             }
         }
     }
 
-    iosX64()
-    iosArm64()
-    iosSimulatorArm64()
-
+    // iOS configuration
     cocoapods {
-        summary = "Some description for the Shared Module"
-        homepage = "Link to the Shared Module homepage"
-        version = "1.0"
-        ios.deploymentTarget = "16.0"
+        summary = "${AppConfig.appName} Common Code (Platform-agnostic)"
+        homepage = "www.github.com/yuroyami/PINGY"
+        version = AppConfig.versionName
+        ios.deploymentTarget = "14.0"
         podfile = project.file("../iosApp/Podfile")
         framework {
             baseName = "shared"
@@ -37,99 +44,73 @@ kotlin {
         pod("SPLPing")
     }
 
-    jvm()
-
-    js {
-        browser()
-        binaries.executable()
-    }
-
     sourceSets {
         all {
             languageSettings {
                 optIn("org.jetbrains.compose.resources.ExperimentalResourceApi")
+                optIn("androidx.compose.material3.ExperimentalMaterial3Api")
+                optIn("androidx.compose.ui.ExperimentalComposeUiApi")
+                optIn("kotlin.RequiresOptIn")
+                optIn("kotlin.experimental.ExperimentalNativeApi")
+                optIn("kotlin.uuid.ExperimentalUuidApi")
+                optIn("kotlin.ExperimentalUnsignedTypes")
+                optIn("kotlin.ExperimentalStdlibApi")
+                optIn("kotlin.io.encoding.ExperimentalEncodingApi")
+                optIn("androidx.compose.material3.ExperimentalMaterial3ExpressiveApi")
+                optIn("kotlinx.cinterop.ExperimentalForeignApi") //for iOS
+                optIn("kotlinx.cinterop.BetaInteropApi") //for iOS
+                optIn("kotlin.time.ExperimentalTime")
+                enableLanguageFeature("ExplicitBackingFields") //same as -Xexplicit-backing-fields compiler flag
+                enableLanguageFeature("NestedTypeAliases") //-Xnested-type-aliases
+                enableLanguageFeature("ExpectActualClasses") //-Xexpect-actual-classes
+                enableLanguageFeature("ContextParameters") //Xcontext-parameters
             }
         }
-        commonMain.dependencies {
-            api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
 
-            api("co.touchlab:kermit:2.0.3")
+        commonMain.dependencies {
+            /* Forcing Kotlin libs to match the compiler */
+            implementation(libs.kotlin.stdlib)
+
+            /* Explicitly specifying a newer coroutines version */
+            implementation(libs.kotlin.coroutines.core)
+
+            /* Official JetBrains Kotlin Date 'n time manager (i.e: generating date from epoch) */
+            implementation(libs.kotlinx.datetime)
 
             /* Compose core dependencies */
-            api(compose.runtime)
-            api(compose.foundation)
-            api(compose.material3)
-            api(compose.materialIconsExtended)
-            @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
-            api(compose.components.resources)
-        }
+            implementation(libs.bundles.compose.multiplatform)
 
-        commonTest.dependencies {
-            implementation(kotlin("test"))
+            /* ViewModel support */
+            implementation(libs.compose.viewmodel)
+
+            /* Navigation support with the modern nav3 library */
+            implementation(libs.bundles.navigation3)
+
+            /* Logging */
+            implementation(libs.logging.kermit)
         }
 
         androidMain.dependencies {
-            api("androidx.core:core-ktx:1.13.0-alpha05")
-            api("androidx.appcompat:appcompat:1.7.0-alpha03")
-            api("androidx.activity:activity-compose:1.9.0-alpha03")
-            api("androidx.core:core-splashscreen:1.1.0-alpha02")
-        }
+            /* Backward compatibility APIs from Google's Jetpack AndroidX */
+            /* Contains AndroidX Libs: Core (+CoreSplashScreen +CorePiP), AppCompat, Activity Compose, DocumentFile */
+            implementation(libs.bundles.jetpack.androidx.extensions)
 
-        jvmMain.dependencies {
-            implementation(compose.desktop.common)
-            implementation(compose.desktop.currentOs)
-        }
-
-        jsMain.dependencies {
-            implementation(compose.html.core)
+            /* Extended coroutine support for Android threading */
+            implementation(libs.kotlin.coroutines.android)
         }
 
         iosMain.dependencies {
+            /* Nothing needed here */
         }
     }
 }
 
-android {
-    namespace = "com.yuroyami.pingy"
-    compileSdk = 34
-    defaultConfig {
-        minSdk = 21
-    }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
-    }
-    kotlin {
-        jvmToolchain(8)
-    }
+with(AppConfig) {
+    updateIOSVersion() //Uncomment if Xcode build fails, for some reason it breaks Gradle build from within Xcode
 }
 
-
-compose.desktop {
-    application {
-        mainClass = "MainKt"
-
-        nativeDistributions {
-            modules("jdk.crypto.ec")
-
-            macOS {
-                infoPlist {
-                    extraKeysRawXml = """
-                        <key>NSAppTransportSecurity</key>
-                            <dict>
-                                <key>NSAllowsArbitraryLoads</key>
-                                <true/>
-                            </dict>
-                    """.trimIndent()
-                }
-            }
-            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "com.yuroyami.pingy.desktopApp"
-            packageVersion = "1.0.0"
-        }
-    }
-}
-
-compose.experimental {
-    web.application {}
+buildConfig {
+    buildConfigField("APP_NAME", AppConfig.appName)
+    buildConfigField("APP_VERSION", AppConfig.versionName)
+    buildConfigField("DEBUG", false)
 }

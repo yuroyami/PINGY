@@ -21,6 +21,7 @@ import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
@@ -160,7 +161,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 .border(1.dp, color = Color.White, RoundedCornerShape(16.dp))
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
-                    indication = rememberRipple(color = Paletting.SGN)
+                    indication = ripple(color = Paletting.SGN)
                 ) {
                     expanded.value = !expanded.value
                 }

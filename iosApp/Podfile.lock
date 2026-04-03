@@ -1,5 +1,5 @@
 PODS:
-  - shared (1.0):
+  - shared (0.1.0):
     - SPLPing
   - SPLPing (1.1.8)
 
@@ -15,9 +15,9 @@ EXTERNAL SOURCES:
     :path: "../shared"
 
 SPEC CHECKSUMS:
-  shared: 84ade07343fca12d27caad084e1e2740dedc2279
+  shared: 139cee7d5c1fddcef925715026910a9656a8fd91
   SPLPing: 420837fae1e19bba0a8360e91e7a384f22509663
 
 PODFILE CHECKSUM: 78d6cc1b71b232202c48a29d4e6c34972c534c73
 
-COCOAPODS: 1.15.2
+COCOAPODS: 1.16.2

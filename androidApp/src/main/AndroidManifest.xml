@@ -17,7 +17,7 @@
         android:theme="@style/Theme.splash">
 
         <activity
-            android:name=".AppActivity"
+            android:name="com.yuroyami.pingy.AppActivity"
             android:configChanges="orientation|keyboardHidden|screenSize"
             android:exported="true"
             android:imeOptions="flagNoExtractUi"

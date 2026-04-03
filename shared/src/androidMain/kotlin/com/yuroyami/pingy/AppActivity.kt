@@ -1,4 +1,4 @@
-package com.yuroyami.pingy.android
+package com.yuroyami.pingy
 
 import android.os.Bundle
 import android.view.WindowManager
@@ -38,4 +38,3 @@ class AppActivity : ComponentActivity() {
         }
     }
 }
-
