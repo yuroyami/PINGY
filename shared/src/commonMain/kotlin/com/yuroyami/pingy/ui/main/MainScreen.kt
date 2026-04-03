@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
@@ -85,7 +86,8 @@ fun MainScreenUI() {
     LaunchedEffect(null) {
         viewmodel.panels.add(
             PingPanel(
-                ip = "1.1.1.1"
+                ip = "1.1.1.1",
+                viewmodel = viewmodel
             )
         )
     }
@@ -100,7 +102,8 @@ fun MainScreenUI() {
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(color = Color.Gray)
-                    .wrapContentHeight(),
+                    .wrapContentHeight()
+                    .systemBarsPadding(),
                 shape = RoundedCornerShape(topEnd = 0.dp, topStart = 0.dp, bottomEnd = 12.dp, bottomStart = 12.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.LightGray),
                 elevation = CardDefaults.elevatedCardElevation(defaultElevation = 12.dp)
@@ -232,7 +235,8 @@ fun MainScreenUI() {
                                     }
                                     viewmodel.panels.add(
                                         PingPanel(
-                                            ip = txt.value.trim()
+                                            ip = txt.value.trim(),
+                                            viewmodel = viewmodel
                                         )
                                     )
                                     txt.value = ""
@@ -273,13 +277,13 @@ fun MainScreenUI() {
                 }
             }
         },
-        content = {
+        content = { pv ->
             val scrolling by remember { mutableStateOf(true) }
             CompositionLocalProvider(LocalPanelBackground provides imageResource(Res.drawable.panel_bg)) {
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(it)
+                        .padding(top = pv.calculateTopPadding())
                         .background(color = Color.Gray),
                     userScrollEnabled = scrolling
                 ) {

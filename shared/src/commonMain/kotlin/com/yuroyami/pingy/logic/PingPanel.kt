@@ -2,16 +2,20 @@ package com.yuroyami.pingy.logic
 
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
-import com.yuroyami.pingy.ui.viewmodel
+import androidx.lifecycle.viewModelScope
+import com.yuroyami.pingy.PingyViewmodel
 import com.yuroyami.pingy.utils.loggy
 import com.yuroyami.pingy.utils.pingIcmp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import kotlin.time.TimeSource
 
 /** Wrapper Model class for a single Ping graph panel and its current parameters */
 data class PingPanel(
-    val ip: String /* Address to ping */
+    val ip: String,/* Address to ping */
+    val viewmodel: PingyViewmodel
 ) {
 
     /** The whole collection of pings for this panel */
@@ -37,7 +41,7 @@ data class PingPanel(
     var highestPing = mutableStateOf<Int?>(0) /* Highest recorded ping */
 
     init {
-        viewmodel.ioScope.launch {
+        viewmodel.viewModelScope.launch(Dispatchers.IO) {
             launch { ping() }
         }
     }
