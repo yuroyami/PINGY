@@ -42,7 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastMapNotNull
 import com.yuroyami.pingy.logic.PingPanel
-import com.yuroyami.pingy.ui.Paletting
+import com.yuroyami.pingy.theme.Paletting
 import com.yuroyami.pingy.ui.main.LocalPanelBackground
 import org.jetbrains.compose.resources.Font
 import pingy.shared.generated.resources.Inter_Regular

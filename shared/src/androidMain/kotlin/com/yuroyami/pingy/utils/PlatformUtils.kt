@@ -2,29 +2,12 @@ package com.yuroyami.pingy.utils
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.BufferedReader
 import java.io.IOException
 import java.io.InputStreamReader
-
-actual suspend fun pingIcmp(host: String, ttl: Int, packetSize: Int): Double? {
-    return try {
-        val pingCommand = "/system/bin/ping -c 1 -w 1 -t $ttl -s $packetSize $host"
-        Runtime.getRuntime().exec(pingCommand).inputStream.use { inputStream ->
-            val output = inputStream.reader().readText()
-            when {
-                output.contains("100% packet loss") -> null
-                else -> output.substringAfter("time=").substringBefore(" ms").trim().toDouble()
-            }
-        }
-    } catch (e: IOException) {
-        loggy(e.stackTraceToString())
-        null
-    }
-}
 
 /**
  * Android PingEngine: spawns a single long-running `/system/bin/ping` process

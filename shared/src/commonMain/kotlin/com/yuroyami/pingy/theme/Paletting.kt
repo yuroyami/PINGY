@@ -1,4 +1,4 @@
-package com.yuroyami.pingy.ui
+package com.yuroyami.pingy.theme
 
 import androidx.compose.ui.graphics.Color
 
@@ -21,9 +21,9 @@ object Paletting {
     val A_TRDIAC_2 = Color(25, 0, 169) /* 3rd part of the triad with the main color */
 
     /** Secondary Palette Colors (Mostly white tbh) */
-    val B_MAIN_COLOR = Color(250,250,250)
-    val B_LIGHT_COLOR = Color(255,255,255)
-    val B_DARK_COLOR = Color(199,199,199)
+    val B_MAIN_COLOR = Color(250, 250, 250)
+    val B_LIGHT_COLOR = Color(255, 255, 255)
+    val B_DARK_COLOR = Color(199, 199, 199)
 
     /** Sgn Shade */
     val SGN = Color(92, 255, 127)

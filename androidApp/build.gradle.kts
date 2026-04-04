@@ -14,7 +14,7 @@ android {
 
     signingConfigs {
         file("${rootDir}/keystore/pingykey.jks").takeIf { it.exists() }?.let { keystoreFile ->
-            create("pingy_keystore") {
+            create("keystore") {
                 storeFile = keystoreFile
                 AppConfig.localProperties.apply {
                     keyAlias = getProperty("yuroyami.keyAlias")
@@ -36,7 +36,7 @@ android {
 
         proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
 
-        signingConfigs.findByName("pingy_keystore")?.let { config ->
+        signingConfigs.findByName("keystore")?.let { config ->
             signingConfig = config
         }
     }

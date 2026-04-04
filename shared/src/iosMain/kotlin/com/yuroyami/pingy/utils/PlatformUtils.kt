@@ -8,14 +8,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-actual suspend fun pingIcmp(host: String, ttl: Int, packetSize: Int): Double? {
-    return PingUtils.pingOnce(
-        host = host,
-        timeoutMs = 1000,
-        payloadSize = packetSize,
-    )
-}
-
 /**
  * iOS PingEngine: performs repeated single-shot ICMP pings via [PingUtils]
  * on a background coroutine with the configured interval.

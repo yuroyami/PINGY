@@ -13,9 +13,6 @@
   "platforms": {
     "ios": "14.0"
   },
-  "dependencies": {
-    "SPLPing": []
-  },
   "xcconfig": {
     "ENABLE_USER_SCRIPT_SANDBOXING": "NO"
   },

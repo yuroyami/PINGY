@@ -65,7 +65,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.PopupProperties
 import com.yuroyami.pingy.logic.Constants
 import com.yuroyami.pingy.logic.PingPanel
-import com.yuroyami.pingy.ui.Paletting
+import com.yuroyami.pingy.theme.Paletting
 import com.yuroyami.pingy.ui.adam.LocalViewmodel
 import com.yuroyami.pingy.ui.main.components.PingGraphView
 import kotlinx.coroutines.launch

@@ -1,22 +1,15 @@
 PODS:
-  - shared (0.1.0):
-    - SPLPing
-  - SPLPing (1.1.8)
+  - shared (0.1.0)
 
 DEPENDENCIES:
   - shared (from `../shared`)
-
-SPEC REPOS:
-  trunk:
-    - SPLPing
 
 EXTERNAL SOURCES:
   shared:
     :path: "../shared"
 
 SPEC CHECKSUMS:
-  shared: 139cee7d5c1fddcef925715026910a9656a8fd91
-  SPLPing: 420837fae1e19bba0a8360e91e7a384f22509663
+  shared: a0491444983448d47300254fecb4a49a6ca73fad
 
 PODFILE CHECKSUM: 78d6cc1b71b232202c48a29d4e6c34972c534c73
 
