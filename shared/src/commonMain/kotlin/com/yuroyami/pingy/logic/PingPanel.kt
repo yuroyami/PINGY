@@ -1,9 +1,9 @@
 package com.yuroyami.pingy.logic
 
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
 import com.yuroyami.pingy.utils.PingEngine
 import com.yuroyami.pingy.utils.loggy
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlin.math.roundToInt
 import kotlin.time.TimeSource
 
@@ -14,37 +14,43 @@ private const val MAX_PINGS = 2000
 class PingPanel(
     val ip: String,
 ) {
-    /** The whole collection of pings for this panel (bounded to [MAX_PINGS]) */
-    val pings = mutableStateListOf<Ping>()
+    /** The whole collection of pings for this panel in a ring buffer */
+    val pings = MutableStateFlow(RingBuffer<Ping>(MAX_PINGS))
 
     /** Pinging Parameters */
-    var isPinging = mutableStateOf(true)
-    private var packetsize = mutableStateOf(32)
-    var interval = mutableStateOf(200L) /* Interval in ms. Default 200ms (5 pings/sec) */
+    val isPinging = MutableStateFlow(true)
+    val packetSize = MutableStateFlow(32)
+    val interval = MutableStateFlow(200L) /* Interval in ms. Default 200ms (5 pings/sec) */
 
     /** UI-related parameters */
-    var widthette = mutableStateOf(3)
-    var roof = mutableStateOf(1000)
-    var angleOfAttack = mutableStateOf(8.0f)
-    val pingStock = mutableStateOf(200)
-    var landMarks = mutableStateOf(listOf(25f, 50f, 100f, 200f, 500f))
-    var expanded = mutableStateOf(true)
+    val widthette = MutableStateFlow(3)
+    val roof = MutableStateFlow(1000)
+    val angleOfAttack = MutableStateFlow(8.0f)
+    val pingStock = MutableStateFlow(200)
+    val landMarks = MutableStateFlow(listOf(25f, 50f, 100f, 200f, 500f))
+    val expanded = MutableStateFlow(true)
+
+    /** Controls whether the panel shows stats or settings */
+    val showSettings = MutableStateFlow(false)
 
     /** For Statistics */
-    var pingsSent = mutableStateOf(0)
-    var pingsLost = mutableStateOf(0)
-    var lowestPing = mutableStateOf<Int?>(null)
-    var highestPing = mutableStateOf<Int?>(null)
+    val pingsSent = MutableStateFlow(0)
+    val pingsLost = MutableStateFlow(0)
+    val lowestPing = MutableStateFlow<Int?>(null)
+    val highestPing = MutableStateFlow<Int?>(null)
 
     /** The platform-specific ping engine tied to this panel's lifecycle */
     private var engine: PingEngine? = null
+
+    /** A version counter that bumps on every ping addition, used to trigger recomposition. */
+    val pingVersion = MutableStateFlow(0L)
 
     fun startPinging() {
         if (engine != null) return
 
         engine = PingEngine(
             host = ip,
-            packetSize = packetsize.value,
+            packetSize = packetSize.value,
             intervalMs = interval.value,
         ).also { eng ->
             eng.start { rttMs ->
@@ -55,14 +61,20 @@ class PingPanel(
                         timestamp = TimeSource.Monotonic.markNow()
                     )
 
-                    pings.add(ping)
-                    // Prune oldest pings when over capacity
-                    while (pings.size > MAX_PINGS) {
-                        pings.removeAt(0)
+                    pings.value.add(ping)
+                    pingVersion.update { it + 1 }
+
+                    pingsSent.update { it + 1 }
+                    if (ping.value == null || ping.value < 0) {
+                        pingsLost.update { it + 1 }
                     }
 
-                    pingsSent.value++
-                    if (ping.value == null || ping.value < 0) pingsLost.value++
+                    // Update min/max incrementally
+                    val v = ping.value
+                    if (v != null && v >= 0) {
+                        lowestPing.update { current -> if (current == null || v < current) v else current }
+                        highestPing.update { current -> if (current == null || v > current) v else current }
+                    }
                 } catch (e: Exception) {
                     loggy(e.stackTraceToString())
                 }
