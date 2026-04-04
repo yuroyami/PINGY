@@ -2,6 +2,7 @@ package com.yuroyami.pingy.utils
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -22,14 +23,12 @@ actual class PingEngine actual constructor(
     @Volatile private var _intervalMs = intervalMs
 
     private var process: Process? = null
-    private var readJob: Job? = null
+    private var job: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO)
 
     actual fun start(onPingResult: (Double?) -> Unit) {
         stop()
 
-        // -i interval in seconds (minimum 0.2 on most Android), -s packet size
-        // Continuous ping mode (no -c flag) so the process stays alive
         val intervalSec = (_intervalMs.coerceAtLeast(200) / 1000.0)
         val cmd = "/system/bin/ping -i $intervalSec -s $_packetSize $host"
 
@@ -42,7 +41,7 @@ actual class PingEngine actual constructor(
 
         val reader = BufferedReader(InputStreamReader(process!!.inputStream))
 
-        readJob = scope.launch {
+        job = scope.launch {
             try {
                 while (isActive) {
                     val line = reader.readLine() ?: break
@@ -60,8 +59,8 @@ actual class PingEngine actual constructor(
     }
 
     actual fun stop() {
-        readJob?.cancel()
-        readJob = null
+        job?.cancel()
+        job = null
         process?.destroyForcibly()
         process = null
     }
@@ -69,13 +68,13 @@ actual class PingEngine actual constructor(
     actual fun updateInterval(intervalMs: Long) {
         _intervalMs = intervalMs
     }
+}
 
-    private fun parsePingLine(line: String): Double? {
-        if (!line.contains("time=")) return null
-        return try {
-            line.substringAfter("time=").substringBefore(" ms").trim().toDouble()
-        } catch (_: NumberFormatException) {
-            null
-        }
+private fun parsePingLine(line: String): Double? {
+    if (!line.contains("time=")) return null
+    return try {
+        line.substringAfter("time=").substringBefore(" ms").trim().toDouble()
+    } catch (_: NumberFormatException) {
+        null
     }
 }

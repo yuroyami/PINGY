@@ -1,5 +1,6 @@
 package com.yuroyami.pingy.ui.main.components
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
@@ -15,14 +16,22 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -40,7 +49,6 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.util.fastMapNotNull
 import com.yuroyami.pingy.logic.PingPanel
 import com.yuroyami.pingy.theme.Paletting
 import com.yuroyami.pingy.ui.main.LocalPanelBackground
@@ -58,7 +66,19 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
     val windowInfo = LocalWindowInfo.current
     val hDP by derivedStateOf { windowInfo.containerDpSize.height }
 
-    val pings = remember { pings }
+    val pings = pings.value
+    val version by pingVersion.collectAsState()
+    val expanded by expanded.collectAsState()
+    val showSettings by showSettings.collectAsState()
+    val pingsSentVal by pingsSent.collectAsState()
+    val pingsLostVal by pingsLost.collectAsState()
+    val lowestPingVal by lowestPing.collectAsState()
+    val highestPingVal by highestPing.collectAsState()
+    val widthetteVal by widthette.collectAsState()
+    val roofVal by roof.collectAsState()
+    val angleOfAttackVal by angleOfAttack.collectAsState()
+    val landMarksVal by landMarks.collectAsState()
+    val intervalVal by interval.collectAsState()
 
     val txtstyle = TextStyle(
         color = Color.DarkGray,
@@ -74,7 +94,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
 
         AnimatedVisibility(
             modifier = modifier.fillMaxWidth(),
-            visible = remember { expanded }.value,
+            visible = expanded,
             enter = slideInVertically(),
             exit = shrinkVertically()
         ) {
@@ -89,35 +109,118 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                         colors = CardDefaults.cardColors(),
                         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp)
                     ) {
-                        Column(
-                            modifier = modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp)
-                                .padding(top = 20.dp, bottom = 12.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(text = "Pinging $ip", color = Color.Gray)
-                            Text(text = "Current Ping: ${pings.lastOrNull()?.value ?: "No pings"} ", style = txtstyle)
-                            Text(text = "Pings sent: ${pingsSent.value}", style = txtstyle)
-
-                            val pingsLostPercentage = if (remember { pingsSent }.value > 0) {
-                                remember { pingsLost }.value * 100 / remember { pingsSent }.value
-                            } else 0
-                            Text(
-                                text = "Pings lost: ${pingsLost.value} (${pingsLostPercentage}%)",
-                                style = txtstyle
-                            )
-
-                            LaunchedEffect(pings.size) {
-                                val fastMap = pings.fastMapNotNull { it.value }
-                                lowestPing.value = fastMap.minOrNull()
-                                highestPing.value = fastMap.maxOrNull()
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            // Settings toggle button in top-right corner
+                            IconButton(
+                                modifier = Modifier.align(Alignment.TopEnd).size(32.dp),
+                                onClick = { this@PingGraphView.showSettings.value = !showSettings }
+                            ) {
+                                Icon(
+                                    imageVector = if (showSettings) Icons.AutoMirrored.Filled.ShowChart else Icons.Filled.Settings,
+                                    contentDescription = if (showSettings) "Show stats" else "Show settings",
+                                    tint = Color.Gray,
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
 
-                            Text(
-                                text = "Min-Max: ${lowestPing.value ?: "0"} - ${highestPing.value ?: "0"}",
-                                style = txtstyle
-                            )
+                            AnimatedContent(targetState = showSettings) { settings ->
+                                if (!settings) {
+                                    // Stats view
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 14.dp)
+                                            .padding(top = 20.dp, bottom = 12.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text(text = "Pinging $ip", color = Color.Gray)
+                                        // Use version to trigger recomposition when pings change
+                                        val lastPing = remember(version) { pings.lastOrNull() }
+                                        Text(text = "Current Ping: ${lastPing?.value ?: "No pings"} ", style = txtstyle)
+                                        Text(text = "Pings sent: $pingsSentVal", style = txtstyle)
+
+                                        val pingsLostPercentage = if (pingsSentVal > 0) {
+                                            pingsLostVal * 100 / pingsSentVal
+                                        } else 0
+                                        Text(
+                                            text = "Pings lost: $pingsLostVal (${pingsLostPercentage}%)",
+                                            style = txtstyle
+                                        )
+
+                                        Text(
+                                            text = "Min-Max: ${lowestPingVal ?: "0"} - ${highestPingVal ?: "0"}",
+                                            style = txtstyle
+                                        )
+                                    }
+                                } else {
+                                    // Settings view
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 14.dp)
+                                            .padding(top = 20.dp, bottom = 12.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text(text = "Settings — $ip", color = Color.Gray)
+
+                                        // Interval slider
+                                        Text(text = "Interval: ${intervalVal}ms", style = txtstyle)
+                                        Slider(
+                                            value = intervalVal.toFloat(),
+                                            onValueChange = { interval.value = it.toLong() },
+                                            valueRange = 50f..2000f,
+                                            steps = 38, // 50ms steps
+                                            colors = SliderDefaults.colors(
+                                                thumbColor = Paletting.SGN,
+                                                activeTrackColor = Paletting.SGN,
+                                            ),
+                                            modifier = Modifier.fillMaxWidth(0.9f)
+                                        )
+
+                                        // Roof (max displayed ping) slider
+                                        Text(text = "Max display: ${roofVal}ms", style = txtstyle)
+                                        Slider(
+                                            value = roofVal.toFloat(),
+                                            onValueChange = { roof.value = it.toInt() },
+                                            valueRange = 100f..5000f,
+                                            steps = 48,
+                                            colors = SliderDefaults.colors(
+                                                thumbColor = Paletting.A_LIGHT_COLOR,
+                                                activeTrackColor = Paletting.A_LIGHT_COLOR,
+                                            ),
+                                            modifier = Modifier.fillMaxWidth(0.9f)
+                                        )
+
+                                        // Line width slider
+                                        Text(text = "Line width: ${widthetteVal}px", style = txtstyle)
+                                        Slider(
+                                            value = widthetteVal.toFloat(),
+                                            onValueChange = { widthette.value = it.toInt() },
+                                            valueRange = 1f..10f,
+                                            steps = 8,
+                                            colors = SliderDefaults.colors(
+                                                thumbColor = Paletting.A_MAIN_COLOR,
+                                                activeTrackColor = Paletting.A_MAIN_COLOR,
+                                            ),
+                                            modifier = Modifier.fillMaxWidth(0.9f)
+                                        )
+
+                                        // Zoom factor slider
+                                        Text(text = "Zoom: ${angleOfAttackVal}", style = txtstyle)
+                                        Slider(
+                                            value = angleOfAttackVal,
+                                            onValueChange = { angleOfAttack.value = it },
+                                            valueRange = 1f..20f,
+                                            steps = 18,
+                                            colors = SliderDefaults.colors(
+                                                thumbColor = Paletting.SGN2,
+                                                activeTrackColor = Paletting.SGN2,
+                                            ),
+                                            modifier = Modifier.fillMaxWidth(0.9f)
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -134,14 +237,14 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                     interactionSource = remember { MutableInteractionSource() },
                     indication = ripple(color = Paletting.SGN)
                 ) {
-                    expanded.value = !expanded.value
+                    this@PingGraphView.expanded.value = !expanded
                 }
         ) {
 
             drawImage(image = bg, dstSize = IntSize(size.width.toInt(), size.height.toInt()))
 
-            for (y in landMarks.value) {
-                val h = calculatePingY(y.toInt(), size.height, roof.value.toFloat(), angleOfAttack.value)
+            for (y in landMarksVal) {
+                val h = calculatePingY(y.toInt(), size.height, roofVal.toFloat(), angleOfAttackVal)
                 drawLine(
                     start = Offset(0f, size.height - h),
                     end = Offset(size.width, size.height - h),
@@ -151,21 +254,23 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 )
             }
 
-            /* Draw pings directly from the real pings list */
-            pingStock.value = (size.width / widthette.value).roundToInt()
+            /* Draw pings directly from the ring buffer — use version to trigger redraws */
+            @Suppress("UNUSED_VARIABLE") val v = version
+            pingStock.value = (size.width / widthetteVal).roundToInt()
             val showablePings = minOf(pingStock.value, pings.size)
 
             if (showablePings > 0) {
+                val startIdx = pings.size - showablePings
                 for (i in 0 until showablePings) {
                     try {
-                        val x = size.width - (showablePings * widthette.value) + (widthette.value * i)
-                        val p = pings[pings.size - showablePings + i]
-                        val y = calculatePingY(p.value ?: 0, size.height, roof.value.toFloat(), angleOfAttack.value)
+                        val x = size.width - (showablePings * widthetteVal) + (widthetteVal * i)
+                        val p = pings[startIdx + i]
+                        val y = calculatePingY(p.value ?: 0, size.height, roofVal.toFloat(), angleOfAttackVal)
 
                         drawLine(
                             end = Offset(x, size.height - y),
                             color = calcPingColor(p.value ?: 0),
-                            strokeWidth = widthette.value.toFloat(),
+                            strokeWidth = widthetteVal.toFloat(),
                             start = Offset(x, size.height),
                         )
                     } catch (_: IndexOutOfBoundsException) {
@@ -174,8 +279,8 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 }
             }
 
-            for (y in landMarks.value) {
-                val h = calculatePingY(y.toInt(), size.height, roof.value.toFloat(), angleOfAttack.value)
+            for (y in landMarksVal) {
+                val h = calculatePingY(y.toInt(), size.height, roofVal.toFloat(), angleOfAttackVal)
                 drawText(
                     textMeasurer = textMeasurer,
                     text = "${y.toInt()}",
