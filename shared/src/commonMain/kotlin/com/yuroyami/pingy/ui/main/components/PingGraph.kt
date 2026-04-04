@@ -135,7 +135,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                                     ) {
                                         Text(text = "Pinging $ip", color = Color.Gray)
                                         // Use version to trigger recomposition when pings change
-                                        val lastPing = remember(version) { pings.lastOrNull() }
+                                        val lastPing = remember(version) { pings.last() }
                                         Text(text = "Current Ping: ${lastPing?.value ?: "No pings"} ", style = txtstyle)
                                         Text(text = "Pings sent: $pingsSentVal", style = txtstyle)
 
@@ -260,22 +260,22 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
             val showablePings = minOf(pingStock.value, pings.size)
 
             if (showablePings > 0) {
-                val startIdx = pings.size - showablePings
-                for (i in 0 until showablePings) {
-                    try {
-                        val x = size.width - (showablePings * widthetteVal) + (widthetteVal * i)
-                        val p = pings[startIdx + i]
-                        val y = calculatePingY(p.value ?: 0, size.height, roofVal.toFloat(), angleOfAttackVal)
+                val skipCount = pings.size - showablePings
+                var drawIndex = 0
+                pings.fastForEachWithIndex { ping, _ ->
+                    if (drawIndex >= skipCount && ping != null) {
+                        val visIndex = drawIndex - skipCount
+                        val x = size.width - (showablePings * widthetteVal) + (widthetteVal * visIndex)
+                        val y = calculatePingY(ping.value ?: 0, size.height, roofVal.toFloat(), angleOfAttackVal)
 
                         drawLine(
                             end = Offset(x, size.height - y),
-                            color = calcPingColor(p.value ?: 0),
+                            color = calcPingColor(ping.value ?: 0),
                             strokeWidth = widthetteVal.toFloat(),
                             start = Offset(x, size.height),
                         )
-                    } catch (_: IndexOutOfBoundsException) {
-                        continue
                     }
+                    drawIndex++
                 }
             }
 
