@@ -26,6 +26,9 @@ kotlin {
             @Suppress("unused") val nsKVO by cinterops.creating {
                 defFile("src/nativeInterop/cinterop/NSKeyValueObserving.def")
             }
+            @Suppress("unused") val icmpPing by cinterops.creating {
+                defFile("src/nativeInterop/cinterop/IcmpPing.def")
+            }
         }
     }
 
@@ -40,8 +43,6 @@ kotlin {
             baseName = "shared"
             isStatic = false
         }
-
-        pod("SPLPing")
     }
 
     sourceSets {
