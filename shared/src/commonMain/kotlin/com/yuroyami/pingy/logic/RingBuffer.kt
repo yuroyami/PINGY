@@ -1,61 +1,96 @@
 package com.yuroyami.pingy.logic
 
-/**
- * A fixed-capacity circular buffer that overwrites the oldest elements when full.
- * Optimized for the ping graph use case: fast append, indexed access from newest to oldest,
- * and snapshot iteration without copying.
- */
-class RingBuffer<T>(val capacity: Int) {
-    private val buffer = arrayOfNulls<Any>(capacity)
-    private var head = 0 // next write position
-    private var _size = 0
+import kotlin.concurrent.Volatile
 
-    val size: Int get() = _size
+/**
+ * A thread-safe circular buffer optimized for streaming data and visualization.
+ *
+ * @param capacity Maximum number of elements the buffer can hold
+ * @param T The type of elements stored in the buffer (must be non‑nullable)
+ */
+class RingBuffer<T : Any>(val capacity: Int) {
+
+    /**
+     * Internal storage array for buffer elements.
+     * The unchecked cast is safe because we only write `T` values into the array
+     * and read them back as `T?`.
+     */
+    @Suppress("UNCHECKED_CAST")
+    val buffer: Array<T?> = arrayOfNulls<Any?>(capacity) as Array<T?>
+
+    @Volatile
+    var writeIndex = 0
+
+    @Volatile
+    var readIndex = 0
+
+    @Volatile
+    var size = 0
+
+    @Volatile
+    var sampleCount = 0F
 
     fun add(element: T) {
-        buffer[head] = element
-        head = (head + 1) % capacity
-        if (_size < capacity) _size++
+        buffer[writeIndex] = element
+        val newWriteIndex = (writeIndex + 1) % capacity
+
+        if (size == capacity) {
+            readIndex = (readIndex + 1) % capacity
+        } else {
+            size++
+        }
+
+        writeIndex = newWriteIndex
     }
 
-    /** Get element by logical index (0 = oldest still in buffer, size-1 = newest). */
-    @Suppress("UNCHECKED_CAST")
-    operator fun get(index: Int): T {
-        if (index < 0 || index >= _size) throw IndexOutOfBoundsException("Index $index, size $_size")
-        val start = if (_size < capacity) 0 else head
-        val realIndex = (start + index) % capacity
-        return buffer[realIndex] as T
-    }
+    inline fun fastForEachWithIndex(crossinline action: (T?, Int) -> Unit) {
+        val currentSize = size
+        val currentReadIndex = readIndex
+        if (currentSize == 0) return
 
-    /** Get the most recently added element, or null if empty. */
-    @Suppress("UNCHECKED_CAST")
-    fun lastOrNull(): T? {
-        if (_size == 0) return null
-        val lastIndex = (head - 1 + capacity) % capacity
-        return buffer[lastIndex] as T
-    }
+        val remainingToEnd = capacity - currentReadIndex
 
-    /** Iterate over all elements from oldest to newest. */
-    @Suppress("UNCHECKED_CAST")
-    fun forEach(action: (T) -> Unit) {
-        val start = if (_size < capacity) 0 else head
-        for (i in 0 until _size) {
-            action(buffer[(start + i) % capacity] as T)
+        if (currentSize <= remainingToEnd) {
+            for (i in 0 until currentSize) {
+                action(buffer[currentReadIndex + i], currentReadIndex + i)
+            }
+        } else {
+            for (i in 0 until remainingToEnd) {
+                action(buffer[currentReadIndex + i], currentReadIndex + i)
+            }
+            val remainingCount = currentSize - remainingToEnd
+            for (i in 0 until remainingCount) {
+                action(buffer[i], i)
+            }
         }
     }
 
-    /** Returns elements as a new list (oldest to newest). */
-    @Suppress("UNCHECKED_CAST")
-    fun toList(): List<T> {
-        val result = ArrayList<T>(_size)
-        forEach { result.add(it) }
-        return result
+    fun last(): T? {
+        if (size == 0) return null
+        val lastIndex = (writeIndex + capacity - 1) % capacity
+        return buffer[lastIndex]
+    }
+
+    fun first(): T? {
+        if (size == 0) return null
+        return buffer[readIndex]
     }
 
     fun clear() {
-        head = 0
-        _size = 0
+        buffer.fill(null)
+        writeIndex = 0
+        readIndex = 0
+        size = 0
+        sampleCount = 0f
     }
 
-    val isEmpty: Boolean get() = _size == 0
+    fun isEmpty(): Boolean = size == 0
+
+    companion object {
+        /**
+         * Factory method to create a generic [RingBuffer] with the specified capacity.
+         * The type parameter can be inferred or specified explicitly.
+         */
+        inline fun <reified T : Any> allocate(size: Int) = RingBuffer<T>(size)
+    }
 }
