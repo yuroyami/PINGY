@@ -2,65 +2,64 @@ package com.yuroyami.pingy.logic
 
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.lifecycle.viewModelScope
-import com.yuroyami.pingy.PingyViewmodel
+import com.yuroyami.pingy.utils.PingEngine
 import com.yuroyami.pingy.utils.loggy
-import com.yuroyami.pingy.utils.pingIcmp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
-import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import kotlin.time.TimeSource
 
-/** Wrapper Model class for a single Ping graph panel and its current parameters */
-data class PingPanel(
-    val ip: String,/* Address to ping */
-    val viewmodel: PingyViewmodel
-) {
+/** Maximum number of pings retained per panel to prevent unbounded memory growth. */
+private const val MAX_PINGS = 2000
 
-    /** The whole collection of pings for this panel */
+/** Wrapper Model class for a single Ping graph panel and its current parameters */
+class PingPanel(
+    val ip: String,
+) {
+    /** The whole collection of pings for this panel (bounded to [MAX_PINGS]) */
     val pings = mutableStateListOf<Ping>()
 
     /** Pinging Parameters */
-    var isPinging = mutableStateOf(true) /* Defines whether this panel is showing and doing pings or not */
-    private var packetsize = mutableStateOf(32) /* Packet size for pinging (Minimum is 32, default is 64) */
-    var interval = mutableStateOf(50L) /* Interval of pinging, in milliseconds, default is 50ms */
+    var isPinging = mutableStateOf(true)
+    private var packetsize = mutableStateOf(32)
+    var interval = mutableStateOf(200L) /* Interval in ms. Default 200ms (5 pings/sec) */
 
     /** UI-related parameters */
-    var widthette = mutableStateOf(3) /* Ping line width in pixels, default is 4 */
-    var roof = mutableStateOf(1000) /* The highest ping that the panel shows */
-    var angleOfAttack = mutableStateOf(8.0f) /* How the panel zooms on smaller amounts, exponentially */
+    var widthette = mutableStateOf(3)
+    var roof = mutableStateOf(1000)
+    var angleOfAttack = mutableStateOf(8.0f)
     val pingStock = mutableStateOf(200)
-    var landMarks = mutableStateOf(listOf(25f, 50f, 100f, 200f, 500f)) /* Line marks on the panel */
-    var expanded = mutableStateOf(true) /* Whether the panel is showing info */
+    var landMarks = mutableStateOf(listOf(25f, 50f, 100f, 200f, 500f))
+    var expanded = mutableStateOf(true)
 
     /** For Statistics */
-    var pingsSent = mutableStateOf(0) /* Overall sent pings */
-    var pingsLost = mutableStateOf(0) /* Lost pings */
-    var lowestPing = mutableStateOf<Int?>(0) /* Lowest recorded ping */
-    var highestPing = mutableStateOf<Int?>(0) /* Highest recorded ping */
+    var pingsSent = mutableStateOf(0)
+    var pingsLost = mutableStateOf(0)
+    var lowestPing = mutableStateOf<Int?>(null)
+    var highestPing = mutableStateOf<Int?>(null)
 
-    init {
-        viewmodel.viewModelScope.launch(Dispatchers.IO) {
-            launch { ping() }
-        }
-    }
+    /** The platform-specific ping engine tied to this panel's lifecycle */
+    private var engine: PingEngine? = null
 
-    /**
-     * Perform ping operations and emit Ping objects to the shared flow.
-     */
-    private suspend fun ping() {
-        while (true) {
-            if (isPinging.value) {
+    fun startPinging() {
+        if (engine != null) return
+
+        engine = PingEngine(
+            host = ip,
+            packetSize = packetsize.value,
+            intervalMs = interval.value,
+        ).also { eng ->
+            eng.start { rttMs ->
                 try {
-                    val p = pingIcmp(host = ip, packetSize = packetsize.value)?.roundToInt()
-
+                    val value = rttMs?.roundToInt()
                     val ping = Ping(
-                        value = p,
+                        value = value,
                         timestamp = TimeSource.Monotonic.markNow()
                     )
 
                     pings.add(ping)
+                    // Prune oldest pings when over capacity
+                    while (pings.size > MAX_PINGS) {
+                        pings.removeAt(0)
+                    }
 
                     pingsSent.value++
                     if (ping.value == null || ping.value < 0) pingsLost.value++
@@ -71,5 +70,14 @@ data class PingPanel(
         }
     }
 
+    /** Stops pinging and releases the engine resources. */
+    fun stopPinging() {
+        engine?.stop()
+        engine = null
+    }
 
+    /** Call when removing this panel entirely. */
+    fun close() {
+        stopPinging()
+    }
 }

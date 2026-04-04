@@ -40,6 +40,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
@@ -84,20 +85,23 @@ fun MainScreenUI() {
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(null) {
-        viewmodel.panels.add(
-            PingPanel(
-                ip = "1.1.1.1",
-                viewmodel = viewmodel
-            )
-        )
+        if (viewmodel.panels.isEmpty()) {
+            val panel = PingPanel(ip = "1.1.1.1")
+            panel.startPinging()
+            viewmodel.panels.add(panel)
+        }
     }
-    /** Doing 'remember' on a mutable state means that the system will recompose
-     * any view that is using this rememberable */
-    /** Starting the UI composition with a scaffold that lays everything out */
+
+    // Clean up all panels when this screen leaves composition
+    DisposableEffect(null) {
+        onDispose {
+            viewmodel.panels.forEach { it.close() }
+        }
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            /** COLUMN acts like a linear layout with vertical orientation */
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -116,7 +120,6 @@ fun MainScreenUI() {
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
 
-                    /** ROW acts like a linear layout with horizontal orientation */
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center,
@@ -164,7 +167,6 @@ fun MainScreenUI() {
                             .padding(vertical = 12.dp)
                     ) {
 
-                        /** Input text field with custom style */
                         val txt = remember { mutableStateOf(Constants.iplist[0]) }
 
                         val digitalTxt = TextStyle(
@@ -187,7 +189,6 @@ fun MainScreenUI() {
                                 Text("IP or Domain", color = Color.White)
                             })
 
-                        /** Box that overlaps button and its popup menu */
                         Box {
                             val displayPopup = remember { mutableStateOf(false) }
 
@@ -220,7 +221,6 @@ fun MainScreenUI() {
                             }
                         }
 
-                        /** The button that adds panels, I like it being a FAB for the style */
                         FloatingActionButton(
                             modifier = Modifier.fillMaxWidth(), containerColor = Paletting.SGN,
                             onClick = {
@@ -233,12 +233,9 @@ fun MainScreenUI() {
                                             return@FloatingActionButton
                                         }
                                     }
-                                    viewmodel.panels.add(
-                                        PingPanel(
-                                            ip = txt.value.trim(),
-                                            viewmodel = viewmodel
-                                        )
-                                    )
+                                    val panel = PingPanel(ip = txt.value.trim())
+                                    panel.startPinging()
+                                    viewmodel.panels.add(panel)
                                     txt.value = ""
                                 } else {
                                     scope.launch {
@@ -269,6 +266,7 @@ fun MainScreenUI() {
                                 border = FilterChipDefaults.filterChipBorder(enabled = true, selected = true),
                                 trailingIcon = { Icon(imageVector = Icons.Filled.Close, contentDescription = "") },
                                 onClick = {
+                                    panel.close()
                                     viewmodel.panels.remove(panel)
                                 })
                             Spacer(modifier = Modifier.width(4.dp))

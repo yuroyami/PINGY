@@ -25,7 +25,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,54 +41,25 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastMapNotNull
-import com.yuroyami.pingy.logic.Ping
 import com.yuroyami.pingy.logic.PingPanel
 import com.yuroyami.pingy.ui.Paletting
 import com.yuroyami.pingy.ui.main.LocalPanelBackground
-import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.Font
 import pingy.shared.generated.resources.Inter_Regular
 import pingy.shared.generated.resources.Res
 import kotlin.math.pow
 import kotlin.math.roundToInt
-import kotlin.time.TimeSource.Monotonic.markNow
 
 
-/** This uses canvas drawing to draw the contents.
- * @param modifier Our Composable will follow this modifier's measurements to draw itself,
- * think of it as layout parameters when it comes to XML.
- **/
 @Composable
 fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
     val bg = LocalPanelBackground.current
-    val textMeasurer = rememberTextMeasurer() //To draw text inside DrawScopes
+    val textMeasurer = rememberTextMeasurer()
     val windowInfo = LocalWindowInfo.current
-    val hDP by derivedStateOf {  windowInfo.containerDpSize.height }
+    val hDP by derivedStateOf { windowInfo.containerDpSize.height }
 
     val pings = remember { pings }
 
-    val falsePings = remember { mutableStateListOf<Ping>() }
-
-    LaunchedEffect(null) {
-        while (true) {
-            if (isPinging.value) {
-                pings.lastOrNull()?.let { lastPing ->
-                    val rtt = lastPing.value?.times(2) ?: 1000
-
-                    val stamp = lastPing.timestamp
-
-                    if (stamp.elapsedNow().inWholeMilliseconds > rtt) {
-                        falsePings.add(Ping(null, markNow()))
-                    } else {
-                        falsePings.add(lastPing)
-                    }
-                }
-            }
-            delay(interval.value)
-        }
-    }
-
-    /* Text Style */
     val txtstyle = TextStyle(
         color = Color.DarkGray,
         fontSize = 14.sp,
@@ -97,7 +67,6 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
         shadow = Shadow(color = Color.LightGray, blurRadius = 3f)
     )
 
-    /* Creating a canvas inside which we draw */
     Box(
         modifier = modifier.fillMaxWidth().padding(12.dp).wrapContentHeight(),
         contentAlignment = Alignment.TopCenter
@@ -109,9 +78,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
             enter = slideInVertically(),
             exit = shrinkVertically()
         ) {
-            Column(
-                modifier = modifier.fillMaxWidth()
-            ) {
+            Column(modifier = modifier.fillMaxWidth()) {
                 Spacer(modifier = Modifier.height((hDP / 5) - 12.dp))
 
                 Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
@@ -121,7 +88,6 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                             .wrapContentHeight(),
                         colors = CardDefaults.cardColors(),
                         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp)
-
                     ) {
                         Column(
                             modifier = modifier
@@ -172,11 +138,8 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 }
         ) {
 
-            /* In the furthest background comes our panel background */
             drawImage(image = bg, dstSize = IntSize(size.width.toInt(), size.height.toInt()))
 
-
-            /* Drawing line indicators for each ping value milestone (20, 50, 100, etc) */
             for (y in landMarks.value) {
                 val h = calculatePingY(y.toInt(), size.height, roof.value.toFloat(), angleOfAttack.value)
                 drawLine(
@@ -188,20 +151,15 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 )
             }
 
-            /* Drawing all pings */
-            pingStock.value = (size.width / widthette.value).roundToInt() //max pings a panel can show (depends on width)
-            val showablePings = (if (pingStock.value > falsePings.size) falsePings.size - 1 else pingStock.value).toInt()
+            /* Draw pings directly from the real pings list */
+            pingStock.value = (size.width / widthette.value).roundToInt()
+            val showablePings = minOf(pingStock.value, pings.size)
 
-            if (falsePings.isNotEmpty()) {
-                for (i in (0 until showablePings)) {
+            if (showablePings > 0) {
+                for (i in 0 until showablePings) {
                     try {
-                        //Position X of the ping (Depends on the position index in the list)
-                        val x = size.width - (showablePings * widthette.value) + (widthette.value * i) //quick maths
-
-                        //The ping in question
-                        val p = falsePings[falsePings.size - showablePings + i]
-
-                        //Height of the ping (Depends on ping value)
+                        val x = size.width - (showablePings * widthette.value) + (widthette.value * i)
+                        val p = pings[pings.size - showablePings + i]
                         val y = calculatePingY(p.value ?: 0, size.height, roof.value.toFloat(), angleOfAttack.value)
 
                         drawLine(
@@ -210,14 +168,12 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                             strokeWidth = widthette.value.toFloat(),
                             start = Offset(x, size.height),
                         )
-                    } catch (e: IndexOutOfBoundsException) {
-                        e.printStackTrace()
+                    } catch (_: IndexOutOfBoundsException) {
                         continue
                     }
                 }
             }
 
-            /* Drawing line indicator texts (must be declared here to be drawn above pings) */
             for (y in landMarks.value) {
                 val h = calculatePingY(y.toInt(), size.height, roof.value.toFloat(), angleOfAttack.value)
                 drawText(
@@ -235,27 +191,23 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
     }
 }
 
-/** Our app focuses mostly on the smaller ping values while not giving much importance
- * to the higher values (especially beyond 200), so in this case, we wanna draw exponentially.
- * Which means, zooming on the smallest values taking up most of the graph Y axis.
- * To achieve this, we can use a mathematical power functional looking like this: a(1-2^(x/-(a/10)))
- * where a is basically the end goal of the exponential.
- * @param [x] value to exponentialize.
- * @param [f] exponentialization factor.
- * */
+/** Exponential scaling to emphasize low ping values in the graph.
+ * Uses the formula: f * (1 - 2^(-x * zoomFactor / f))
+ * @param x value to exponentialize.
+ * @param f exponentialization factor (the asymptotic ceiling).
+ * @param zoomFactor how aggressively to zoom on small values. */
 private fun exponentialize(x: Float, f: Float, zoomFactor: Float): Double {
     if (x == f) return f.toDouble()
     return f.toDouble() * (1.0 - 2.0.pow((-x.toDouble() * zoomFactor / f.toDouble())))
 }
 
-/** Calculates a ping height on the current panel based on its value
- * This calls [exponentialize] internally then linearalize it according to our panel height */
+/** Calculates a ping height on the current panel based on its value.
+ * Calls [exponentialize] internally then linearizes it to the panel height. */
 private fun calculatePingY(ping: Int, panelHeight: Float, pingMaxVal: Float, zoomFactor: Float): Float {
     return (exponentialize(ping.toFloat(), pingMaxVal, zoomFactor) * (panelHeight.toDouble() / pingMaxVal)).toFloat()
 }
 
-//
-/** Calculates a ping's color based on its value. Only a bit of linear maths is involved. */
+/** Calculates a ping's color based on its value using linear interpolation across tiers. */
 private fun calcPingColor(ping: Int): Color {
     return when (ping) {
         in (0..20) -> Color(0, ping * 255 / 20, 255)

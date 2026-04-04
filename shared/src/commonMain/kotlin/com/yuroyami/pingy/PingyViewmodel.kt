@@ -9,7 +9,12 @@ class PingyViewmodel: ViewModel() {
 
     val backstack = mutableStateListOf<Screen>(Screen.Main)
 
-    /** Defines the operating PingGraph [com.yuroyami.pingy.logic.PingPanel]s but in a mutable state (so it can be observed) */
+    /** Operating [PingPanel]s in observable mutable state */
     val panels = mutableStateListOf<PingPanel>()
 
+    override fun onCleared() {
+        super.onCleared()
+        panels.forEach { it.close() }
+        panels.clear()
+    }
 }

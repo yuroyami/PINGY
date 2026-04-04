@@ -1,25 +1,57 @@
 package com.yuroyami.pingy.utils
 
-import cocoapods.SPLPing.SPLPing
-import cocoapods.SPLPing.SPLPingConfiguration
-import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalForeignApi::class)
 actual suspend fun pingIcmp(host: String, ttl: Int, packetSize: Int): Double? {
-    val future = CompletableDeferred<Double>()
-    SPLPing.pingOnce(
+    return PingUtils.pingOnce(
         host = host,
-        configuration = SPLPingConfiguration(
-            pingInterval = 1.0, timeoutInterval = 1.0, timeToLive = ttl.toLong(), payloadSize = packetSize.toULong()
-        )
-    ) {
-        it?.let { response ->
-            future.complete(
-                (response.duration * 1000.0)
-            )
+        timeoutMs = 1000,
+        payloadSize = packetSize,
+    )
+}
+
+/**
+ * iOS PingEngine: performs repeated single-shot ICMP pings via [PingUtils]
+ * on a background coroutine with the configured interval.
+ */
+actual class PingEngine actual constructor(
+    actual val host: String,
+    packetSize: Int,
+    intervalMs: Long,
+) {
+    private val _packetSize = packetSize
+    private var _intervalMs = intervalMs
+
+    private var job: Job? = null
+    private val scope = CoroutineScope(Dispatchers.IO)
+
+    actual fun start(onPingResult: (Double?) -> Unit) {
+        stop()
+        job = scope.launch {
+            while (isActive) {
+                val result = PingUtils.pingOnce(
+                    host = host,
+                    timeoutMs = 1000,
+                    payloadSize = _packetSize,
+                )
+                onPingResult(result)
+                delay(_intervalMs)
+            }
         }
     }
-    return withTimeoutOrNull(1000) { future.await() }
+
+    actual fun stop() {
+        job?.cancel()
+        job = null
+    }
+
+    actual fun updateInterval(intervalMs: Long) {
+        _intervalMs = intervalMs
+    }
 }

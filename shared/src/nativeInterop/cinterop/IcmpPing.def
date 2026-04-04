@@ -1,0 +1,153 @@
+package = com.yuroyami.pingy.native.icmp
+language = C
+---
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/ip.h>
+#include <netinet/ip_icmp.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <sys/time.h>
+#include <poll.h>
+#include <unistd.h>
+#include <string.h>
+#include <errno.h>
+
+/* Helper to get errno value since Kotlin/Native can't always read it directly */
+static inline int get_errno(void) {
+    return errno;
+}
+
+/* Build an ICMP echo request packet into the provided buffer.
+   Returns the total packet size (header + payload). */
+static inline int build_icmp_echo_request(
+    void *buf,
+    int buf_size,
+    uint16_t identifier,
+    uint16_t sequence_number,
+    int payload_size
+) {
+    if (buf_size < (int)(sizeof(struct icmp) + payload_size)) return -1;
+
+    struct icmp *icmp_hdr = (struct icmp *)buf;
+    memset(icmp_hdr, 0, sizeof(struct icmp) + payload_size);
+
+    icmp_hdr->icmp_type = ICMP_ECHO;
+    icmp_hdr->icmp_code = 0;
+    icmp_hdr->icmp_id = htons(identifier);
+    icmp_hdr->icmp_seq = htons(sequence_number);
+
+    /* Fill payload with a pattern */
+    char *payload = (char *)buf + sizeof(struct icmp);
+    for (int i = 0; i < payload_size; i++) {
+        payload[i] = (char)(0x07);
+    }
+
+    /* Compute checksum */
+    icmp_hdr->icmp_cksum = 0;
+    uint16_t *ptr = (uint16_t *)buf;
+    int total_size = (int)sizeof(struct icmp) + payload_size;
+    int32_t sum = 0;
+    int len = total_size;
+
+    while (len > 1) {
+        sum += *ptr++;
+        len -= 2;
+    }
+    if (len == 1) {
+        uint16_t last = 0;
+        *((uint8_t *)&last) = *((uint8_t *)ptr);
+        sum += last;
+    }
+    sum = (sum >> 16) + (sum & 0xffff);
+    sum += (sum >> 16);
+    icmp_hdr->icmp_cksum = (uint16_t)(~sum);
+
+    return total_size;
+}
+
+/* Parse an ICMP echo reply from raw IP packet data.
+   Returns 0 on success, -1 on failure.
+   On success, fills out_id, out_seq, and out_type. */
+static inline int parse_icmp_echo_reply(
+    const void *buf,
+    int buf_len,
+    uint16_t *out_id,
+    uint16_t *out_seq,
+    uint8_t *out_type,
+    uint8_t *out_code
+) {
+    if (buf_len < (int)(sizeof(struct ip) + sizeof(struct icmp))) return -1;
+
+    const struct ip *ip_hdr = (const struct ip *)buf;
+    int ip_hdr_len = ip_hdr->ip_hl << 2;
+
+    if (buf_len < (int)(ip_hdr_len + sizeof(struct icmp))) return -1;
+
+    const struct icmp *icmp_hdr = (const struct icmp *)((const char *)buf + ip_hdr_len);
+
+    *out_type = icmp_hdr->icmp_type;
+    *out_code = icmp_hdr->icmp_code;
+    *out_id = ntohs(icmp_hdr->icmp_id);
+    *out_seq = ntohs(icmp_hdr->icmp_seq);
+
+    return 0;
+}
+
+/* Create an ICMP socket. Returns fd or -1 on error. */
+static inline int create_icmp_socket(void) {
+    return socket(AF_INET, SOCK_DGRAM, IPPROTO_ICMP);
+}
+
+/* Resolve hostname to IPv4 address string. Returns 0 on success. */
+static inline int resolve_host(const char *hostname, char *ip_buf, int ip_buf_size) {
+    struct addrinfo hints;
+    struct addrinfo *result = NULL;
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_DGRAM;
+    hints.ai_protocol = IPPROTO_ICMP;
+
+    int ret = getaddrinfo(hostname, NULL, &hints, &result);
+    if (ret != 0 || result == NULL) return -1;
+
+    struct sockaddr_in *addr = (struct sockaddr_in *)result->ai_addr;
+    if (inet_ntop(AF_INET, &addr->sin_addr, ip_buf, ip_buf_size) == NULL) {
+        freeaddrinfo(result);
+        return -1;
+    }
+
+    freeaddrinfo(result);
+    return 0;
+}
+
+/* Get current time in microseconds (monotonic-ish via gettimeofday) */
+static inline int64_t get_time_usec(void) {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (int64_t)tv.tv_sec * 1000000LL + (int64_t)tv.tv_usec;
+}
+
+/* Send ICMP packet to the given IPv4 address string. Returns bytes sent or -1. */
+static inline int send_icmp_packet(int sockfd, const char *ip_addr, const void *packet, int packet_len) {
+    struct sockaddr_in dest;
+    memset(&dest, 0, sizeof(dest));
+    dest.sin_family = AF_INET;
+    inet_pton(AF_INET, ip_addr, &dest.sin_addr);
+
+    return (int)sendto(sockfd, packet, packet_len, 0, (struct sockaddr *)&dest, sizeof(dest));
+}
+
+/* Receive ICMP reply with timeout in milliseconds. Returns bytes received or -1. */
+static inline int recv_icmp_packet(int sockfd, void *buf, int buf_size, int timeout_ms) {
+    struct pollfd pfd;
+    pfd.fd = sockfd;
+    pfd.events = POLLIN;
+    pfd.revents = 0;
+
+    int ret = poll(&pfd, 1, timeout_ms);
+    if (ret <= 0) return -1; /* timeout or error */
+
+    return (int)recvfrom(sockfd, buf, buf_size, 0, NULL, NULL);
+}

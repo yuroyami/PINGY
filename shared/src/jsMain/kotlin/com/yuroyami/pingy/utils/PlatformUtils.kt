@@ -1,16 +1,15 @@
 package com.yuroyami.pingy.utils
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalWindowInfo
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import org.w3c.xhr.XMLHttpRequest
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
-import kotlin.js.Date
-import kotlin.math.roundToLong
 
 actual suspend fun pingIcmp(host: String, ttl: Int, packetSize: Int): Double? {
     return try {
@@ -44,22 +43,37 @@ actual suspend fun pingIcmp(host: String, ttl: Int, packetSize: Int): Double? {
     }
 }
 
+/**
+ * JS PingEngine: performs repeated single-shot pings via XHR to the backend.
+ */
+actual class PingEngine actual constructor(
+    actual val host: String,
+    packetSize: Int,
+    intervalMs: Long,
+) {
+    private val _packetSize = packetSize
+    private var _intervalMs = intervalMs
 
-actual fun generateTimestampMillis() = Date().getTime().roundToLong()
+    private var job: Job? = null
+    private val scope = CoroutineScope(Dispatchers.Default)
 
-@OptIn(ExperimentalComposeUiApi::class)
-@Composable
-actual fun getScreenSizeInfo(): ScreenSizeInfo {
-    val density = LocalDensity.current
-    val config = LocalWindowInfo.current.containerSize
+    actual fun start(onPingResult: (Double?) -> Unit) {
+        stop()
+        job = scope.launch {
+            while (isActive) {
+                val result = pingIcmp(host = host, packetSize = _packetSize)
+                onPingResult(result)
+                delay(_intervalMs)
+            }
+        }
+    }
 
+    actual fun stop() {
+        job?.cancel()
+        job = null
+    }
 
-    return remember(density, config) {
-        ScreenSizeInfo(
-            hPX = config.height,
-            wPX = config.width,
-            hDP = with(density) { config.height.toDp() },
-            wDP = with(density) { config.width.toDp() }
-        )
+    actual fun updateInterval(intervalMs: Long) {
+        _intervalMs = intervalMs
     }
 }
