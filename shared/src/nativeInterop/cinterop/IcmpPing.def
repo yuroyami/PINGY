@@ -18,6 +18,26 @@ static inline int get_errno(void) {
     return errno;
 }
 
+/* Standard BSD Internet checksum used for ICMP packets (same algorithm as SPLPing's in_cksum). */
+static inline uint16_t icmp_in_cksum(const uint8_t *buffer, int len) {
+    int32_t sum = 0;
+    const uint16_t *cursor = (const uint16_t *)buffer;
+    int bytes_left = len;
+
+    while (bytes_left > 1) {
+        sum += *cursor++;
+        bytes_left -= 2;
+    }
+    if (bytes_left == 1) {
+        uint16_t last = 0;
+        *((uint8_t *)&last) = *((const uint8_t *)cursor);
+        sum += last;
+    }
+    sum = (sum >> 16) + (sum & 0xffff);
+    sum += (sum >> 16);
+    return (uint16_t)~sum;
+}
+
 /* Build an ICMP echo request packet into the provided buffer.
    Returns the total packet size (header + payload). */
 static inline int build_icmp_echo_request(
@@ -37,38 +57,27 @@ static inline int build_icmp_echo_request(
     icmp_hdr->icmp_id = htons(identifier);
     icmp_hdr->icmp_seq = htons(sequence_number);
 
-    /* Fill payload with a pattern */
+    /* Fill payload with a pattern (matches SPLPing convention of 0x07 repeat) */
     char *payload = (char *)buf + sizeof(struct icmp);
     for (int i = 0; i < payload_size; i++) {
         payload[i] = (char)(0x07);
     }
 
-    /* Compute checksum */
+    /* Compute checksum over the full ICMP message (header + payload). */
     icmp_hdr->icmp_cksum = 0;
-    uint16_t *ptr = (uint16_t *)buf;
     int total_size = (int)sizeof(struct icmp) + payload_size;
-    int32_t sum = 0;
-    int len = total_size;
-
-    while (len > 1) {
-        sum += *ptr++;
-        len -= 2;
-    }
-    if (len == 1) {
-        uint16_t last = 0;
-        *((uint8_t *)&last) = *((uint8_t *)ptr);
-        sum += last;
-    }
-    sum = (sum >> 16) + (sum & 0xffff);
-    sum += (sum >> 16);
-    icmp_hdr->icmp_cksum = (uint16_t)(~sum);
+    icmp_hdr->icmp_cksum = icmp_in_cksum((const uint8_t *)buf, total_size);
 
     return total_size;
 }
 
-/* Parse an ICMP echo reply from raw IP packet data.
-   Returns 0 on success, -1 on failure.
-   On success, fills out_id, out_seq, and out_type. */
+/* Parse an ICMP echo reply from a raw IP packet buffer as delivered by
+   SOCK_DGRAM+IPPROTO_ICMP on Darwin (which includes the full IPv4 header).
+   Returns:
+       0  — parse OK, checksum valid, fields filled.
+      -1  — buffer too small or malformed.
+      -2  — checksum mismatch (reply is not ours / corrupt).
+   On 0, fills out_id/out_seq/out_type/out_code. */
 static inline int parse_icmp_echo_reply(
     const void *buf,
     int buf_len,
@@ -77,40 +86,88 @@ static inline int parse_icmp_echo_reply(
     uint8_t *out_type,
     uint8_t *out_code
 ) {
-    if (buf_len < (int)(sizeof(struct ip) + sizeof(struct icmp))) return -1;
+    if (buf_len < (int)(sizeof(struct ip) + 8)) return -1;
 
     const struct ip *ip_hdr = (const struct ip *)buf;
+    /* Sanity check: IPv4 + ICMP */
+    if ((ip_hdr->ip_v != 4) || (ip_hdr->ip_p != IPPROTO_ICMP)) {
+        /* Not fatal — continue best-effort; callers that care will look at type. */
+    }
+
     int ip_hdr_len = ip_hdr->ip_hl << 2;
+    if (ip_hdr_len < 20 || buf_len < ip_hdr_len + 8) return -1;
 
-    if (buf_len < (int)(ip_hdr_len + sizeof(struct icmp))) return -1;
+    const uint8_t *icmp = (const uint8_t *)buf + ip_hdr_len;
+    int icmp_len = buf_len - ip_hdr_len;
 
-    const struct icmp *icmp_hdr = (const struct icmp *)((const char *)buf + ip_hdr_len);
+    /* Extract fields directly (tolerate unaligned reads via byte pick). */
+    *out_type = icmp[0];
+    *out_code = icmp[1];
+    uint16_t received_cksum;
+    memcpy(&received_cksum, icmp + 2, sizeof(uint16_t));
+    uint16_t id_be, seq_be;
+    memcpy(&id_be, icmp + 4, sizeof(uint16_t));
+    memcpy(&seq_be, icmp + 6, sizeof(uint16_t));
+    *out_id = ntohs(id_be);
+    *out_seq = ntohs(seq_be);
 
-    *out_type = icmp_hdr->icmp_type;
-    *out_code = icmp_hdr->icmp_code;
-    *out_id = ntohs(icmp_hdr->icmp_id);
-    *out_seq = ntohs(icmp_hdr->icmp_seq);
+    /* Verify checksum. Because we must treat the checksum field as zero when
+       recomputing, we split the sum into "bytes before cksum + zero + bytes after". */
+    int32_t sum = 0;
+    /* First 16-bit word: type + code */
+    uint16_t w;
+    memcpy(&w, icmp, 2); sum += w;
+    /* Skip checksum field (2 bytes, treated as 0) */
+    /* Remaining words */
+    int offset = 4;
+    while (offset + 1 < icmp_len) {
+        memcpy(&w, icmp + offset, 2);
+        sum += w;
+        offset += 2;
+    }
+    if (offset < icmp_len) {
+        uint16_t last = 0;
+        *((uint8_t *)&last) = icmp[offset];
+        sum += last;
+    }
+    sum = (sum >> 16) + (sum & 0xffff);
+    sum += (sum >> 16);
+    uint16_t computed = (uint16_t)~sum;
+
+    if (computed != received_cksum) return -2;
 
     return 0;
 }
 
-/* Create an ICMP socket. Returns fd or -1 on error. */
+/* Create an unprivileged ICMP socket (SOCK_DGRAM + IPPROTO_ICMP).
+   On Darwin, the kernel manages a unique per-socket identifier and rewrites
+   the ICMP id field on send/filters replies on receive — so callers should
+   NOT rely on the identifier they set being echoed back verbatim. */
 static inline int create_icmp_socket(void) {
     return socket(AF_INET, SOCK_DGRAM, IPPROTO_ICMP);
 }
 
-/* Resolve hostname to IPv4 address string. Returns 0 on success. */
+/* Resolve hostname to IPv4 address string. Returns 0 on success,
+   or the getaddrinfo error code (positive) / -1 for inet_ntop failure. */
 static inline int resolve_host(const char *hostname, char *ip_buf, int ip_buf_size) {
+    /* Fast path: numeric IPv4 literal — bypass DNS entirely. */
+    struct in_addr addr4;
+    if (inet_pton(AF_INET, hostname, &addr4) == 1) {
+        if (inet_ntop(AF_INET, &addr4, ip_buf, ip_buf_size) == NULL) return -1;
+        return 0;
+    }
+
+    /* Slow path: DNS. Leave ai_socktype / ai_protocol at 0 — Darwin's
+       getaddrinfo refuses combinations like (SOCK_DGRAM + IPPROTO_ICMP)
+       when `service` is NULL, failing every lookup including numeric IPs. */
     struct addrinfo hints;
     struct addrinfo *result = NULL;
 
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_DGRAM;
-    hints.ai_protocol = IPPROTO_ICMP;
 
     int ret = getaddrinfo(hostname, NULL, &hints, &result);
-    if (ret != 0 || result == NULL) return -1;
+    if (ret != 0 || result == NULL) return (ret != 0) ? ret : -1;
 
     struct sockaddr_in *addr = (struct sockaddr_in *)result->ai_addr;
     if (inet_ntop(AF_INET, &addr->sin_addr, ip_buf, ip_buf_size) == NULL) {
