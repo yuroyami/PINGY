@@ -35,9 +35,11 @@ const val PING_TIMEOUT_MS: Int = 3000
  * Platform actuals:
  *  - Android / JVM → unprivileged `SOCK_DGRAM + IPPROTO_ICMP` via a small JNI
  *                    library compiled from `shared/native/icmp_ping.c`.
- *  - iOS         → the same BSD socket code path via Kotlin/Native cinterop
- *                    (see `shared/src/nativeInterop/cinterop/IcmpPing.def`
- *                    and `iosMain/utils/PingUtils.kt`).
+ *  - iOS         → the same BSD socket code path via Kotlin/Native cinterop —
+ *                    a single C entry point (`do_ping_once_c` in
+ *                    `shared/src/nativeInterop/cinterop/IcmpPing.def`) runs
+ *                    the whole send/poll/recv/timestamp dance inside C so the
+ *                    measurement window stays free of K/N transitions.
  *
  * All three platforms therefore measure an honest-to-goodness network RTT
  * with microsecond-grade precision — no subprocess fork, no `ping -i` floor,

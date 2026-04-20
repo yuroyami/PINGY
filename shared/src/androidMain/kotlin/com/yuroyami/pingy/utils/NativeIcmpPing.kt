@@ -10,8 +10,8 @@ package com.yuroyami.pingy.utils
  * non-root callers, and every single-shot invocation pays a fork + linker
  * + DNS-resolver startup cost on top. Going direct via a JNI-fronted
  * SOCK_DGRAM+IPPROTO_ICMP socket is behaviorally interchangeable with the
- * iOS-side Kotlin/Native implementation in `PingUtils.kt` and gets us to
- * the same microsecond-grade RTT fidelity.
+ * iOS-side Kotlin/Native cinterop implementation (see `IcmpPing.def`'s
+ * `do_ping_once_c`) and gets us to the same microsecond-grade RTT fidelity.
  *
  * Android's kernel has `net.ipv4.ping_group_range` set to include the
  * `inet` gid, so app UIDs are allowed to open these sockets without any

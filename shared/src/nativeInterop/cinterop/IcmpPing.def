@@ -8,10 +8,12 @@ language = C
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
+#include <time.h>
 #include <poll.h>
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include <stdint.h>
 
 /* Helper to get errno value since Kotlin/Native can't always read it directly */
 static inline int get_errno(void) {
@@ -179,8 +181,15 @@ static inline int resolve_host(const char *hostname, char *ip_buf, int ip_buf_si
     return 0;
 }
 
-/* Get current time in microseconds (monotonic-ish via gettimeofday) */
+/* Monotonic wall clock in microseconds. Prefer CLOCK_MONOTONIC so NTP adjustments
+   don't skew an in-flight RTT measurement (gettimeofday is subject to them). */
 static inline int64_t get_time_usec(void) {
+#if defined(CLOCK_MONOTONIC)
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0) {
+        return (int64_t)ts.tv_sec * 1000000LL + (int64_t)ts.tv_nsec / 1000LL;
+    }
+#endif
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return (int64_t)tv.tv_sec * 1000000LL + (int64_t)tv.tv_usec;
@@ -207,4 +216,80 @@ static inline int recv_icmp_packet(int sockfd, void *buf, int buf_size, int time
     if (ret <= 0) return -1; /* timeout or error */
 
     return (int)recvfrom(sockfd, buf, buf_size, 0, NULL, NULL);
+}
+
+/* Full ping-once orchestration in C — mirrors the Android/JVM `do_ping_once` in
+ * shared/native/icmp_ping.c. Doing the whole send/poll/recv/timestamp dance in C
+ * (instead of driving it from Kotlin/Native) eliminates the K/N↔C transitions
+ * and ByteArray pin/unpin churn from inside the measured window, so the iOS RTT
+ * reflects the network alone — same ballpark as Android's JNI path.
+ *
+ * Returns RTT in milliseconds on success, or -1.0 on any failure / timeout.
+ */
+static inline double do_ping_once_c(const char *host, int timeout_ms, int payload_size) {
+    if (host == NULL || payload_size < 0 || payload_size > 480 || timeout_ms <= 0) {
+        return -1.0;
+    }
+
+    char ip_addr[INET_ADDRSTRLEN + 1];
+    memset(ip_addr, 0, sizeof(ip_addr));
+    if (resolve_host(host, ip_addr, sizeof(ip_addr)) != 0) return -1.0;
+
+    int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_ICMP);
+    if (sockfd < 0) return -1.0;
+
+    unsigned char packet[512];
+    int packet_size = build_icmp_echo_request(packet, sizeof(packet), 0xABCD, 1, payload_size);
+    if (packet_size < 0) { close(sockfd); return -1.0; }
+
+    struct sockaddr_in dest;
+    memset(&dest, 0, sizeof(dest));
+    dest.sin_family = AF_INET;
+    if (inet_pton(AF_INET, ip_addr, &dest.sin_addr) != 1) {
+        close(sockfd);
+        return -1.0;
+    }
+
+    int64_t send_us = get_time_usec();
+    if (sendto(sockfd, packet, packet_size, 0, (struct sockaddr *)&dest, sizeof(dest)) < 0) {
+        close(sockfd);
+        return -1.0;
+    }
+
+    unsigned char recv_buf[1024];
+    int remaining_ms = timeout_ms;
+    /* Loop: may receive stray replies (unreachable / time-exceeded / other ICMP).
+       Keep reading until a valid ECHOREPLY or the budget is gone. */
+    while (remaining_ms > 0) {
+        int64_t wait_start_us = get_time_usec();
+        struct pollfd pfd;
+        pfd.fd = sockfd;
+        pfd.events = POLLIN;
+        pfd.revents = 0;
+        int pr = poll(&pfd, 1, remaining_ms);
+        if (pr <= 0) { close(sockfd); return -1.0; }
+
+        int n = (int)recvfrom(sockfd, recv_buf, sizeof(recv_buf), 0, NULL, NULL);
+        if (n < 0) { close(sockfd); return -1.0; }
+
+        uint16_t id_out = 0, seq_out = 0;
+        uint8_t type_out = 0, code_out = 0;
+        int parsed = parse_icmp_echo_reply(recv_buf, n, &id_out, &seq_out, &type_out, &code_out);
+        /* type 0 = ECHOREPLY. On Darwin the kernel demuxes per-socket, so any
+           ECHOREPLY we receive is already ours — id/seq match not required. */
+        if (parsed == 0 && type_out == 0) {
+            int64_t recv_us = get_time_usec();
+            close(sockfd);
+            double rtt_ms = (double)(recv_us - send_us) / 1000.0;
+            if (rtt_ms < 0.0) rtt_ms = 0.0;
+            return rtt_ms;
+        }
+
+        int64_t now_us = get_time_usec();
+        int elapsed_ms = (int)((now_us - wait_start_us) / 1000);
+        if (elapsed_ms < 1) elapsed_ms = 1;
+        remaining_ms -= elapsed_ms;
+    }
+    close(sockfd);
+    return -1.0;
 }
