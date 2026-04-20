@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.plugin)
@@ -5,18 +7,26 @@ plugins {
 }
 
 kotlin {
-    jvmToolchain(AppConfig.javaVersion)
+    jvmToolchain(21)
 }
 
 android {
     namespace = "com.yuroyami.pingy.android"
-    compileSdk = AppConfig.compileSdk
+    compileSdk = providers.gradleProperty("android.compileSdk").get().toInt()
+
+    // applicationId, versionCode/Name, manifestPlaceholders[appName],
+    // compileOptions (java version), resourceConfigurations — handled by kmpSsot.
 
     signingConfigs {
         file("${rootDir}/keystore/pingykey.jks").takeIf { it.exists() }?.let { keystoreFile ->
             create("keystore") {
                 storeFile = keystoreFile
-                AppConfig.localProperties.apply {
+
+                val localProperties = Properties().apply {
+                    val file = File("local.properties")
+                    if (file.exists()) load(file.inputStream())
+                }
+                localProperties.apply {
                     keyAlias = getProperty("yuroyami.keyAlias")
                     keyPassword = getProperty("yuroyami.keyPassword")
                     storePassword = getProperty("yuroyami.storePassword")
@@ -26,13 +36,8 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.yuroyami.pingy"
-        minSdk = AppConfig.minSdk
-        targetSdk = AppConfig.compileSdk
-        versionCode = AppConfig.versionCode
-        versionName = AppConfig.versionName
-
-        manifestPlaceholders["appName"] = AppConfig.appName
+        minSdk = providers.gradleProperty("android.minSdk").get().toInt()
+        targetSdk = providers.gradleProperty("android.targetSdk").get().toInt()
 
         proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
 
@@ -56,8 +61,6 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.toVersion(AppConfig.javaVersion)
-        targetCompatibility = JavaVersion.toVersion(AppConfig.javaVersion)
         isCoreLibraryDesugaringEnabled = true
     }
 

@@ -6,16 +6,27 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Android [pingOnce] actual: delegates to the NDK-compiled `libpingy_icmp.so`
- * via [NativeIcmpPing]. The native call blocks its thread inside `poll(2)`
- * up to [timeoutMs], so we hop to the IO dispatcher for it.
+ * Android [openIcmpSocket] actual: thin wrapper around the JNI entry that
+ * does `socket(AF_INET, SOCK_DGRAM, IPPROTO_ICMP)` + `connect()`.
  */
-actual suspend fun pingOnce(
-    host: String,
+actual fun openIcmpSocket(ipv4: String): Int = NativeIcmpPing.nativeOpenSocket(ipv4)
+
+/**
+ * Android [pingOnSocket] actual: delegates to the JNI `nativePingOnSocket`.
+ * The native call blocks its thread in `poll(2)` up to [timeoutMs], so we
+ * hop to the IO dispatcher.
+ */
+actual suspend fun pingOnSocket(
+    fd: Int,
     timeoutMs: Int,
     payloadSize: Int,
-): Double? = withContext(Dispatchers.IO) {
-    NativeIcmpPing.pingOnce(host, timeoutMs, payloadSize)
+): Double = withContext(Dispatchers.IO) {
+    NativeIcmpPing.nativePingOnSocket(fd, timeoutMs, payloadSize)
+}
+
+/** Android [closeIcmpSocket] actual — idempotent on negative fds. */
+actual fun closeIcmpSocket(fd: Int) {
+    NativeIcmpPing.nativeCloseSocket(fd)
 }
 
 /**

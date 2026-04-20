@@ -218,68 +218,78 @@ static inline int recv_icmp_packet(int sockfd, void *buf, int buf_size, int time
     return (int)recvfrom(sockfd, buf, buf_size, 0, NULL, NULL);
 }
 
-/* Full ping-once orchestration in C — mirrors the Android/JVM `do_ping_once` in
- * shared/native/icmp_ping.c. Doing the whole send/poll/recv/timestamp dance in C
- * (instead of driving it from Kotlin/Native) eliminates the K/N↔C transitions
- * and ByteArray pin/unpin churn from inside the measured window, so the iOS RTT
- * reflects the network alone — same ballpark as Android's JNI path.
+/* Open an unprivileged ICMP socket and `connect()` it to an IPv4 literal.
+ * Mirrors nativeOpenSocket in shared/native/icmp_ping.c. Returns fd on
+ * success, or -1 on any failure. Hostnames are NOT accepted — the caller
+ * (PingEngine) does resolution once in Kotlin and caches the result.
  *
- * Returns RTT in milliseconds on success, or -1.0 on any failure / timeout.
- */
-static inline double do_ping_once_c(const char *host, int timeout_ms, int payload_size) {
-    if (host == NULL || payload_size < 0 || payload_size > 480 || timeout_ms <= 0) {
-        return -1.0;
-    }
-
-    char ip_addr[INET_ADDRSTRLEN + 1];
-    memset(ip_addr, 0, sizeof(ip_addr));
-    if (resolve_host(host, ip_addr, sizeof(ip_addr)) != 0) return -1.0;
-
-    int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_ICMP);
-    if (sockfd < 0) return -1.0;
-
-    unsigned char packet[512];
-    int packet_size = build_icmp_echo_request(packet, sizeof(packet), 0xABCD, 1, payload_size);
-    if (packet_size < 0) { close(sockfd); return -1.0; }
-
+ * Connecting pins the 4-tuple so subsequent send()s skip per-packet route
+ * lookups. That, plus reusing the same fd across probes, shaves the
+ * socket()+close() churn and the route cache miss a 5 Hz ping stream
+ * otherwise pays on every probe. */
+static inline int open_icmp_socket_connected(const char *ipv4) {
+    if (ipv4 == NULL) return -1;
+    int fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_ICMP);
+    if (fd < 0) return -1;
     struct sockaddr_in dest;
     memset(&dest, 0, sizeof(dest));
     dest.sin_family = AF_INET;
-    if (inet_pton(AF_INET, ip_addr, &dest.sin_addr) != 1) {
-        close(sockfd);
+    if (inet_pton(AF_INET, ipv4, &dest.sin_addr) != 1) { close(fd); return -1; }
+    if (connect(fd, (struct sockaddr *)&dest, sizeof(dest)) < 0) { close(fd); return -1; }
+    return fd;
+}
+
+/* Close a socket previously returned by open_icmp_socket_connected.
+ * Idempotent on negative fds. */
+static inline void close_icmp_socket(int fd) {
+    if (fd >= 0) close(fd);
+}
+
+/* Perform one ICMP probe over a previously opened+connected socket.
+ * Mirrors nativePingOnSocket in shared/native/icmp_ping.c — the whole
+ * send/poll/recv/timestamp dance runs inside this single C function so the
+ * measured window stays free of K/N↔C boundary crossings.
+ *
+ * Return contract (same as the JNI side):
+ *   rtt >= 0.0  — success, RTT in ms
+ *   -1.0        — socket-level failure; caller should close+reopen the fd
+ *   -2.0        — timeout / no matching reply; socket is still healthy
+ */
+static inline double ping_once_on_socket(int fd, int timeout_ms, int payload_size) {
+    if (fd < 0 || timeout_ms <= 0 || payload_size < 0 || payload_size > 480) {
         return -1.0;
     }
 
+    unsigned char packet[512];
+    int packet_size = build_icmp_echo_request(packet, sizeof(packet), 0xABCD, 1, payload_size);
+    if (packet_size < 0) return -1.0;
+
     int64_t send_us = get_time_usec();
-    if (sendto(sockfd, packet, packet_size, 0, (struct sockaddr *)&dest, sizeof(dest)) < 0) {
-        close(sockfd);
-        return -1.0;
-    }
+    /* send() instead of sendto() — socket is connected, kernel skips route lookup. */
+    if (send(fd, packet, packet_size, 0) < 0) return -1.0;
 
     unsigned char recv_buf[1024];
     int remaining_ms = timeout_ms;
-    /* Loop: may receive stray replies (unreachable / time-exceeded / other ICMP).
-       Keep reading until a valid ECHOREPLY or the budget is gone. */
     while (remaining_ms > 0) {
         int64_t wait_start_us = get_time_usec();
         struct pollfd pfd;
-        pfd.fd = sockfd;
+        pfd.fd = fd;
         pfd.events = POLLIN;
         pfd.revents = 0;
         int pr = poll(&pfd, 1, remaining_ms);
-        if (pr <= 0) { close(sockfd); return -1.0; }
+        if (pr < 0) return -1.0;
+        if (pr == 0) return -2.0;
 
-        int n = (int)recvfrom(sockfd, recv_buf, sizeof(recv_buf), 0, NULL, NULL);
-        if (n < 0) { close(sockfd); return -1.0; }
+        int n = (int)recv(fd, recv_buf, sizeof(recv_buf), 0);
+        if (n < 0) return -1.0;
 
         uint16_t id_out = 0, seq_out = 0;
         uint8_t type_out = 0, code_out = 0;
         int parsed = parse_icmp_echo_reply(recv_buf, n, &id_out, &seq_out, &type_out, &code_out);
-        /* type 0 = ECHOREPLY. On Darwin the kernel demuxes per-socket, so any
-           ECHOREPLY we receive is already ours — id/seq match not required. */
+        /* type 0 = ECHOREPLY. Darwin's kernel demuxes per-socket so any
+           ECHOREPLY we see is already ours — no id/seq match required. */
         if (parsed == 0 && type_out == 0) {
             int64_t recv_us = get_time_usec();
-            close(sockfd);
             double rtt_ms = (double)(recv_us - send_us) / 1000.0;
             if (rtt_ms < 0.0) rtt_ms = 0.0;
             return rtt_ms;
@@ -290,6 +300,5 @@ static inline double do_ping_once_c(const char *host, int timeout_ms, int payloa
         if (elapsed_ms < 1) elapsed_ms = 1;
         remaining_ms -= elapsed_ms;
     }
-    close(sockfd);
-    return -1.0;
+    return -2.0;
 }

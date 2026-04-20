@@ -10,29 +10,32 @@ package com.yuroyami.pingy.utils
  * non-root callers, and every single-shot invocation pays a fork + linker
  * + DNS-resolver startup cost on top. Going direct via a JNI-fronted
  * SOCK_DGRAM+IPPROTO_ICMP socket is behaviorally interchangeable with the
- * iOS-side Kotlin/Native cinterop implementation (see `IcmpPing.def`'s
- * `do_ping_once_c`) and gets us to the same microsecond-grade RTT fidelity.
+ * iOS-side Kotlin/Native cinterop implementation (see `IcmpPing.def`) and
+ * gets us to the same microsecond-grade RTT fidelity.
  *
  * Android's kernel has `net.ipv4.ping_group_range` set to include the
  * `inet` gid, so app UIDs are allowed to open these sockets without any
  * special permission.
+ *
+ * Three-entry API — the engine holds the socket open for its whole lifetime:
+ *  - [nativeOpenSocket]   → socket() + connect() to the resolved IPv4, once.
+ *  - [nativePingOnSocket] → send()/poll()/recv() over that fd, per probe.
+ *  - [nativeCloseSocket]  → close(), once at engine shutdown.
  */
 internal object NativeIcmpPing {
     init {
         System.loadLibrary("pingy_icmp")
     }
 
-    /**
-     * Returns the RTT in milliseconds, or a negative sentinel (-1.0) on any
-     * failure (resolution, socket, send, poll, timeout, malformed reply).
-     * Blocks the calling thread for up to [timeoutMs].
-     */
+    /** Returns the file descriptor on success, or `-1` on any failure. */
     @JvmStatic
-    external fun nativePingOnce(host: String, timeoutMs: Int, payloadSize: Int): Double
+    external fun nativeOpenSocket(ipv4: String): Int
 
-    /** Null-on-failure wrapper over [nativePingOnce]. */
-    fun pingOnce(host: String, timeoutMs: Int, payloadSize: Int): Double? {
-        val rtt = nativePingOnce(host, timeoutMs, payloadSize)
-        return if (rtt < 0.0) null else rtt
-    }
+    /** See [com.yuroyami.pingy.utils.pingOnSocket] for the sentinel contract. */
+    @JvmStatic
+    external fun nativePingOnSocket(fd: Int, timeoutMs: Int, payloadSize: Int): Double
+
+    /** Safe to call with `-1`; no-op in that case. */
+    @JvmStatic
+    external fun nativeCloseSocket(fd: Int)
 }

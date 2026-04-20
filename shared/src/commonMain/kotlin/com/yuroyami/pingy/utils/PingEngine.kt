@@ -28,24 +28,40 @@ import kotlin.concurrent.Volatile
 const val PING_TIMEOUT_MS: Int = 3000
 
 /**
- * Perform exactly one ICMP echo probe against [host] and return the round-trip
- * time in milliseconds, or `null` on any failure (unresolvable host, socket
- * error, timeout, malformed reply).
+ * Open an unprivileged ICMP socket and `connect()` it to the given IPv4
+ * literal. Returns the platform file descriptor (Int) on success, or `-1`
+ * on any failure. Hostnames are intentionally not accepted — callers
+ * resolve once via [resolveHostToIpv4] and feed the numeric result here.
  *
- * Platform actuals:
- *  - Android / JVM → unprivileged `SOCK_DGRAM + IPPROTO_ICMP` via a small JNI
- *                    library compiled from `shared/native/icmp_ping.c`.
- *  - iOS         → the same BSD socket code path via Kotlin/Native cinterop —
- *                    a single C entry point (`do_ping_once_c` in
- *                    `shared/src/nativeInterop/cinterop/IcmpPing.def`) runs
- *                    the whole send/poll/recv/timestamp dance inside C so the
- *                    measurement window stays free of K/N transitions.
- *
- * All three platforms therefore measure an honest-to-goodness network RTT
- * with microsecond-grade precision — no subprocess fork, no `ping -i` floor,
- * no shell. Interchangeable across Android and iOS.
+ * The point of holding the socket open: per-probe `socket() + close()` is
+ * real kernel work (Darwin also allocates a per-socket ICMP id on every
+ * create), and sendto() on an unconnected DGRAM socket re-resolves the
+ * route every packet. Opening once + connecting once means subsequent
+ * probes are pure send/poll/recv with no kernel-side setup.
  */
-expect suspend fun pingOnce(host: String, timeoutMs: Int, payloadSize: Int): Double?
+expect fun openIcmpSocket(ipv4: String): Int
+
+/**
+ * Perform exactly one ICMP echo probe over a socket previously returned by
+ * [openIcmpSocket]. The raw native return value uses this sentinel contract:
+ *
+ *   result >= 0.0  — success, RTT in ms.
+ *   [PING_RESULT_SOCK_ERR] (-1.0) — socket-level failure; caller must close+reopen.
+ *   [PING_RESULT_TIMEOUT]  (-2.0) — timeout / no matching reply; socket still healthy.
+ *
+ * Returning a `Double` (not `Double?`) deliberately — the engine branches on
+ * the sentinel to decide between "lost-but-keep-socket" and "socket-died-reopen".
+ */
+expect suspend fun pingOnSocket(fd: Int, timeoutMs: Int, payloadSize: Int): Double
+
+/** Close a socket previously returned by [openIcmpSocket]. Idempotent on `-1`. */
+expect fun closeIcmpSocket(fd: Int)
+
+/** Native sentinel: socket died (caller should close+reopen the fd). */
+const val PING_RESULT_SOCK_ERR: Double = -1.0
+
+/** Native sentinel: no matching reply within the budget (socket still healthy). */
+const val PING_RESULT_TIMEOUT: Double = -2.0
 
 /**
  * Resolve a hostname to an IPv4 dotted string once, via the platform resolver.
@@ -60,9 +76,14 @@ expect suspend fun pingOnce(host: String, timeoutMs: Int, payloadSize: Int): Dou
 expect fun resolveHostToIpv4(host: String): String?
 
 /**
- * A live, long-running ping engine. Spawns a coroutine that fires [pingOnce]
+ * A live, long-running ping engine. Spawns a coroutine that fires probes
  * against [host] back-to-back and reports each result (RTT in ms, or `null`
  * for a confirmed lost/timed-out probe) via the callback passed to [start].
+ *
+ * Single socket per engine: on first iteration we resolve the host once,
+ * open one ICMP socket, `connect()` it, and reuse it for every probe until
+ * [stop]. A socket-level error (send/poll/recv failure) triggers a close+
+ * reopen on the next iteration; a plain timeout does not.
  *
  * [intervalMs] == 0 → "fire the next probe the instant the previous one
  * returned" (adaptive mode; the effective cadence equals the RTT). Positive
@@ -94,26 +115,57 @@ class PingEngine(
 
     fun start(onPingResult: (Double?) -> Unit) {
         scope.launch {
-            while (isActive) {
-                val target = cachedTarget ?: run {
-                    val resolved = runCatching { resolveHostToIpv4(host) }.getOrNull() ?: host
-                    cachedTarget = resolved
-                    resolved
-                }
-                // withTimeoutOrNull is the hard cap that overrules the process.
-                // The native call gets PING_TIMEOUT_MS too, but if for any reason
-                // it fails to honor it, we still unblock the loop at the deadline
-                // (+ a tiny margin so the native timeout gets to fire naturally
-                // in the common case).
-                val rtt = runCatching {
-                    withTimeoutOrNull(PING_TIMEOUT_MS + 200L) {
-                        pingOnce(target, timeoutMs = PING_TIMEOUT_MS, payloadSize = _packetSize)
+            var fd = -1
+            try {
+                while (isActive) {
+                    // Lazy (re)open. cachedTarget resolves the host at most once
+                    // per engine lifetime; the fd is recreated after a socket-level
+                    // error or not at all if probes keep succeeding / only timing out.
+                    if (fd < 0) {
+                        val target = cachedTarget ?: run {
+                            val resolved = runCatching { resolveHostToIpv4(host) }.getOrNull() ?: host
+                            cachedTarget = resolved
+                            resolved
+                        }
+                        fd = runCatching { openIcmpSocket(target) }.getOrDefault(-1)
+                        if (fd < 0) {
+                            // Could be a transient resource issue (EMFILE, ENOBUFS) or a
+                            // bad IP. Emit one lost sample, back off briefly, retry.
+                            if (!isActive) break
+                            onPingResult(null)
+                            delay(200)
+                            continue
+                        }
                     }
-                }.getOrNull()
-                if (!isActive) break
-                onPingResult(rtt)
-                val iv = _intervalMs
-                if (iv > 0L) delay(iv)
+
+                    // withTimeoutOrNull is the hard cap that overrules the native
+                    // call — it should honor its own PING_TIMEOUT_MS but if poll(2)
+                    // ever stalls we still unblock the loop (+ tiny margin so the
+                    // native timeout fires naturally in the common case).
+                    val raw = runCatching {
+                        withTimeoutOrNull(PING_TIMEOUT_MS + 200L) {
+                            pingOnSocket(fd, timeoutMs = PING_TIMEOUT_MS, payloadSize = _packetSize)
+                        } ?: PING_RESULT_SOCK_ERR // outer timeout → assume the fd is wedged
+                    }.getOrDefault(PING_RESULT_SOCK_ERR)
+
+                    if (!isActive) break
+
+                    when {
+                        raw >= 0.0 -> onPingResult(raw)
+                        raw == PING_RESULT_TIMEOUT -> onPingResult(null)
+                        else -> {
+                            // Socket-level error: report lost, close fd, reopen next iter.
+                            onPingResult(null)
+                            closeIcmpSocket(fd)
+                            fd = -1
+                        }
+                    }
+
+                    val iv = _intervalMs
+                    if (iv > 0L) delay(iv)
+                }
+            } finally {
+                if (fd >= 0) closeIcmpSocket(fd)
             }
         }
     }

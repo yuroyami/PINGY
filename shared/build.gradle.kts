@@ -1,3 +1,7 @@
+import com.yuroyami.kmpssot.KmpSsotExtension
+
+val ssot = rootProject.extensions.getByType(KmpSsotExtension::class.java)
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.cocoapods)
@@ -8,12 +12,12 @@ plugins {
 }
 
 kotlin {
-    jvmToolchain(AppConfig.javaVersion)
+    jvmToolchain(21)
 
     android {
         namespace = "com.yuroyami.pingy"
-        compileSdk = AppConfig.compileSdk
-        minSdk = AppConfig.minSdk
+        compileSdk = providers.gradleProperty("android.compileSdk").get().toInt()
+        minSdk = providers.gradleProperty("android.minSdk").get().toInt()
         androidResources { enable = true }
     }
 
@@ -40,11 +44,12 @@ kotlin {
         }
     }
 
-    // iOS configuration
+    // iOS configuration. kmpSsot handles pbxproj version/bundleId/appName
+    // propagation via the `syncIosConfig` task hooked into framework linking.
     cocoapods {
-        summary = "${AppConfig.appName} Common Code (Platform-agnostic)"
+        summary = "${ssot.appName.get()} Common Code (Platform-agnostic)"
         homepage = "www.github.com/yuroyami/PINGY"
-        version = AppConfig.versionName
+        version = ssot.versionName.get()
         ios.deploymentTarget = "14.0"
         podfile = project.file("../iosApp/Podfile")
         framework {
@@ -180,12 +185,8 @@ run {
     }
 }
 
-with(AppConfig) {
-    updateIOSVersion() //Uncomment if Xcode build fails, for some reason it breaks Gradle build from within Xcode
-}
-
 buildConfig {
-    buildConfigField("APP_NAME", AppConfig.appName)
-    buildConfigField("APP_VERSION", AppConfig.versionName)
+    buildConfigField("APP_NAME", ssot.appName.get())
+    buildConfigField("APP_VERSION", ssot.versionName.get())
     buildConfigField("DEBUG", false)
 }

@@ -7,7 +7,7 @@
   },
   "authors": "",
   "license": "",
-  "summary": "PINGY Common Code (Platform-agnostic)",
+  "summary": "Pingy Common Code (Platform-agnostic)",
   "vendored_frameworks": "build/cocoapods/framework/shared.framework",
   "libraries": "c++",
   "platforms": {
