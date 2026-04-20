@@ -78,9 +78,9 @@ import kotlin.math.roundToInt
  * - A standalone minimize/expand [IconButton] overlaid on the canvas' top-right
  *   corner. It intercepts clicks in its own area and toggles the sheet's
  *   expanded/collapsed state, independently from the mode switch.
- * - A bottom sheet containing either stats or tuning sliders (interval, angle
- *   of attack, width, height, timeframe) — all reactive via the panel's
- *   StateFlows, so changes take effect instantly.
+ * - A bottom sheet containing either stats or tuning sliders (packet size,
+ *   angle of attack, canvas height, timeframe, roof) — all reactive via the
+ *   panel's StateFlows, so changes take effect instantly.
  */
 @Composable
 fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
@@ -425,7 +425,7 @@ private fun StatsSheet(
  */
 @Composable
 private fun PingPanel.SettingsSheet(txtstyle: TextStyle) {
-    val intervalVal by interval.collectAsState()
+    val packetSizeVal by packetSize.collectAsState()
     val roofVal by roof.collectAsState()
     val angleOfAttackVal by angleOfAttack.collectAsState()
     val timeframeMsVal by timeframeMs.collectAsState()
@@ -445,14 +445,13 @@ private fun PingPanel.SettingsSheet(txtstyle: TextStyle) {
             style = txtstyle.copy(fontSize = 11.sp)
         )
 
-        // --- Interval (most important) ---
+        // --- Packet size (ICMP payload bytes) — live-applied to the next probe. ---
         SliderBlock(
-            label = if (intervalVal == 0L) "Interval: 0 ms (as fast as possible)"
-                    else "Interval: ${intervalVal} ms",
-            value = intervalVal.toFloat(),
-            range = 0f..2000f,
-            steps = 39, // ~50ms steps
-            onValueChange = { interval.value = it.toLong() },
+            label = "Packet size: ${packetSizeVal} bytes",
+            value = packetSizeVal.toFloat(),
+            range = 16f..480f,
+            steps = 28, // 16-byte steps
+            onValueChange = { packetSize.value = it.toInt() },
             txtstyle = txtstyle
         )
 
