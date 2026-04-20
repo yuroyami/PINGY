@@ -53,7 +53,7 @@ object PingUtils {
             resolve_host(host, pinned.addressOf(0), IP_BUF_SIZE)
         }
         if (resolved != 0) {
-            loggy("PingUtils: host resolution failed for '$host' (gai/errno=$resolved)")
+            loggyw("PingUtils: host resolution failed for '$host' (gai/errno=$resolved)")
             return null
         }
         val ipAddress = ipBuf.decodeToString().trimEnd('\u0000')
@@ -61,7 +61,7 @@ object PingUtils {
         // 2. Open unprivileged ICMP socket
         val sockfd = create_icmp_socket()
         if (sockfd < 0) {
-            loggy("PingUtils: create_icmp_socket failed (errno=${get_errno()}) host=$host")
+            loggye("PingUtils: create_icmp_socket failed (errno=${get_errno()}) host=$host")
             return null
         }
 
@@ -78,7 +78,7 @@ object PingUtils {
                 )
             }
             if (packetSize < 0) {
-                loggy("PingUtils: build_icmp_echo_request failed")
+                loggye("PingUtils: build_icmp_echo_request failed")
                 return null
             }
 
@@ -88,7 +88,7 @@ object PingUtils {
                 send_icmp_packet(sockfd, ipAddress, pinned.addressOf(0), packetSize)
             }
             if (sent < 0) {
-                loggy("PingUtils: send_icmp_packet failed (errno=${get_errno()}) host=$host ip=$ipAddress")
+                loggyw("PingUtils: send_icmp_packet failed (errno=${get_errno()}) host=$host ip=$ipAddress")
                 return null
             }
 

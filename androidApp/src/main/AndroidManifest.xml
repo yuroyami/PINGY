@@ -2,26 +2,26 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
+    <!-- INTERNET is the only permission this app actually needs: we open
+         unprivileged ICMP sockets from our own UID. ACCESS_NETWORK_STATE is
+         kept for future "which network am I on" display (Wi-Fi vs. cell). -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="Pingy"
-        android:requestLegacyExternalStorage="true"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="false"
-        android:theme="@style/Theme.splash">
+        android:theme="@style/Theme.splash"
+        tools:targetApi="31">
 
         <activity
             android:name="com.yuroyami.pingy.AppActivity"
             android:configChanges="orientation|keyboardHidden|screenSize"
             android:exported="true"
             android:imeOptions="flagNoExtractUi"
-            android:fitsSystemWindows="true"
             android:windowSoftInputMode="adjustNothing">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -31,4 +31,4 @@
 
     </application>
 
-</manifest> 
+</manifest>

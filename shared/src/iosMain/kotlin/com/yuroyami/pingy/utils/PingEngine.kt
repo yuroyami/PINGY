@@ -1,81 +1,40 @@
 package com.yuroyami.pingy.utils
 
-import kotlin.concurrent.Volatile
-import kotlin.time.TimeSource
-import kotlinx.coroutines.CoroutineScope
+import com.yuroyami.pingy.native.icmp.resolve_host
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.memScoped
+import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
- * iOS PingEngine: performs repeated single-shot ICMP pings via [PingUtils]
- * on a background coroutine with the configured interval.
- *
- * Interval changes take effect immediately: the current in-flight delay is
- * cancelled and the loop is restarted with the new interval.
+ * iOS [pingOnce] actual: delegates to [PingUtils.pingOnce], which is a
+ * pure Kotlin/Native + POSIX cinterop implementation (see
+ * `shared/src/nativeInterop/cinterop/IcmpPing.def` and its matching
+ * `PingUtils.kt`). Darwin's kernel demuxes ECHOREPLYs per-socket, so the
+ * Kotlin layer only has to validate type + checksum.
  */
-actual class PingEngine actual constructor(
-    actual val host: String,
-    packetSize: Int,
-    intervalMs: Long,
-) {
-    private val _packetSize = packetSize
+actual suspend fun pingOnce(
+    host: String,
+    timeoutMs: Int,
+    payloadSize: Int,
+): Double? = withContext(Dispatchers.IO) {
+    PingUtils.pingOnce(
+        host = host,
+        timeoutMs = timeoutMs,
+        payloadSize = payloadSize,
+    )
+}
 
-    @Volatile
-    private var _intervalMs = intervalMs
-
-    private var job: Job? = null
-    private val scope = CoroutineScope(Dispatchers.IO)
-    private var currentCallback: ((Double?) -> Unit)? = null
-
-    actual fun start(onPingResult: (Double?) -> Unit) {
-        currentCallback = onPingResult
-        relaunchLoop()
-    }
-
-    private fun relaunchLoop() {
-        val cb = currentCallback ?: return
-        job?.cancel()
-        job = scope.launch {
-            while (isActive) {
-                val wallStart = TimeSource.Monotonic.markNow()
-                val result = PingUtils.pingOnce(
-                    host = host,
-                    timeoutMs = 1000,
-                    payloadSize = _packetSize,
-                )
-                val wallMs = wallStart.elapsedNow().inWholeMicroseconds / 1000.0
-                if (result != null) {
-                    loggy("iOS ping rtt=${formatMs(result)}ms wall=${formatMs(wallMs)}ms overhead=${formatMs(wallMs - result)}ms")
-                } else {
-                    loggy("iOS ping lost wall=${formatMs(wallMs)}ms")
-                }
-                cb(result)
-                delay(_intervalMs)
-            }
-        }
-    }
-
-    private fun formatMs(v: Double): String {
-        val neg = v < 0
-        val cents = kotlin.math.round(kotlin.math.abs(v) * 100.0).toLong()
-        val prefix = if (neg) "-" else ""
-        return "$prefix${cents / 100}.${(cents % 100).toString().padStart(2, '0')}"
-    }
-
-    actual fun stop() {
-        currentCallback = null
-        job?.cancel()
-        job = null
-    }
-
-    actual fun updateInterval(intervalMs: Long) {
-        if (_intervalMs == intervalMs) return
-        _intervalMs = intervalMs
-        // Cancel current delay so the new interval takes effect immediately.
-        relaunchLoop()
-    }
+/**
+ * iOS [resolveHostToIpv4] actual: calls straight into the cinterop
+ * `resolve_host` (same helper `PingUtils` uses), which shortcuts IPv4
+ * literals via `inet_pton` and otherwise walks the system's `getaddrinfo`.
+ */
+actual fun resolveHostToIpv4(host: String): String? = memScoped {
+    val buf = ByteArray(64)
+    val rc = buf.usePinned { resolve_host(host, it.addressOf(0), buf.size) }
+    if (rc != 0) return@memScoped null
+    buf.decodeToString().trimEnd('\u0000').takeIf { it.isNotEmpty() }
 }

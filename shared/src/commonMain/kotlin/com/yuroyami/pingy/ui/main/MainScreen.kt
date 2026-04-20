@@ -40,7 +40,6 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
@@ -77,6 +76,22 @@ import pingy.shared.generated.resources.panel_bg
 
 val LocalPanelBackground = compositionLocalOf<ImageBitmap> { error("No panel background provided") }
 
+/**
+ * Normalize whatever the user pasted into the "IP or Domain" field into the
+ * string we actually pass to the resolver. Strips scheme ("https://"),
+ * trailing paths ("/foo") and surrounding whitespace. Returns `null` when
+ * nothing usable remains.
+ */
+private fun sanitizeHost(raw: String): String? {
+    val trimmed = raw.trim()
+    if (trimmed.isEmpty()) return null
+    val noScheme = trimmed
+        .removePrefix("https://").removePrefix("http://")
+        .removePrefix("HTTPS://").removePrefix("HTTP://")
+    val pathStripped = noScheme.substringBefore('/').substringBefore('?')
+    return pathStripped.ifBlank { null }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MainScreenUI() {
@@ -91,13 +106,10 @@ fun MainScreenUI() {
             viewmodel.panels.add(panel)
         }
     }
-
-    // Clean up all panels when this screen leaves composition
-    DisposableEffect(null) {
-        onDispose {
-            viewmodel.panels.forEach { it.close() }
-        }
-    }
+    // Panel lifecycle ownership lives on the ViewModel: PingyViewmodel.onCleared()
+    // calls close() on every panel when the VM itself is disposed. Adding a
+    // DisposableEffect here would kill engines on every recomposition-level
+    // screen swap and leave stale panels in the observable list.
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -224,22 +236,22 @@ fun MainScreenUI() {
                         FloatingActionButton(
                             modifier = Modifier.fillMaxWidth(), containerColor = Paletting.SGN,
                             onClick = {
-                                if (txt.value.isNotBlank()) {
-                                    for (panel in viewmodel.panels) {
-                                        if (panel.ip == txt.value.trim()) {
-                                            scope.launch {
-                                                snackbarHostState.showSnackbar("This address is already added.")
-                                            }
-                                            return@FloatingActionButton
+                                val host = sanitizeHost(txt.value)
+                                when {
+                                    host == null -> {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Please enter a valid address.")
                                         }
                                     }
-                                    val panel = PingPanel(ip = txt.value.trim())
-                                    panel.startPinging()
-                                    viewmodel.panels.add(panel)
-                                    txt.value = ""
-                                } else {
-                                    scope.launch {
-                                        snackbarHostState.showSnackbar("Please enter a valid address.")
+                                    viewmodel.panels.any { it.ip == host } -> {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("This address is already added.")
+                                        }
+                                    }
+                                    else -> {
+                                        val panel = PingPanel(ip = host)
+                                        panel.startPinging()
+                                        viewmodel.panels.add(panel)
                                     }
                                 }
                             }
@@ -257,9 +269,13 @@ fun MainScreenUI() {
                         for (panel in viewmodel.panels) {
                             ElevatedFilterChip(
                                 label = {
+                                    // Auto-shrink long hostnames so the chip
+                                    // doesn't overflow the row. Threshold is
+                                    // purely cosmetic — short IPs render at
+                                    // the default Material chip size.
                                     Text(
                                         text = panel.ip,
-                                        fontSize = if (panel.ip.contains("www", true)) 11.sp else TextUnit.Unspecified
+                                        fontSize = if (panel.ip.length > 16) 11.sp else TextUnit.Unspecified
                                     )
                                 },
                                 selected = true,

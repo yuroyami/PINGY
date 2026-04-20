@@ -3,10 +3,16 @@ package com.yuroyami.pingy.logic
 import kotlin.concurrent.Volatile
 
 /**
- * A thread-safe circular buffer optimized for streaming data and visualization.
+ * Fixed-capacity circular buffer used for ping history.
+ *
+ * Concurrency: single-writer / many-reader. The ping engine's coroutine is the
+ * sole writer; the Compose render thread iterates via [fastForEachWithIndex].
+ * [writeIndex]/[readIndex]/[size] are [Volatile] so readers see a consistent
+ * recent state — but [add] is NOT atomic, so a second concurrent writer would
+ * race. That guarantee is enough for our one-engine-per-panel model.
  *
  * @param capacity Maximum number of elements the buffer can hold
- * @param T The type of elements stored in the buffer (must be non‑nullable)
+ * @param T The type of elements stored in the buffer (must be non-nullable)
  */
 class RingBuffer<T : Any>(val capacity: Int) {
 
@@ -26,9 +32,6 @@ class RingBuffer<T : Any>(val capacity: Int) {
 
     @Volatile
     var size = 0
-
-    @Volatile
-    var sampleCount = 0F
 
     fun add(element: T) {
         buffer[writeIndex] = element
@@ -76,21 +79,5 @@ class RingBuffer<T : Any>(val capacity: Int) {
         return buffer[readIndex]
     }
 
-    fun clear() {
-        buffer.fill(null)
-        writeIndex = 0
-        readIndex = 0
-        size = 0
-        sampleCount = 0f
-    }
-
     fun isEmpty(): Boolean = size == 0
-
-    companion object {
-        /**
-         * Factory method to create a generic [RingBuffer] with the specified capacity.
-         * The type parameter can be inferred or specified explicitly.
-         */
-        inline fun <reified T : Any> allocate(size: Int) = RingBuffer<T>(size)
-    }
 }

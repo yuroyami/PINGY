@@ -6,5 +6,14 @@ package com.yuroyami.pingy.utils
 
 import co.touchlab.kermit.Logger
 
-/** Logs the [s] message to the platform's corresponding log output */
-fun loggy(s: Any?) = Logger.e("Pingy") { s.toString() }
+private const val TAG = "Pingy"
+
+/** Informational log — expected events (startup, connectivity state, etc). */
+fun loggy(s: Any?) = Logger.i(tag = TAG) { s.toString() }
+
+/** Warning — something unexpected but recoverable (packet loss, transient socket errors). */
+fun loggyw(s: Any?) = Logger.w(tag = TAG) { s.toString() }
+
+/** Error — a failure the user will probably notice (engine aborted, permission denied). */
+fun loggye(s: Any?, throwable: Throwable? = null) =
+    Logger.e(throwable = throwable, tag = TAG) { s.toString() }

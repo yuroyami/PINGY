@@ -74,17 +74,15 @@
 |:---|:---|
 | **Android** | 8.0 (API 26) and above |
 | **iOS** | 16.0 and above |
-| **Desktop (JVM)** | Experimental |
-| **Web (JS)** | Experimental |
+| **Desktop (JVM)** | Experimental — library only, no UI shell |
 
-Under the hood each platform uses a native ping engine:
-
-| Platform | Engine |
-|:---|:---|
-| **Android** | `/system/bin/ping` via a long-lived process |
-| **iOS** | `SimplePing` (ICMP via raw socket) |
-| **JVM** | `InetAddress.isReachable` / `ping` subprocess |
-| **JS** | HTTP round-trip fallback |
+All three targets run the **same unprivileged ICMP path**: a single
+`shared/native/icmp_ping.c` source opens a `SOCK_DGRAM + IPPROTO_ICMP`
+socket and walks the echo-request/reply by hand. Android and desktop JVM
+compile it into a JNI-loaded `libpingy_icmp` (CMake via NDK on Android,
+`cc` via a Gradle `Exec` task on JVM). iOS compiles the same syscalls via
+Kotlin/Native cinterop. No shelled-out `ping` process, no `-i` interval
+floor — the cadence is driven by the coroutine loop in `PingEngine`.
 
 ---
 
@@ -108,11 +106,8 @@ The ring buffer caps each panel at a few thousand samples so long monitoring ses
 **Why is my ping "lost" / negative?**
 > A null/negative value means the probe timed out or the system couldn't reach the host. The app counts it as a lost packet and keeps going.
 
-**Why does Android ask for storage permission?**
-> Only for saving exported data in future versions. Nothing is uploaded anywhere.
-
-**Why doesn't the web build match the mobile version feature-for-feature?**
-> Browsers don't let JavaScript send real ICMP packets. The JS target uses an HTTP round-trip as a best-effort substitute, so absolute numbers differ from native ping.
+**Why does the Android app need no special permissions?**
+> It only uses `INTERNET` (plus `ACCESS_NETWORK_STATE`). Android's `ping_group_range` kernel setting lets app UIDs open unprivileged ICMP sockets directly, so no root and no storage permissions are involved.
 
 **Android says "App not installed" when updating?**
 > Uninstall the old version first, then install the new APK.

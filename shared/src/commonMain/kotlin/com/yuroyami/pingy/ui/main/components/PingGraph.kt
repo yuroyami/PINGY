@@ -61,6 +61,7 @@ import com.yuroyami.pingy.logic.Ping
 import com.yuroyami.pingy.logic.PingPanel
 import com.yuroyami.pingy.theme.Paletting
 import com.yuroyami.pingy.ui.main.LocalPanelBackground
+import com.yuroyami.pingy.utils.PING_TIMEOUT_MS
 import org.jetbrains.compose.resources.Font
 import pingy.shared.generated.resources.Inter_Regular
 import pingy.shared.generated.resources.Res
@@ -88,7 +89,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
     val windowInfo = LocalWindowInfo.current
     val windowHeightDp by derivedStateOf { windowInfo.containerDpSize.height }
 
-    val pings = pings.value
+    val pings = this.pings
     val version by pingVersion.collectAsState()
     val expanded by expanded.collectAsState()
     val showSettings by showSettings.collectAsState()
@@ -106,6 +107,12 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
     val canvasHeightFractionVal by canvasHeightFraction.collectAsState()
 
     val canvasHeight = windowHeightDp * canvasHeightFractionVal // Dp
+
+    // Reusable scratch buffer for the per-frame visible-pings pass. Remembered
+    // across frames so the draw loop allocates nothing when the RingBuffer
+    // hasn't grown: clear() keeps the underlying array, and we only grow on
+    // the first few frames as the history fills up.
+    val visibleBuf = remember { ArrayList<Ping>(256) }
 
     // Per-frame ticker so the canvas scrolls smoothly between ping arrivals,
     // giving the illusion of a continuous left-moving conveyor belt instead
@@ -175,81 +182,115 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 @Suppress("UNUSED_VARIABLE") val t = frameTick.longValue
 
                 // Collect the subset of pings within the user-chosen timeframe.
+                // Reuses the outer `visibleBuf` to avoid a per-frame allocation.
                 val thresholdMs = timeframeMsVal
-                val visible = ArrayList<Ping>(128)
+                visibleBuf.clear()
                 pings.fastForEachWithIndex { p, _ ->
                     if (p != null && p.timestamp.elapsedNow().inWholeMilliseconds <= thresholdMs) {
-                        visible.add(p)
+                        visibleBuf.add(p)
                     }
                 }
 
                 val canvasW = size.width
                 val canvasH = size.height
-                val lostColor = Color(140, 0, 0, 200)
 
-                if (visible.isNotEmpty()) {
-                    // Slot-based drawing. Each bar tiles against its predecessor:
-                    // its width in time is (this_ping.ts - prev_ping.ts). No gaps
-                    // between bars even when the interval dwarfs the RTT, and a
-                    // long-RTT ping is still visibly wider because it ate more real
-                    // time before the next ping could land.
+                if (visibleBuf.isNotEmpty()) {
+                    // Slot-based drawing. Each valid bar tiles against its
+                    // predecessor when that predecessor was also valid — the
+                    // width in time is (this_ping.ts - prev_ping.ts), which
+                    // keeps a long-RTT bar visibly wider because it ate more
+                    // real time before the next probe could land.
+                    //
+                    // Void (null-valued) pings DRAW NOTHING. A timeout has
+                    // no duration to represent, and the slot before the next
+                    // valid bar is rendered as literal background — the gap
+                    // itself carries the "lost packet" signal at a glance.
+                    // The next valid bar then falls back to its own RTT for
+                    // width, so the timeline doesn't swallow the gap by
+                    // widening the recovery bar.
                     val pxPerMs = canvasW / thresholdMs.toFloat()
 
-                    // Snapshot each ping's age once — prevents width tearing from
-                    // elapsedNow() being called at slightly different instants.
-                    val ages = LongArray(visible.size) { i ->
-                        visible[i].timestamp.elapsedNow().inWholeMilliseconds
-                    }
+                    var prevAgeMs = 0L
+                    var lastAgeMs = 0L
+                    // First iteration has no predecessor, treat as invalid
+                    // so widthMs falls back to the ping's own RTT.
+                    var prevWasInvalid = true
 
-                    // Forward-offset to push the in-flight gap off-screen east:
-                    // shifts the whole timeline rightward by roughly the current
-                    // inter-ping cadence. Clamped so it never eats more than a
-                    // quarter of the visible timeframe.
-                    val offsetMs: Long = if (ages.size >= 2) {
-                        (ages[ages.size - 2] - ages[ages.size - 1])
-                            .coerceIn(10L, thresholdMs / 4)
-                    } else {
-                        intervalVal.coerceIn(10L, thresholdMs / 4)
-                    }
-
-                    for (i in visible.indices) {
-                        val ping = visible[i]
-                        val displayAge = ages[i] - offsetMs
-                        val rightEdgePx = canvasW - displayAge * pxPerMs
-                        if (rightEdgePx <= 0f) continue
-
-                        // Slot-based width: from the previous ping's timestamp to
-                        // this one. For the first visible ping (no predecessor) fall
-                        // back to its RTT or the interval.
-                        val widthMs: Long = if (i > 0) {
-                            (ages[i - 1] - ages[i]).coerceAtLeast(1L)
-                        } else {
-                            val v0 = ping.value
-                            if (v0 != null && v0 >= 0) v0.toLong().coerceAtLeast(1L)
-                            else intervalVal.coerceAtLeast(10L)
-                        }
-                        val widthPx = (widthMs.toFloat() * pxPerMs).coerceAtLeast(1f)
-                        val leftEdgePx = (rightEdgePx - widthPx).coerceAtLeast(0f)
-                        val drawW = rightEdgePx - leftEdgePx
+                    for (i in visibleBuf.indices) {
+                        val ping = visibleBuf[i]
+                        val ageMs = ping.timestamp.elapsedNow().inWholeMilliseconds
+                        val previousAgeMs = prevAgeMs
+                        val predecessorWasInvalid = prevWasInvalid
+                        prevAgeMs = ageMs
+                        lastAgeMs = ageMs
 
                         val v = ping.value
                         val isLost = v == null || v < 0
+                        // Update for the next iteration BEFORE the skip so
+                        // the next ping knows its predecessor was void.
+                        prevWasInvalid = isLost
+                        if (isLost) continue
 
-                        if (isLost) {
-                            drawRect(
-                                color = lostColor,
-                                topLeft = Offset(leftEdgePx, 0f),
-                                size = Size(drawW, canvasH)
-                            )
+                        val rightEdgePx = canvasW - ageMs * pxPerMs
+                        if (rightEdgePx <= 0f) continue
+
+                        val widthMs: Long = if (!predecessorWasInvalid) {
+                            (previousAgeMs - ageMs).coerceAtLeast(1L)
                         } else {
+                            // No valid predecessor → don't reach back over
+                            // a gap, just paint this bar at its own duration.
+                            v.toLong().coerceAtLeast(1L)
+                        }
+                        val widthPx = (widthMs.toFloat() * pxPerMs).coerceAtLeast(1f)
+                        // No coerceAtLeast(0f) on the left edge: letting it
+                        // go negative keeps the bar's full width intact as
+                        // it exits the canvas. Compose clips off-canvas
+                        // drawing for free, and the previous clamped version
+                        // made the oldest visible bar "ghost" into a
+                        // shrinking sliver against the left border — a bar
+                        // with a defined value shouldn't visually degrade
+                        // just because it reached the edge.
+                        val leftEdgePx = rightEdgePx - widthPx
+
+                        val y = calculatePingY(
+                            v,
+                            canvasH,
+                            roofVal.toFloat(),
+                            angleOfAttackVal
+                        )
+                        drawRect(
+                            color = calcPingColor(v),
+                            topLeft = Offset(leftEdgePx, canvasH - y),
+                            size = Size(widthPx, y)
+                        )
+                    }
+
+                    // Chameleon — the in-flight slot between the newest
+                    // buffer entry and the present moment. Colorizes in
+                    // real time with elapsed in-flight duration so the
+                    // user watches the probe "ripen" on the way to its
+                    // resolved RTT. No alpha fade: when the result lands
+                    // the chameleon is replaced instantly by either the
+                    // new valid bar (matching color, continuous read) or
+                    // by nothing at all if the probe was deemed void —
+                    // the visual must reflect actuality the moment it's
+                    // known, no lingering ghost.
+                    val newestAge = lastAgeMs.coerceAtLeast(0L)
+                    val inFlightMs = (newestAge - intervalVal).coerceAtLeast(0L)
+                    if (inFlightMs > 0L) {
+                        val widthPx = inFlightMs.toFloat() * pxPerMs
+                        val leftEdgePx = (canvasW - widthPx).coerceAtLeast(0f)
+                        val drawW = canvasW - leftEdgePx
+                        if (drawW >= 1f) {
+                            val colorMs = inFlightMs.coerceAtMost(PING_TIMEOUT_MS.toLong()).toInt()
                             val y = calculatePingY(
-                                v,
+                                colorMs,
                                 canvasH,
                                 roofVal.toFloat(),
                                 angleOfAttackVal
                             )
                             drawRect(
-                                color = calcPingColor(v),
+                                color = calcPingColor(colorMs),
                                 topLeft = Offset(leftEdgePx, canvasH - y),
                                 size = Size(drawW, y)
                             )
@@ -440,8 +481,8 @@ private fun PingPanel.SettingsSheet(txtstyle: TextStyle) {
         SliderBlock(
             label = "Timeframe: ${formatTimeframe(timeframeMsVal)}",
             value = timeframeMsVal.toFloat(),
-            range = 5_000f..30_000f, // 5s .. 30s
-            steps = 24,              // 1s steps
+            range = 1_000f..30_000f, // 1s .. 30s
+            steps = 28,              // 1s steps
             onValueChange = { timeframeMs.value = it.toLong() },
             txtstyle = txtstyle
         )
@@ -504,10 +545,12 @@ private fun formatTimeframe(ms: Long): String {
 
 /** One-decimal formatter without depending on platform `Locale` / `String.format`. */
 private fun formatFloat1(value: Float): String {
-    val tenths = (value * 10f).roundToInt()
-    val whole = tenths / 10
-    val frac = if (tenths < 0) -(tenths % 10) else (tenths % 10)
-    return "$whole.$frac"
+    val negative = value < 0f
+    val absTenths = (abs(value) * 10f).roundToInt()
+    val whole = absTenths / 10
+    val frac = absTenths % 10
+    val sign = if (negative && (whole != 0 || frac != 0)) "-" else ""
+    return "$sign$whole.$frac"
 }
 
 /** Exponential scaling to emphasize low ping values in the graph.

@@ -1,11 +1,10 @@
 package com.yuroyami.pingy.logic
 
 import com.yuroyami.pingy.utils.PingEngine
-import com.yuroyami.pingy.utils.loggy
+import com.yuroyami.pingy.utils.loggye
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,8 +28,11 @@ private const val MAX_PINGS = 2000
 class PingPanel(
     val ip: String,
 ) {
-    /** The whole collection of pings for this panel in a ring buffer */
-    val pings = MutableStateFlow(RingBuffer<Ping>(MAX_PINGS))
+    /** The whole collection of pings for this panel in a ring buffer.
+     * Not wrapped in a Flow: the buffer is a single long-lived instance that
+     * mutates in place, so nothing ever re-emits. Observers instead watch
+     * [pingVersion], which ticks on every insert. */
+    val pings = RingBuffer<Ping>(MAX_PINGS)
 
     /** Pinging Parameters */
     val isPinging = MutableStateFlow(true)
@@ -72,15 +74,20 @@ class PingPanel(
 
     /** Panel-owned coroutine scope for observing preference changes. */
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-    private var intervalObserverJob: Job? = null
 
     init {
         // Whenever the interval StateFlow changes (after initial emit), push the new
-        // value to the running engine. Debounced so rapid slider drags don't thrash
-        // the underlying process (especially on Android, which restarts its ping process).
-        intervalObserverJob = scope.launch {
+        // value to the running engine. Debounced so rapid slider drags don't restart
+        // the loop's sleep more often than the user actually meant.
+        scope.launch {
             interval.drop(1).debounce(150).collect { newInterval ->
                 engine?.updateInterval(newInterval)
+            }
+        }
+        // Packet size changes apply to the very next probe, no debounce needed.
+        scope.launch {
+            packetSize.drop(1).collect { newSize ->
+                engine?.updatePacketSize(newSize)
             }
         }
     }
@@ -101,7 +108,7 @@ class PingPanel(
                         timestamp = TimeSource.Monotonic.markNow()
                     )
 
-                    pings.value.add(ping)
+                    pings.add(ping)
                     pingVersion.update { it + 1 }
 
                     pingsSent.update { it + 1 }
@@ -115,7 +122,7 @@ class PingPanel(
                         highestPing.update { current -> if (current == null || v > current) v else current }
                     }
                 } catch (e: Exception) {
-                    loggy(e.stackTraceToString())
+                    loggye("PingPanel[$ip]: result callback failed", e)
                 }
             }
         }
@@ -141,8 +148,7 @@ class PingPanel(
     /** Call when removing this panel entirely. */
     fun close() {
         stopPinging()
-        intervalObserverJob?.cancel()
-        scope.cancel()
+        scope.cancel() // cancels intervalObserverJob too
     }
 
     companion object {

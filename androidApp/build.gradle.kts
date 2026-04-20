@@ -39,6 +39,20 @@ android {
         signingConfigs.findByName("keystore")?.let { config ->
             signingConfig = config
         }
+
+        // Ship the unprivileged-ICMP native lib only for the ABIs the app actually runs on.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
+    }
+
+    // Build the native ICMP shim (shared/native/icmp_ping.c) into libpingy_icmp.so
+    // via CMake. Consumed at runtime by com.yuroyami.pingy.utils.NativeIcmpPing.
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     compileOptions {
@@ -73,14 +87,6 @@ android {
         // Disables dependency metadata when building APKs & Android App Bundles.
         includeInApk = false
         includeInBundle = false
-    }
-
-    // This block strips out odd, unused artifacts that the google-shortcuts library brings along,
-    // none of which are needed for its main features.
-    // This will remove them also from any other library that might use them
-    configurations.all {
-        exclude(group = "com.google.crypto.tink", module = "tink-android")
-        exclude(group = "com.google.android.gms")
     }
 }
 
