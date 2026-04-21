@@ -1,5 +1,5 @@
 plugins {
-    id("com.yuroyami.kmpssot") version "1.0.1"
+    id("com.yuroyami.kmpssot") version "1.0.3"
 
     alias(libs.plugins.kotlin.multiplatform).apply(false)
     alias(libs.plugins.kotlin.android).apply(false)
@@ -24,10 +24,9 @@ kmpSsot {
     sharedModule     = "shared"
     androidAppModule = "androidApp"
 
-    // No Pingy-owned XML vector + 1024 PNG pair exists yet; logo propagation
-    // stays off. Drop both files in and uncomment to enable.
-    // appLogoXml = file("shared/src/commonMain/composeResources/drawable/pingy_vector.xml")
-    // appLogoPng = file("shared/src/commonMain/composeResources/drawable/pingy_raster.png")
+
+    appLogoXml = file("shared/src/commonMain/composeResources/drawable/pingy_vector.xml")
+    appLogoPng = file("shared/src/commonMain/composeResources/drawable/pingy_raster.png")
 
     // locales auto-detected from shared/src/commonMain/composeResources/values-*
     // (Pingy has none yet, so the list stays empty.)

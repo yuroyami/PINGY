@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" shape-rendering="geometricPrecision">
+  
+  <rect width="512" height="512" rx="96" ry="96" fill="#232323"></rect>
+
+  
+  <g fill="#1F8F92">
+    
+    <polygon points="64,240 103,240 135,190 96,190"></polygon>
+    
+    <polygon points="148,240 187,240 234,165 195,165"></polygon>
+    
+    <polygon points="230,240 269,240 337,135 298,135"></polygon>
+    
+    <polygon points="313,240 332,240 407,105 388,105"></polygon>
+  </g>
+  
+  <polygon points="332,240 352,240 427,105 407,105" fill="#D6F4F4"></polygon>
+
+  
+  <g fill="#1F8F92">
+    
+    <path d="M 61 271 H 122 V 331 H 80 V 373 H 61 Z&#xA;             M 81 290 V 313 H 103 V 290 Z" fill-rule="evenodd"></path>
+    
+    <rect x="146" y="271" width="20" height="102"></rect>
+    
+    <path d="M 195 271 H 256 V 373 H 236 V 290 H 215 V 373 H 195 Z"></path>
+    
+    <path d="M 288 271 H 349 V 290 H 308 V 354 H 349 V 373 H 288 Z&#xA;             M 329 331 H 349 V 354 H 329 Z" fill-rule="evenodd"></path>
+  </g>
+  
+  <g fill="#D6F4F4">
+    
+    <rect x="377" y="271" width="20" height="48"></rect>
+    
+    <rect x="418" y="271" width="20" height="48"></rect>
+    
+    <rect x="377" y="319" width="61" height="16"></rect>
+    
+    <rect x="398" y="335" width="20" height="38"></rect>
+  </g>
+</svg>
