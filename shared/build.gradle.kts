@@ -1,6 +1,4 @@
-import com.yuroyami.kmpssot.KmpSsotExtension
-
-val ssot = rootProject.extensions.getByType(KmpSsotExtension::class.java)
+import com.yuroyami.kmpssot.kmpSsot
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
@@ -13,6 +11,14 @@ plugins {
 
 kotlin {
     jvmToolchain(21)
+
+    compilerOptions {
+        freeCompilerArgs.addAll(
+            "-Xexplicit-backing-fields",
+            "-Xexpect-actual-classes",
+            "-Xcontext-parameters",
+        )
+    }
 
     android {
         namespace = "com.yuroyami.pingy"
@@ -47,9 +53,9 @@ kotlin {
     // iOS configuration. kmpSsot handles pbxproj version/bundleId/appName
     // propagation via the `syncIosConfig` task hooked into framework linking.
     cocoapods {
-        summary = "${ssot.appName.get()} Common Code (Platform-agnostic)"
+        summary = "${kmpSsot.appName.get()} Common Code (Platform-agnostic)"
         homepage = "www.github.com/yuroyami/PINGY"
-        version = ssot.versionName.get()
+        version = kmpSsot.versionName.get()
         ios.deploymentTarget = "14.0"
         podfile = project.file("../iosApp/Podfile")
         framework {
@@ -74,10 +80,6 @@ kotlin {
                 optIn("kotlinx.cinterop.ExperimentalForeignApi") //for iOS
                 optIn("kotlinx.cinterop.BetaInteropApi") //for iOS
                 optIn("kotlin.time.ExperimentalTime")
-                enableLanguageFeature("ExplicitBackingFields") //same as -Xexplicit-backing-fields compiler flag
-                enableLanguageFeature("NestedTypeAliases") //-Xnested-type-aliases
-                enableLanguageFeature("ExpectActualClasses") //-Xexpect-actual-classes
-                enableLanguageFeature("ContextParameters") //Xcontext-parameters
             }
         }
 
@@ -186,7 +188,7 @@ run {
 }
 
 buildConfig {
-    buildConfigField("APP_NAME", ssot.appName.get())
-    buildConfigField("APP_VERSION", ssot.versionName.get())
+    buildConfigField("APP_NAME", kmpSsot.appName.get())
+    buildConfigField("APP_VERSION", kmpSsot.versionName.get())
     buildConfigField("DEBUG", false)
 }

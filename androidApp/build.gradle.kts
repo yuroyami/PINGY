@@ -27,9 +27,9 @@ android {
                     if (file.exists()) load(file.inputStream())
                 }
                 localProperties.apply {
-                    keyAlias = getProperty("yuroyami.keyAlias")
-                    keyPassword = getProperty("yuroyami.keyPassword")
-                    storePassword = getProperty("yuroyami.storePassword")
+                    keyAlias = getProperty("keystore.keyAlias")
+                    keyPassword = getProperty("keystore.keyPassword")
+                    storePassword = getProperty("keystore.storePassword")
                 }
             }
         }
