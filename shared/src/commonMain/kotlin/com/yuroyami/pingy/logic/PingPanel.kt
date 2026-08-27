@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.time.TimeSource
 
@@ -65,6 +66,16 @@ class PingPanel(
     val pingsLost = MutableStateFlow(0)
     val lowestPing = MutableStateFlow<Int?>(null)
     val highestPing = MutableStateFlow<Int?>(null)
+    val averagePing = MutableStateFlow<Int?>(null)
+
+    /** Mean absolute difference between consecutive RTTs — the wobble a user feels. */
+    val jitter = MutableStateFlow<Int?>(null)
+
+    private var rttSum = 0L
+    private var rttCount = 0L
+    private var jitterSum = 0L
+    private var jitterCount = 0L
+    private var previousRtt: Int? = null
 
     /** The platform-specific ping engine tied to this panel's lifecycle */
     private var engine: PingEngine? = null
@@ -120,6 +131,18 @@ class PingPanel(
                     if (v != null && v >= 0) {
                         lowestPing.update { current -> if (current == null || v < current) v else current }
                         highestPing.update { current -> if (current == null || v > current) v else current }
+                        rttSum += v
+                        rttCount += 1
+                        averagePing.value = (rttSum / rttCount).toInt()
+                        previousRtt?.let { previous ->
+                            jitterSum += abs(v - previous)
+                            jitterCount += 1
+                            jitter.value = (jitterSum / jitterCount).toInt()
+                        }
+                        previousRtt = v
+                    } else {
+                        // A gap breaks RTT adjacency; the next pair would span it.
+                        previousRtt = null
                     }
                 } catch (e: Exception) {
                     loggye("PingPanel[$ip]: result callback failed", e)
