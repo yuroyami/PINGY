@@ -16,6 +16,8 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -64,13 +66,14 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.yuroyami.pingy.GraphStyle
 import com.yuroyami.pingy.logic.Ping
 import com.yuroyami.pingy.logic.PingPanel
 import com.yuroyami.pingy.theme.Paletting
-import com.yuroyami.pingy.ui.main.LocalPanelBackground
+import com.yuroyami.pingy.theme.pingColor
+import com.yuroyami.pingy.ui.adam.LocalViewmodel
 import com.yuroyami.pingy.utils.PING_TIMEOUT_MS
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.update
@@ -106,7 +109,7 @@ private const val SCRUB_GLIDE_MS = 350f // frozen time glides back to now instea
 private const val PEAK_DECAY_PER_SEC = 0.22f // peak-hold line falls this canvas-fraction per second
 
 private val FizzleColor = Color(0xFFFF5252)
-private val PeakLineColor = Color(0xFFFFC24B)
+private val PeakLineColor = Color(0xFFE2E8EF)
 
 // Control deck: dark instrument surfaces with dim chrome around glowing values.
 // Settings sit on a slightly lifted shade so the mode flip registers without
@@ -145,12 +148,12 @@ private const val GESTURE_SCRUB = 3
  */
 @Composable
 fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
-    val bg = LocalPanelBackground.current
     val textMeasurer = rememberTextMeasurer()
     val windowInfo = LocalWindowInfo.current
     val windowHeightDp by derivedStateOf { windowInfo.containerDpSize.height }
 
     val pings = this.pings
+    val graphStyleVal by LocalViewmodel.current.graphStyle.collectAsState()
     val version by pingVersion.collectAsState()
     val expanded by expanded.collectAsState()
     val showSettings by showSettings.collectAsState()
@@ -236,6 +239,8 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
         TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = interFont)
     }
     val peakDash = remember { PathEffect.dashPathEffect(floatArrayOf(12f, 8f)) }
+    // Ambient clock for the procedural backdrop (time grid + sweep).
+    val panelEpoch = remember { TimeSource.Monotonic.markNow() }
 
     Column(
         modifier = modifier
@@ -310,10 +315,46 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                         }
                     }
             ) {
-                drawImage(
-                    image = bg,
-                    dstSize = IntSize(size.width.toInt(), size.height.toInt())
+                // Procedural instrument-bay backdrop: no bitmap, no decode,
+                // a handful of cached-gradient rects. The vertical time grid
+                // scrolls with real seconds; neutral chrome so the data owns
+                // every drop of color on this screen.
+                val ambientMs = panelEpoch.elapsedNow().inWholeMilliseconds
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        0f to Color(0xFF161C2A),
+                        1f to Color(0xFF0A0D13),
+                    )
                 )
+                drawRect(
+                    brush = Brush.radialGradient(
+                        0f to Color.Transparent,
+                        1f to Color(0x59000000),
+                        center = Offset(size.width / 2f, size.height / 2f),
+                        radius = size.width * 0.72f,
+                    )
+                )
+                run {
+                    val tickPxPerMs = size.width / timeframeMsVal.toFloat()
+                    val minor = timeframeMsVal <= 10_000L
+                    var tick = ambientMs % 1_000L
+                    var major = true
+                    val step = if (minor) 500L else 1_000L
+                    if (minor && tick >= 500L) { tick -= 500L; major = false }
+                    while (true) {
+                        val x = size.width - tick * tickPxPerMs
+                        if (x < 0f) break
+                        drawLine(
+                            color = Color.White,
+                            alpha = if (major) 0.08f else 0.035f,
+                            start = Offset(x, 0f),
+                            end = Offset(x, size.height),
+                            strokeWidth = 1f,
+                        )
+                        tick += step
+                        if (minor) major = !major
+                    }
+                }
 
                 // Horizontal ping-level landmark lines
                 for (y in landMarksVal) {
@@ -355,12 +396,23 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
 
                 // Collect the subset of pings within the user-chosen timeframe.
                 // Reuses the outer `visibleBuf` to avoid a per-frame allocation.
+                // The newest ALREADY-EVICTED ping rides along as index 0: it is
+                // the left anchor of the slope (and the width donor of the bar)
+                // that bridges into the window. Without it, that whole span
+                // vanishes the frame its anchor leaves, punching a gap as wide
+                // as the ping lasted instead of sliding out under the border.
                 val thresholdMs = timeframeMsVal
                 visibleBuf.clear()
+                var evictedAnchor: Ping? = null
                 pings.fastForEachWithIndex { p, _ ->
                     if (p != null) {
                         val age = p.timestamp.elapsedNow().inWholeMilliseconds - freezeOffsetMs
-                        if (age in 0..thresholdMs) visibleBuf.add(p)
+                        if (age > thresholdMs) {
+                            evictedAnchor = p
+                        } else if (age >= 0) {
+                            if (visibleBuf.isEmpty()) evictedAnchor?.let { visibleBuf.add(it) }
+                            visibleBuf.add(p)
+                        }
                     }
                 }
 
@@ -383,7 +435,164 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 var maxTopFraction = 0f
                 var lastValidColor: Color? = null
 
-                if (visibleBuf.isNotEmpty()) {
+                if (visibleBuf.isNotEmpty() && graphStyleVal == GraphStyle.MOUNTAIN_SLOPES) {
+                    // MOUNTAIN-SLOPES: one continuous ridge instead of bars.
+                    // Between consecutive valid points the crest runs as a
+                    // straight diagonal — steep when the value jumped — and the
+                    // fill below blends each point's color into the next, so
+                    // every ping keeps its chameleon identity without owning a
+                    // rectangle. Lost pings break the range: the massif ends,
+                    // the honest gap shows, the next massif begins. Rendered as
+                    // one 1px column per device pixel; no allocations.
+                    val n = visibleBuf.size
+                    val crestPx = 2.dp.toPx()
+                    var mountainChameleon: Color? = null
+                    var mountainPresence = 1f
+                    var newestAge = 0L
+                    var newestIsValid = false
+                    var newestY = 0f
+                    var newestColor = Color.White
+
+                    var index = 0
+                    while (index < n) {
+                        val ping = visibleBuf[index]
+                        val ageA = ping.timestamp.elapsedNow().inWholeMilliseconds - freezeOffsetMs
+                        val xA = canvasW - ageA * pxPerMs
+                        val vA = ping.value
+                        val lostA = vA == null || vA < 0
+                        var yA = 0f
+                        var cA = Color.White
+                        if (!lostA) {
+                            yA = calculatePingY(vA, canvasH, roofVal.toFloat(), angleOfAttackVal)
+                            cA = calcPingColor(vA)
+                            if (activeScrub == null && ageA < BIRTH_MS) {
+                                val life = ageA / BIRTH_MS
+                                yA = (yA * (1f + BIRTH_OVERSHOOT * sin(PI * life).toFloat())).coerceAtMost(canvasH)
+                                cA = lerp(cA, Color.White, BIRTH_BRIGHTEN * (1f - life))
+                            }
+                            lastValidColor = cA
+                            if (yA / canvasH > maxTopFraction) maxTopFraction = yA / canvasH
+                        }
+                        if (cursorAgeMs != null) {
+                            val diff = abs(ageA - cursorAgeMs)
+                            if (diff < pickDiff) {
+                                pickDiff = diff; pickFound = true; pickLost = lostA
+                                pickAgeMs = ageA; pickLeft = xA - 2f; pickWidth = 4f
+                                pickHeight = if (lostA) canvasH else yA
+                                if (!lostA) pickValue = vA
+                            }
+                        }
+                        newestAge = ageA
+                        newestIsValid = !lostA
+                        if (!lostA) { newestY = yA; newestColor = cA }
+
+                        // Fill the columns of the slope from this point to the next.
+                        if (index + 1 < n && !lostA) {
+                            val next = visibleBuf[index + 1]
+                            val vB = next.value
+                            if (vB != null && vB >= 0) {
+                                val ageB = next.timestamp.elapsedNow().inWholeMilliseconds - freezeOffsetMs
+                                val xB = canvasW - ageB * pxPerMs
+                                var yB = calculatePingY(vB, canvasH, roofVal.toFloat(), angleOfAttackVal)
+                                var cB = calcPingColor(vB)
+                                if (activeScrub == null && ageB < BIRTH_MS) {
+                                    val life = ageB / BIRTH_MS
+                                    yB = (yB * (1f + BIRTH_OVERSHOOT * sin(PI * life).toFloat())).coerceAtMost(canvasH)
+                                    cB = lerp(cB, Color.White, BIRTH_BRIGHTEN * (1f - life))
+                                }
+                                if (xB > xA + 0.5f && xB > 0f) {
+                                    // Integer-aligned unit columns: fractional
+                                    // x positions leave an antialiased seam on
+                                    // every column, which reads as shimmering
+                                    // vertical curtain stripes across the range.
+                                    var xi = kotlin.math.ceil(xA.coerceAtLeast(0f)).toInt()
+                                    val xEnd = kotlin.math.ceil(xB.coerceAtMost(canvasW)).toInt()
+                                    while (xi < xEnd) {
+                                        val t = (((xi + 0.5f) - xA) / (xB - xA)).coerceIn(0f, 1f)
+                                        val ridge = yA + (yB - yA) * t
+                                        if (ridge >= 1f) {
+                                            val col = lerp(cA, cB, t)
+                                            drawRect(
+                                                color = col,
+                                                topLeft = Offset(xi.toFloat(), canvasH - ridge),
+                                                size = Size(1f, ridge)
+                                            )
+                                            drawRect(
+                                                color = lerp(col, Color.White, 0.5f),
+                                                topLeft = Offset(xi.toFloat(), canvasH - ridge),
+                                                size = Size(1f, ridge.coerceAtMost(crestPx))
+                                            )
+                                        }
+                                        xi++
+                                    }
+                                }
+                            }
+                        }
+                        index++
+                    }
+
+                    // The in-flight probe is the range's leading slope: a wedge
+                    // climbing from the newest point toward the "now" edge,
+                    // ripening in color and dissolving over its final stretch
+                    // exactly like the pinglette wall does.
+                    if (activeScrub == null) {
+                        val inFlightMs = (newestAge - intervalVal).coerceAtLeast(0L)
+                        if (inFlightMs > 0L) {
+                            val colorMs = inFlightMs.coerceAtMost(PING_TIMEOUT_MS.toLong()).toInt()
+                            if (colorMs > CHAMELEON_FADE_START_MS) {
+                                mountainPresence = 1f - (
+                                    (colorMs - CHAMELEON_FADE_START_MS) /
+                                        (PING_TIMEOUT_MS - CHAMELEON_FADE_START_MS)
+                                    ).coerceIn(0f, 1f)
+                            }
+                            val yNow = calculatePingY(colorMs, canvasH, roofVal.toFloat(), angleOfAttackVal)
+                            val cNow = calcPingColor(colorMs)
+                            val xStart = (canvasW - newestAge * pxPerMs).coerceAtLeast(0f)
+                            val yStart = if (newestIsValid) newestY else 0f
+                            val cStart = if (newestIsValid) newestColor else cNow
+                            val span = canvasW - xStart
+                            if (span >= 1f && mountainPresence > 0f) {
+                                var xi = kotlin.math.ceil(xStart).toInt()
+                                val xEnd = kotlin.math.ceil(canvasW).toInt()
+                                while (xi < xEnd) {
+                                    val t = (((xi + 0.5f) - xStart) / span).coerceIn(0f, 1f)
+                                    val ridge = yStart + (yNow - yStart) * t
+                                    if (ridge >= 1f) {
+                                        drawRect(
+                                            color = lerp(cStart, cNow, t),
+                                            alpha = mountainPresence,
+                                            topLeft = Offset(xi.toFloat(), canvasH - ridge),
+                                            size = Size(1f, ridge)
+                                        )
+                                    }
+                                    xi++
+                                }
+                            }
+                            mountainChameleon = cNow
+                            if (yNow / canvasH > maxTopFraction) maxTopFraction = yNow / canvasH
+                        }
+
+                        (mountainChameleon ?: lastValidColor)?.let { target ->
+                            val chase = 1f - exp(-dtSec * 10f)
+                            val smoothed = auraSmooth.color?.let { lerp(it, target, chase) } ?: target
+                            auraSmooth.color = smoothed
+                            val auraAlpha = 0.13f * (if (mountainChameleon != null) mountainPresence else 1f)
+                            val auraW = 28.dp.toPx()
+                            drawRect(
+                                brush = Brush.horizontalGradient(
+                                    0f to Color.Transparent,
+                                    1f to smoothed.copy(alpha = auraAlpha),
+                                    startX = canvasW - auraW,
+                                    endX = canvasW,
+                                ),
+                                topLeft = Offset(canvasW - auraW, 0f),
+                                size = Size(auraW, canvasH)
+                            )
+                        }
+                    }
+                }
+
+                if (visibleBuf.isNotEmpty() && graphStyleVal == GraphStyle.PINGLETTES) {
                     // Slot-based drawing. Each valid bar tiles against its
                     // predecessor when that predecessor was also valid — the
                     // width in time is (this_ping.ts - prev_ping.ts), which
@@ -539,7 +748,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                             val smoothed = auraSmooth.color?.let { lerp(it, target, chase) } ?: target
                             auraSmooth.color = smoothed
                             // The aura breathes out with a dissolving wall.
-                            val auraAlpha = 0.22f * (if (chameleonColor != null) chameleonPresence else 1f)
+                            val auraAlpha = 0.13f * (if (chameleonColor != null) chameleonPresence else 1f)
                             val auraW = 28.dp.toPx()
                             drawRect(
                                 brush = Brush.horizontalGradient(
@@ -749,6 +958,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
  * glance at the hues tells the story before the numbers do. The sample size
  * lives inside the LOSS cell as its denominator instead of wasting a line.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StatsSheet(
     ip: String,
@@ -763,98 +973,87 @@ private fun StatsSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp)
-            .padding(top = 12.dp, bottom = 14.dp),
+            .padding(horizontal = 14.dp, vertical = 11.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "PINGING",
-                fontSize = 9.sp,
-                letterSpacing = 2.sp,
-                color = StatsLabelColor,
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(18.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            InlineStat(
+                label = "PINGING",
+                value = ip,
+                valueColor = SettingsTextColor,
                 fontFamily = interFont,
+                glow = false,
             )
-            Text(
-                text = ip,
-                modifier = Modifier.padding(start = 8.dp),
-                fontSize = 13.sp,
-                fontFamily = interFont,
-                style = TextStyle(
-                    color = Paletting.SGN,
-                    shadow = Shadow(color = Paletting.SGN, blurRadius = 10f),
-                ),
-            )
-        }
-        Row(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-            StatCell(
+            InlineStat(
                 label = "AVG",
-                value = average?.let { "$it ms" } ?: "—",
+                value = average?.let { "${it}ms" } ?: "—",
                 valueColor = average?.let(::calcPingColor) ?: StatsDimColor,
                 fontFamily = interFont,
-                modifier = Modifier.weight(1f),
             )
-            StatCell(
-                label = "JITTER",
-                value = jitterMs?.let { "±$it ms" } ?: "—",
-                // Jitter hurts at far smaller values than raw RTT, so it rides
-                // the shared color scale amplified: ±10 ms already leaves teal.
-                valueColor = jitterMs?.let { calcPingColor((it * 8).coerceAtMost(2_000)) } ?: StatsDimColor,
+            InlineStat(
+                label = "JIT",
+                value = jitterMs?.let { "±$it" } ?: "—",
+                valueColor = SettingsTextColor,
                 fontFamily = interFont,
-                modifier = Modifier.weight(1f),
+                glow = false,
             )
-        }
-        Row(Modifier.fillMaxWidth().padding(top = 10.dp)) {
-            val lossPercent = if (sent > 0) lost * 100f / sent else null
-            StatCell(
-                label = "LOSS",
-                value = lossPercent?.let { "${formatFloat1(it)}%" } ?: "—",
-                valueColor = lossPercent?.let(::lossColor) ?: StatsDimColor,
-                fontFamily = interFont,
-                modifier = Modifier.weight(1f),
-                sub = if (sent > 0) "$lost / $sent" else null,
-            )
-            StatCell(
+            run {
+                val lossPercent = if (sent > 0) lost * 100f / sent else null
+                InlineStat(
+                    label = "LOSS",
+                    value = lossPercent?.let { "${formatFloat1(it)}% ($lost/$sent)" } ?: "—",
+                    // Loss only earns color once packets actually die.
+                    valueColor = when {
+                        lossPercent == null -> StatsDimColor
+                        lossPercent <= 0.001f -> SettingsTextColor
+                        else -> lossColor(lossPercent)
+                    },
+                    fontFamily = interFont,
+                    glow = lossPercent != null && lossPercent > 0.001f,
+                )
+            }
+            InlineStat(
                 label = "RANGE",
-                value = if (lowest != null && highest != null) "$lowest–$highest" else "—",
-                valueColor = highest?.let(::calcPingColor) ?: StatsDimColor,
+                value = if (lowest != null && highest != null) "$lowest–${highest}ms" else "—",
+                valueColor = SettingsTextColor,
                 fontFamily = interFont,
-                modifier = Modifier.weight(1f),
-                sub = if (lowest != null) "ms" else null,
+                glow = false,
             )
         }
     }
 }
 
+/** One strip element: dim label sitting beside its glowing value. */
 @Composable
-private fun StatCell(
+private fun InlineStat(
     label: String,
     value: String,
     valueColor: Color,
     fontFamily: FontFamily,
-    modifier: Modifier = Modifier,
-    sub: String? = null,
+    glow: Boolean = true,
 ) {
-    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = label,
-            fontSize = 9.sp,
-            letterSpacing = 1.5.sp,
+            fontSize = 11.sp,
+            letterSpacing = 1.2.sp,
             color = StatsLabelColor,
             fontFamily = fontFamily,
         )
         Text(
             text = value,
+            modifier = Modifier.padding(start = 7.dp),
             style = TextStyle(
                 color = valueColor,
-                fontSize = 19.sp,
+                fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = fontFamily,
-                shadow = Shadow(color = valueColor, blurRadius = 14f),
+                shadow = if (glow) Shadow(color = valueColor, blurRadius = 12f) else null,
             ),
         )
-        sub?.let {
-            Text(text = it, fontSize = 10.sp, color = StatsSubColor, fontFamily = fontFamily)
-        }
     }
 }
 
@@ -1034,88 +1233,6 @@ private fun calculatePingY(ping: Int, panelHeight: Float, pingMaxVal: Float, zoo
     return (exponentialize(ping.toFloat(), pingMaxVal, zoomFactor) * (panelHeight.toDouble() / pingMaxVal)).toFloat()
 }
 
-/**
- * Maps a ping RTT (ms) to a color that carries meaning at a glance.
- *
- * Anchor points (all interpolated in HSV, log-scale on ping):
- *
- *     ≤ 10ms → deep ocean blue    (baseline — relaxing, "instant")
- *     ~40ms  → bright teal        (healthy)
- *     ~200ms → yellow-green       (warning)
- *     ~650ms → orange             (bad)
- *     ~1s    → magenta            (terrible)
- *     ≥ 2s   → deep purple        (catastrophic)
- *
- * Two deliberate shaping choices:
- *
- *  1. Log-scale ping → hue. Perceived latency quality is roughly logarithmic
- *     (10→40ms feels like 100→400ms), so colors are positioned on log(ping).
- *     The hue sweep is piecewise so most of the arc sits in the "good" zone
- *     (small RTT shifts still read as color shifts) and passes quickly through
- *     yellow — yellow shouldn't be the dominant color of a mediocre link.
- *
- *  2. V (brightness) curve with a peak around yellow/orange. A flat V makes
- *     yellow render as olive/brown, because the eye expects yellow to be the
- *     brightest color on the wheel. So V rises into the warning zone and
- *     falls off toward both ends: ocean blue stays deep, purple stays ominous.
- *     This is why the earlier constant-L OkLCh version made 40ms look muddy.
- */
-private fun calcPingColor(ping: Int): Color {
-    val clamped = ping.coerceAtLeast(0).coerceAtMost(2000)
-    val t = if (clamped <= 1) 0.0
-            else (log10(clamped.toDouble()) / log10(2000.0)).coerceIn(0.0, 1.0)
+/** The app-wide RTT color scale lives in the theme; the graph just speaks it. */
+private fun calcPingColor(ping: Int): Color = pingColor(ping)
 
-    // Piecewise hue (HSV degrees). 0°=red, 60°=yellow, 120°=green, 180°=cyan,
-    // 240°=blue, 300°=magenta. 225° is ocean blue; the final −60° wraps to 300°.
-    val hueDeg = piecewiseLinear(
-        t,
-        0.00, 225.0,   // ocean blue
-        0.50, 165.0,   // teal
-        0.70,  95.0,   // yellow-green
-        0.85,  25.0,   // orange
-        1.00, -60.0,   // deep purple
-    ).let { ((it % 360.0) + 360.0) % 360.0 }
-
-    // Brightness: ramp up into the yellow/orange peak, taper down toward purple.
-    val v = if (t <= 0.70) 0.65 + (t / 0.70) * 0.35
-            else           1.00 - ((t - 0.70) / 0.30) * 0.50
-
-    return hsvColor(hueDeg, 0.88, v)
-}
-
-/** Piecewise-linear interpolation through (x, y) anchor pairs sorted by x. */
-private fun piecewiseLinear(x: Double, vararg xy: Double): Double {
-    val n = xy.size / 2
-    if (x <= xy[0]) return xy[1]
-    if (x >= xy[(n - 1) * 2]) return xy[(n - 1) * 2 + 1]
-    for (i in 0 until n - 1) {
-        val x0 = xy[i * 2]; val y0 = xy[i * 2 + 1]
-        val x1 = xy[(i + 1) * 2]; val y1 = xy[(i + 1) * 2 + 1]
-        if (x in x0..x1) {
-            val f = (x - x0) / (x1 - x0)
-            return y0 + f * (y1 - y0)
-        }
-    }
-    return xy[(n - 1) * 2 + 1]
-}
-
-/** HSV → sRGB. h in degrees [0,360), s/v in [0,1]. */
-private fun hsvColor(h: Double, s: Double, v: Double): Color {
-    val c = v * s
-    val hh = (h / 60.0)
-    val x = c * (1.0 - abs((hh % 2.0) - 1.0))
-    val m = v - c
-    val (r0, g0, b0) = when {
-        hh < 1.0 -> Triple(c, x, 0.0)
-        hh < 2.0 -> Triple(x, c, 0.0)
-        hh < 3.0 -> Triple(0.0, c, x)
-        hh < 4.0 -> Triple(0.0, x, c)
-        hh < 5.0 -> Triple(x, 0.0, c)
-        else     -> Triple(c, 0.0, x)
-    }
-    return Color(
-        red = (r0 + m).toFloat().coerceIn(0f, 1f),
-        green = (g0 + m).toFloat().coerceIn(0f, 1f),
-        blue = (b0 + m).toFloat().coerceIn(0f, 1f),
-    )
-}
