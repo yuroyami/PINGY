@@ -1,0 +1,378 @@
+<title>PINGY Playbook</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  :root {
+    --ground: #0B0E13;
+    --panel: #14181E;
+    --panel2: #1B212B;
+    --line: #2A3442;
+    --ink: #C9D2DD;
+    --dim: #7C8794;
+    --faint: #5E6874;
+    --sgn: #5CFF7F;
+    --teal: #00C1D5;
+    --warn: #FFC24B;
+    --bad: #FF5252;
+    --sans: "Inter", system-ui, -apple-system, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.65;
+    margin: 0;
+    padding: 0 20px 90px;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  header.hero {
+    padding: 64px 0 26px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 8px;
+  }
+  .wordmark {
+    font-weight: 800;
+    font-size: 44px;
+    letter-spacing: 2px;
+    background: linear-gradient(90deg, #64F4FF, var(--sgn), #64F4FF);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 0 26px rgba(92,255,127,0.25);
+    margin: 0;
+  }
+  .hero p.sub {
+    color: var(--dim);
+    margin: 10px 0 0;
+    max-width: 62ch;
+  }
+  .eyebrow {
+    font-size: 11px;
+    letter-spacing: 2.2px;
+    color: var(--dim);
+    text-transform: uppercase;
+    font-weight: 600;
+    margin: 0 0 6px;
+    font-family: var(--mono);
+  }
+  section { padding: 34px 0 8px; border-bottom: 1px solid rgba(42,52,66,0.55); }
+  h2 {
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: 0.2px;
+    margin: 0 0 12px;
+    color: #E8EEF5;
+    text-wrap: balance;
+  }
+  h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #DCE5EE;
+    margin: 26px 0 8px;
+  }
+  p { max-width: 72ch; margin: 10px 0; }
+  p.lead { color: var(--ink); }
+  .dim { color: var(--dim); }
+  code, .mono {
+    font-family: var(--mono);
+    font-size: 0.88em;
+    color: var(--teal);
+    background: rgba(0,193,213,0.07);
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+  pre {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    line-height: 1.55;
+  }
+  pre code { background: none; padding: 0; color: #B7EAF2; font-size: 12.5px; }
+  .chip {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    border-radius: 999px;
+    padding: 2px 9px;
+    vertical-align: 1px;
+    white-space: nowrap;
+  }
+  .chip.fixed { color: #0A2413; background: var(--sgn); }
+  .chip.open { color: #241B04; background: var(--warn); }
+  .chip.design { color: #A9C4D6; background: rgba(0,193,213,0.14); border: 1px solid rgba(0,193,213,0.35); }
+  .chip.p1 { color: var(--sgn); border: 1px solid rgba(92,255,127,0.4); background: rgba(92,255,127,0.08); }
+  .chip.p2 { color: var(--teal); border: 1px solid rgba(0,193,213,0.4); background: rgba(0,193,213,0.07); }
+  .chip.p3 { color: var(--dim); border: 1px solid var(--line); background: transparent; }
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; margin: 16px 0; }
+  table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 13.5px; }
+  th {
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 1.6px;
+    text-transform: uppercase;
+    color: var(--dim);
+    font-weight: 600;
+    background: var(--panel);
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(42,52,66,0.45);
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  td.k { color: #E2E8EF; font-weight: 600; white-space: nowrap; }
+  .good { color: var(--sgn); }
+  .warncell { color: var(--warn); }
+  .badcell { color: var(--bad); }
+  .ladder { display: flex; flex-direction: column; gap: 10px; margin: 18px 0; }
+  .rung {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--teal);
+    border-radius: 10px;
+    padding: 12px 16px;
+  }
+  .rung .t { font-weight: 600; color: #E2E8EF; }
+  .rung .t .mono { color: var(--sgn); background: none; padding: 0; }
+  .rung p { margin: 5px 0 0; font-size: 13.5px; color: var(--dim); max-width: none; }
+  ul { padding-left: 20px; max-width: 76ch; }
+  li { margin: 6px 0; }
+  li::marker { color: var(--faint); }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin: 16px 0; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .card .t { font-weight: 600; color: #E2E8EF; margin-bottom: 4px; }
+  .card p { font-size: 13.5px; color: var(--dim); margin: 4px 0 0; max-width: none; }
+  a { color: var(--sgn); text-decoration: none; }
+  a:hover, a:focus-visible { text-decoration: underline; outline: none; }
+  .toc {
+    display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 0;
+  }
+  .toc a {
+    font-family: var(--mono); font-size: 11.5px; color: var(--dim);
+    border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px;
+  }
+  .toc a:hover { color: var(--sgn); border-color: rgba(92,255,127,0.45); text-decoration: none; }
+  .footnote { color: var(--faint); font-size: 12.5px; }
+  @media (prefers-reduced-motion: no-preference) {
+    section { scroll-margin-top: 20px; }
+  }
+</style>
+
+<div class="wrap">
+<header class="hero">
+  <p class="eyebrow">Deep design notes · 2026-08-28</p>
+  <h1 class="wordmark">PINGY PLAYBOOK</h1>
+  <p class="sub">Where the ping engine stands after this session's fixes, how it behaves on hostile networks, and the concrete designs for the next features: probe tiers, force-cellular, TCP ping, web, benchmark, speed test, and motion.</p>
+  <nav class="toc">
+    <a href="#fixed">Fixed today</a>
+    <a href="#survival">Survival map</a>
+    <a href="#tiers">Probe tiers</a>
+    <a href="#concurrency">Concurrency</a>
+    <a href="#cellular">Force cellular</a>
+    <a href="#tcp">TCP ping</a>
+    <a href="#web">Web target</a>
+    <a href="#benchmark">Benchmark</a>
+    <a href="#speed">Speed test</a>
+    <a href="#motion">Motion</a>
+    <a href="#backlog">Backlog</a>
+  </nav>
+</header>
+
+<section id="fixed">
+  <p class="eyebrow">01</p>
+  <h2>What this session already fixed</h2>
+  <p class="lead">Two audits ran against the real code (engine, C layer, buffers, UI). Their confirmed findings that affect correctness got fixed in this batch, because "loss is not calculated properly" turned out to be several real bugs, not one formula.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Problem</th><th>What went wrong</th><th>Status</th></tr>
+    <tr><td class="k">Stale replies faked 0 ms pings</td><td>Every probe used sequence number 1, and the parser accepted any echo reply. A late reply from a timed-out probe sat in the socket buffer and got timed against the next probe's send. One slow patch poisoned min, avg, and jitter forever, and the stream could stay offset by one probe permanently.</td><td><span class="chip fixed">FIXED</span> per-probe sequence numbers, seq matching in both parsers, and a drain of stale packets before each send. Android, iOS, and desktop all share the fix.</td></tr>
+    <tr><td class="k">Socket errors spun the CPU</td><td>A firewall that rejects ICMP made the loop do open, send, fail, close, repeat with zero delay at interval 0. Thousands of fake "lost" samples per second, hot battery.</td><td><span class="chip fixed">FIXED</span> 200 ms backoff on the socket-error path.</td></tr>
+    <tr><td class="k">One DNS hiccup killed the panel forever</td><td>A failed resolution was cached as if it were the answer. The panel then showed 100% loss until removed.</td><td><span class="chip fixed">FIXED</span> failures are never cached, retried every second. A socket error also clears the cache so a network change re-resolves.</td></tr>
+    <tr><td class="k">Lifetime stats lied</td><td>Loss and averages accumulated since panel birth. A bad minute an hour ago still haunted the numbers.</td><td><span class="chip fixed">FIXED</span> all stats are now windowed to the same timeframe the graph shows. The trouble scrolls away, the numbers recover.</td></tr>
+    <tr><td class="k">Removing a panel took up to 3 s</td><td>Cancellation cannot interrupt a blocking poll(2). The socket stayed open until the timeout expired.</td><td><span class="chip fixed">FIXED</span> stop() closes the fd directly, which wakes the poll immediately.</td></tr>
+    <tr><td class="k">Interval was dead code</td><td>The engine supported intervals, but no slider existed since the redesigns. Zero-interval was the only reachable mode.</td><td><span class="chip fixed">FIXED</span> interval slider is back (adaptive to 2000 ms).</td></tr>
+    <tr><td class="k">One-outstanding-probe blindness</td><td>The old loop sent a probe and froze until it resolved. Each timeout meant 3 s of not sampling at all, so count-based loss under-weighted outages by up to 100x, and time-based loss would have counted blind waiting as downtime.</td><td><span class="chip fixed">FIXED</span> the engine is pipelined now: a send schedule fires seq-stamped probes and never waits (adaptive mode: each reply pulls the next send once the pipeline drains; a 250 ms watchdog keeps sampling through outages), replies are matched to probes by seq, and expired probes are reaped without stalling anything. Verified live: healthy cadence = 1/RTT, outage cadence = exactly 4 verdicts/sec.</td></tr>
+    <tr><td class="k">Loss had no time dimension</td><td>Count-based LOSS alone could read 1% during a half-window blackout.</td><td><span class="chip fixed">FIXED</span> new GONE stat: the share of the window's resolved time covered by spans ending in a lost verdict. With pipelined probing it is honest in both directions (a blackout reads ~100%, one dropped packet reads milliseconds). Shown next to LOSS; the pair diagnoses: high GONE + low LOSS = long outage, the reverse = rapid sparse drops.</td></tr>
+  </table></div>
+  <p class="footnote">Also in the batch: draw pass now walks the ring newest-first and stops at the window edge (no more full 6000-slot scan per frame), per-pixel folding caps draw cost at any probe rate, and the panel no longer recomposes on every ping.</p>
+</section>
+
+<section id="survival">
+  <p class="eyebrow">02</p>
+  <h2>Hostile-network survival map</h2>
+  <p class="lead">One mechanism exists today on all three platforms: unprivileged ICMP echo over <code>SOCK_DGRAM + IPPROTO_ICMP</code>, one connected socket per panel, pipelined (many seq-matched probes in flight; timeouts never pause the schedule). No exec of ping, no fallback. This is the honest map of what happens under each condition.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Condition</th><th>Today</th><th>Plan</th></tr>
+    <tr><td class="k">ICMP silently dropped<br><span class="dim">(corporate Wi-Fi, some mobile carriers)</span></td><td class="warncell">All losses, no explanation - but the pipelined watchdog keeps sampling at 4 probes/sec, so stats and graph stay truthful about the outage.</td><td>Tier ladder (section 03). The app detects the block during the handshake and drops to TCP with a visible tier tag.</td></tr>
+    <tr><td class="k">ICMP actively rejected<br><span class="dim">(admin-prohibited replies)</span></td><td class="good">Backoff added today keeps it at 5 gentle retries per second.</td><td>Distinguish "rejected" from "timed out" in the sentinel contract, then demote to TCP.</td></tr>
+    <tr><td class="k">2G / 3G where real RTT can pass 3 s</td><td class="warncell">Genuine reply after 3 s counts as a loss. The stale-reply fix means it can no longer fake a 0 ms sample, it is just dropped now.</td><td>Make the timeout a per-panel setting (3 s default, up to 10 s). On EDGE, an honest 4 s bar beats a fake loss.</td></tr>
+    <tr><td class="k">Android OEM quirks<br><span class="dim">(ping_group_range, SELinux)</span></td><td class="good">Low risk. No CAP_NET_RAW needed, no exec, plain app-UID socket. AOSP ships gid 3003 in the allowed range.</td><td>If open ever fails persistently, say so in the panel instead of showing loss. An exec fallback is useless: toybox ping uses the same socket type.</td></tr>
+    <tr><td class="k">iOS local network privacy</td><td class="good">Fixed today: <code>NSLocalNetworkUsageDescription</code> added to Info.plist. Router targets (192.168.x.x) can now trigger the consent prompt instead of failing silently.</td><td>Verify once on real hardware. The two gateway presets are the test.</td></tr>
+    <tr><td class="k">IPv6 target or AAAA-only host</td><td class="badcell">AF_INET is hardcoded in both native layers. A v6 literal fails resolution and shows permanent loss.</td><td>Mirror the C for <code>ICMPv6</code> + <code>AF_UNSPEC</code> in getaddrinfo. The TCP tier gets IPv6 for free.</td></tr>
+    <tr><td class="k">Wi-Fi to cellular handover, VPN toggling</td><td class="warncell">The connected socket's route dies, send fails, and today's fix re-resolves and reopens after backoff. Recovery works but is blind.</td><td>Listen to <code>ConnectivityManager.registerDefaultNetworkCallback</code> / <code>NWPathMonitor</code> and rerun the tier handshake on change, instead of discovering the change through errors.</td></tr>
+    <tr><td class="k">Captive portal</td><td class="warncell">DNS answers with the portal's address, panel pings the portal. Numbers are real but mean the wrong thing.</td><td>HTTP tier doubles as the portal detector: a 204 from <code>connectivitycheck.gstatic.com</code> means clean internet, a 200 with a body means portal. Show a portal badge.</td></tr>
+    <tr><td class="k">Doze / OEM background killers</td><td class="warncell">Nothing pauses the engine when the app backgrounds. The OS eventually freezes it; on thaw, a wedged fd is recovered by the reopen path.</td><td>Pause probing in <code>onStop</code>, resume in <code>onStart</code>. Background monitoring, if ever wanted, is a foreground service with a notification, not a silent battery drain.</td></tr>
+    <tr><td class="k">Airplane mode</td><td class="good">Open fails, one loss per backoff period, self-recovers when the network returns.</td><td>Good enough.</td></tr>
+  </table></div>
+</section>
+
+<section id="tiers">
+  <p class="eyebrow">03</p>
+  <h2>The probe tier ladder</h2>
+  <p class="lead">The design rule that keeps the data honest: never fall back per probe. Mixing ICMP and TCP samples in one graph makes the average meaningless. Instead, run a capability handshake when a panel starts, pin the best working tier for the session, tag every sample with its tier, and rerun the handshake on a network-change event.</p>
+  <div class="ladder">
+    <div class="rung"><div class="t">Tier 0 · <span class="mono">ICMP echo</span> (exists today)</div>
+      <p>Kernel-answered, no server-side app delay, best fidelity. Now trustworthy (seq matching) and pipelined (no blind waiting). Stays the default wherever it works.</p></div>
+    <div class="rung"><div class="t">Tier 1 · <span class="mono">DNS query over UDP/53</span></div>
+      <p>A real A-record query to the target, timed to the response. Only meaningful for resolvers, and three of the eight presets are resolvers (1.1.1.1, 8.8.8.8, 9.9.9.9). UDP/53 survives most firewalls that drop ICMP. Android: DatagramSocket with soTimeout. iOS: NWConnection with .udp.</p></div>
+    <div class="rung"><div class="t">Tier 2 · <span class="mono">TCP connect</span> (the universal fallback)</div>
+      <p>Measures SYN to SYN-ACK: the moment connect() returns. Details in section 06. Works against almost anything with an open port, and brings IPv6 and interface pinning along.</p></div>
+    <div class="rung"><div class="t">Tier 3 · <span class="mono">HTTP HEAD</span> (reachability + portal detection only)</div>
+      <p>Not comparable to the tiers above (TLS and request cost). Never enters the RTT average. Its job is the binary question "is the internet real here" and catching captive portals.</p></div>
+  </div>
+  <p>The panel header shows the active tier as a small tag next to the address whenever it is not ICMP, so a TCP number is never mistaken for an ICMP number. The failure reason enum (resolve failed, no route, rejected, timeout) is the prerequisite work: the handshake needs to know why a tier failed to decide whether to demote.</p>
+</section>
+
+<section id="concurrency">
+  <p class="eyebrow">04</p>
+  <h2>Concurrency: what changed, what stays open</h2>
+  <p class="lead">The audit went deep on the Kotlin-to-C boundary and the coroutine layout. Verdict before fixes: not sound at zero interval. Verdict after: the correctness items are closed, two efficiency items remain by choice.</p>
+  <h3>Closed today</h3>
+  <ul>
+    <li><b>Ring buffer reader vs writer.</b> Readers now walk newest-first, away from the writer's clobber point, and stop if ages go non-monotonic. <code>last()</code> derives everything from a single volatile read of the write cursor, killing the torn-read that could return null right after a ping landed.</li>
+    <li><b>Engine reference visibility.</b> The <code>engine</code> field is volatile; slider changes from the Default pool can no longer read a stale null and silently drop an update.</li>
+    <li><b>The fake outer timeout.</b> <code>withTimeoutOrNull</code> around a blocking native call cannot fire (cancellation lands only at suspension points). Removed. On iOS it also taxed the single Kotlin/Native timer thread per probe. The native poll budget is the one authority, and stop() closing the fd covers the wedge case for real.</li>
+    <li><b>IO pool starvation.</b> Each engine now runs on its own single-lane <code>limitedParallelism(1)</code> view, so many panels can no longer eat the shared 64-slot IO pool from under the rest of the app (DataStore writes included).</li>
+    <li><b>Panel identity in lists.</b> Panels are keyed by IP everywhere, so removing one no longer hands its peak-hold line and aura state to the neighbor.</li>
+  </ul>
+  <h3>Open, on purpose</h3>
+  <ul>
+    <li><b>Blocking resolve.</b> <span class="chip open">OPEN</span> getaddrinfo on a captive portal can block a lane for many seconds. Contained (one lane per engine, failures retried), but the clean fix is resolving before engine start inside the panel scope, where close() cancels it.</li>
+    <li><b>Write-side downsampling.</b> <span class="chip open">OPEN</span> the draw pass now folds to one entry per pixel, so rendering is cheap at any rate. The ring itself still stores every raw sample (6000). If a "30 s window at LAN speed" ever matters, bucket at write time (keep min, max, last per display slice).</li>
+  </ul>
+</section>
+
+<section id="cellular">
+  <p class="eyebrow">05</p>
+  <h2>Force cellular ("force 4G")</h2>
+  <p class="lead">The question this feature answers: "is my mobile data actually good right now, while I am on Wi-Fi?" Both platforms can pin the existing ICMP socket to the cellular interface. No root, no tricks.</p>
+  <div class="cols">
+    <div class="card"><div class="t">Android</div>
+      <p><code>ConnectivityManager.requestNetwork</code> with <code>TRANSPORT_CELLULAR</code> keeps mobile data alive next to Wi-Fi, then <code>network.bindSocket(fd)</code> pins our ICMP fd to it. Needs the normal <code>CHANGE_NETWORK_STATE</code> permission. The request must stay held while the panel lives, and released on close, or the radio idles back.</p></div>
+    <div class="card"><div class="t">iOS</div>
+      <p>BSD sockets pin with <code>setsockopt(IP_BOUND_IF)</code> using the cellular interface index (the pdp_ip family). One new parameter through the cinterop. NWConnection's requiredInterfaceType is the cleaner API but only matters if the TCP tier wants it too.</p></div>
+    <div class="card"><div class="t">UI shape</div>
+      <p>A per-panel interface selector: Auto, Wi-Fi, Cellular. Sits in the settings deck as one more compact row. The panel readout gets a tiny antenna tag when it is not Auto, same language as the tier tag.</p></div>
+    <div class="card"><div class="t">Honest caveats</div>
+      <p>Bringing the cellular radio up costs battery and a second or two of admission delay, so the first samples after switching are marked warm-up and excluded from stats. Dual SIM picks the active data SIM; per-SIM selection is not worth the API pain today.</p></div>
+  </div>
+</section>
+
+<section id="tcp">
+  <p class="eyebrow">06</p>
+  <h2>TCP ping</h2>
+  <p class="lead">The universal tier, and also a feature on its own: pinging a service, not a host. "Is my game server's port answering, and how fast?"</p>
+  <ul>
+    <li><b>Measure to the SYN-ACK.</b> The moment <code>connect()</code> returns (or NWConnection reaches .ready) is one round trip plus microseconds of stack time. That is the number. Close immediately with RST (linger 0) so the server never holds half a connection.</li>
+    <li><b>Never include TLS.</b> Plain sockets only. TLS adds round trips and handshake CPU and would make the number a lie.</li>
+    <li><b>A refused port is still an answer.</b> An RST arrives in one round trip and proves the path. Render it as a valid RTT with a "refused" tint rather than a loss.</li>
+    <li><b>Port ladder for the handshake:</b> 443, then 80, then 53. A user-set port wins over the ladder for explicit TCP panels.</li>
+    <li><b>Implementation:</b> Ktor raw sockets (<code>aSocket().tcp().connect()</code> inside withTimeout) work in commonMain across JVM, Android, and iOS, one code path. Keep a thin NWConnection variant on iOS only if interface pinning for TCP becomes a feature.</li>
+    <li><b>Cost note:</b> a TCP probe is a real connection on the target. Default TCP panels to a 1 s interval instead of adaptive, and cap adaptive TCP at 5 probes per second. Hammering someone's accept queue at 200 Hz is abuse, not measurement.</li>
+  </ul>
+</section>
+
+<section id="web">
+  <p class="eyebrow">07</p>
+  <h2>Web target, without lying</h2>
+  <p class="lead">A browser build (wasmJs) cannot open ICMP, UDP, or raw TCP. Anything the web version shows must be one of these, clearly labeled:</p>
+  <ul>
+    <li><b>WebSocket RTT.</b> Open a WS to an echo endpoint and time small frames. Honest, continuous, and the closest thing to a ping the browser allows. Needs an endpoint that speaks WS: either a tiny echo relay you host, or targets that happen to expose one. This is the primary web tier.</li>
+    <li><b>HTTPS request timing.</b> <code>fetch</code> HEAD with the Performance API. Includes TLS unless the connection is reused, so it is a "service latency" number, not an RTT. Cross-origin targets hide detailed timings unless they send <code>Timing-Allow-Origin</code>, and every target needs CORS. Works for the user's own services, useless for 8.8.8.8.</li>
+  </ul>
+  <p>So the web app is real but different: it measures services, not hosts, and says so in the panel. CMP already compiles this UI to wasm; the work is a <code>wasmJs</code> target, a browser PingEngine actual speaking WS/fetch, and honest tier labels. A relay server would make arbitrary-host pinging possible from the browser, but that turns PINGY into infrastructure; park it until wanted.</p>
+</section>
+
+<section id="benchmark">
+  <p class="eyebrow">08</p>
+  <h2>Benchmark screen</h2>
+  <p class="lead">One target tells you about one path. The benchmark answers "how healthy is my connection", using the user's chosen duration and ending in a diagnosis, not a wall of numbers.</p>
+  <h3>Protocol (phases scale with the chosen duration, 30 s to 10 min)</h3>
+  <ul>
+    <li><b>Baseline sweep.</b> Ping the gateway, two anycast resolvers, and one far target in parallel. Collects idle latency, jitter, and loss per path.</li>
+    <li><b>DNS check.</b> Time fresh lookups of a few uncached names against the system resolver and against 1.1.1.1 directly.</li>
+    <li><b>Loaded latency.</b> Start a parallel download to saturate the line (the speed-test machinery from section 09), keep pinging the gateway and a resolver during it. The idle-to-loaded latency delta is bufferbloat, the thing that makes calls stutter while someone streams.</li>
+    <li><b>Recovery tail.</b> Stop the load, watch latency settle. Slow settling implies deep queues.</li>
+  </ul>
+  <h3>Diagnosis rules (each fires a plain-language finding)</h3>
+  <div class="tablewrap"><table>
+    <tr><th>Pattern</th><th>Finding</th></tr>
+    <tr><td class="k">Gateway clean, WAN targets bad</td><td>Your Wi-Fi is fine. The problem is your ISP or beyond.</td></tr>
+    <tr><td class="k">Gateway already jittery or lossy</td><td>Local radio problem: interference, distance, or a busy router.</td></tr>
+    <tr><td class="k">Idle latency fine, loaded latency 5x worse</td><td>Bufferbloat. Calls and games will suffer whenever anything downloads.</td></tr>
+    <tr><td class="k">System DNS slow, direct resolver fast</td><td>Your configured DNS is the bottleneck. Suggest switching.</td></tr>
+    <tr><td class="k">Uniform loss on every path</td><td>Real packet loss on the link itself, not congestion on one route.</td></tr>
+    <tr><td class="k">All bad on Wi-Fi, all good on cellular (if permitted to compare)</td><td>The access network is the problem, not the internet.</td></tr>
+  </table></div>
+  <p>Score is secondary to findings: a 0-100 blend of idle latency (25%), jitter (20%), loss (30%), bufferbloat delta (25%), each mapped through honest thresholds. The result screen leads with the findings in sentences, keeps the raw numbers one tap away, and reuses the panel visual language so it still feels like PINGY.</p>
+</section>
+
+<section id="speed">
+  <p class="eyebrow">09</p>
+  <h2>Download / upload speed</h2>
+  <ul>
+    <li><b>Method:</b> parallel HTTP streams (4 to 8) with ramp-up, measured over 1-second windows, discard the first two windows, report the median of the rest. Median beats mean against bursts.</li>
+    <li><b>Servers:</b> Cloudflare's public speed endpoints (<code>speed.cloudflare.com/__down?bytes=N</code> and <code>__up</code>) as default, LibreSpeed server URL as a user-configurable alternative for self-hosters. No SDK dependencies.</li>
+    <li><b>Upload:</b> chunked POST of generated data, same windowing.</li>
+    <li><b>Implementation:</b> Ktor client in commonMain with streaming bodies; OkHttp engine on Android, Darwin engine on iOS, CIO on desktop.</li>
+    <li><b>Guardrails:</b> show projected data usage before starting on cellular (a 30 s test can eat hundreds of MB), and feed the loaded-latency phase of the benchmark instead of running its own load twice.</li>
+  </ul>
+</section>
+
+<section id="motion">
+  <p class="eyebrow">10</p>
+  <h2>Morph catalog</h2>
+  <p class="lead">Motion budget rule: one orchestrated moment per interaction, springs over tweens, everything under 350 ms, and nothing animates during scrub. The list, in order of felt impact:</p>
+  <ul>
+    <li><b>Layout morphs.</b> Wrap the panel area in <code>LookaheadScope</code> with <code>movableContentOf</code> panels, so switching stack, grid, and pager physically slides and resizes the same panels instead of teleporting them. This is the single most "wow" item.</li>
+    <li><b>Preset dropdown.</b> Staggered item entrance (fade + 8 dp slide, 25 ms apart) and an animated dot that breathes once when the item lands. The menu itself already scales in; the stagger is what makes it feel alive.</li>
+    <li><b>Deck fold.</b> Replace the current slide with <code>animateContentSize</code> on the chassis plus a crossfade between stats and settings, so the panel's outline morphs as one shape, matching the fused-chassis idea.</li>
+    <li><b>Readout digits.</b> Roll digits vertically on change (AnimatedContent with slide per digit slot, throttled to the existing 150 ms sampler). Skip when the value jumps by more than 3 digits.</li>
+    <li><b>Add and remove.</b> New panel springs in with a small overshoot (the birth ritual the bars already perform); removed panel collapses via <code>animateItem</code> in the lazy containers.</li>
+    <li><b>About entrance.</b> The logo icon slides in from the left, the wordmark from the right, meeting in the middle once. Cheap, memorable, and only on that screen.</li>
+  </ul>
+</section>
+
+<section id="backlog">
+  <p class="eyebrow">11</p>
+  <h2>Backlog: the other things this app wants</h2>
+  <ul>
+    <li><span class="chip p1">P1</span> <b>Failure-reason taxonomy</b>: the enum (resolve failed, no route, rejected, timeout) that unlocks tiers, honest panels, and the benchmark's findings.</li>
+    <li><span class="chip p1">P1</span> <b>Network-change listeners</b> on both platforms, feeding the handshake and a tiny "network changed" tick mark on the graph timeline.</li>
+    <li><span class="chip p1">P1</span> <b>Pause on background</b>, resume on foreground. Honest battery behavior before any store release.</li>
+    <li><span class="chip p2">P2</span> <b>Traceroute without root</b>: Linux ping sockets deliver TTL-exceeded errors via <code>IP_RECVERR</code>, so hop-by-hop latency is possible on Android with the existing socket type. Darwin needs a different trick (TCP with rising TTL). A killer differentiator if it lands.</li>
+    <li><span class="chip p2">P2</span> <b>Loss alerts</b>: a per-panel threshold (loss over N% for M seconds) firing a local notification. Pairs with the foreground-service question.</li>
+    <li><span class="chip p2">P2</span> <b>Session history</b>: persist compressed per-minute aggregates (SQLDelight), a scrollable past-hour strip under the live graph.</li>
+    <li><span class="chip p2">P2</span> <b>IPv6</b> end to end, per the survival map.</li>
+    <li><span class="chip p3">P3</span> <b>Home-screen widget</b> (Glance) showing one target's live color and value.</li>
+    <li><span class="chip p3">P3</span> <b>Export</b>: share a panel as PNG (the graph already draws itself; render to an ImageBitmap) or CSV of the window.</li>
+    <li><span class="chip p3">P3</span> <b>Gateway auto-detect</b> preset: resolve the actual default gateway instead of guessing 192.168.1.1.</li>
+    <li><span class="chip p3">P3</span> <b>Anomaly badge</b>: EWMA over RTT; when the live value runs 3 sigma above its own baseline, the readout pulses once. Cheap math, real signal.</li>
+    <li><span class="chip p3">P3</span> <b>MTU probe</b>: binary-search the largest unfragmented payload (the packet-size machinery already exists).</li>
+  </ul>
+  <p class="footnote">Suggested order of attack: taxonomy, then network listeners, then the TCP tier, then force-cellular, then the benchmark on top of all four. Each step ships alone.</p>
+</section>
+</div>
