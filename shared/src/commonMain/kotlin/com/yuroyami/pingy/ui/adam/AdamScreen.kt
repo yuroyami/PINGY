@@ -32,7 +32,7 @@ fun AdamScreenUI() {
             NavDisplay(
                 backStack = vm.backstack,
                 onBack = {
-                    //NoOp
+                    if (vm.backstack.size > 1) vm.backstack.removeAt(vm.backstack.lastIndex)
                 },
                 entryDecorators = listOf(
                     rememberSaveableStateHolderNavEntryDecorator(),
@@ -40,6 +40,9 @@ fun AdamScreenUI() {
                 ),
                 entryProvider = entryProvider {
                     entry<Screen.Main> {
+                        it.UI()
+                    }
+                    entry<Screen.About> {
                         it.UI()
                     }
                 }

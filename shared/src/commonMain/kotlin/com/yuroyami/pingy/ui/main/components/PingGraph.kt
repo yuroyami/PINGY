@@ -13,28 +13,31 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ShowChart
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.UnfoldLessDouble
-import androidx.compose.material.icons.filled.UnfoldMoreDouble
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -49,6 +52,7 @@ import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -61,16 +65,23 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.yuroyami.pingy.GraphStyle
+import com.yuroyami.pingy.PanelLayout
 import com.yuroyami.pingy.logic.Ping
 import com.yuroyami.pingy.logic.PingPanel
+import com.yuroyami.pingy.logic.RingBuffer
 import com.yuroyami.pingy.theme.Paletting
 import com.yuroyami.pingy.theme.pingColor
 import com.yuroyami.pingy.ui.adam.LocalViewmodel
@@ -87,7 +98,6 @@ import kotlin.math.log10
 import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sin
-import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 
 // ---- Juice tuning. Everything is a pure function of a ping's age, so the same
@@ -108,6 +118,14 @@ private val CHAMELEON_FADE_START_MS = PING_TIMEOUT_MS * 2f / 3f
 private const val SCRUB_GLIDE_MS = 350f // frozen time glides back to now instead of teleporting
 private const val PEAK_DECAY_PER_SEC = 0.22f // peak-hold line falls this canvas-fraction per second
 
+/** Buffer entries are appended in COMPLETION order while their timestamps
+ * are SEND moments, so a reaped loss can sit up to a timeout out of place.
+ * Any age jump beyond this is the ring writer clobbering under us. */
+private val REORDER_SLACK_MS = PING_TIMEOUT_MS + 1_000L
+
+/** Oldest-first ordering for the visible window (timestamps ascending). */
+private val PingTimeOrder = Comparator<Ping> { a, b -> a.timestamp.compareTo(b.timestamp) }
+
 private val FizzleColor = Color(0xFFFF5252)
 private val PeakLineColor = Color(0xFFE2E8EF)
 
@@ -122,7 +140,7 @@ private val StatsDimColor = Color(0xFF5A6470)
 private val SettingsTextColor = Color(0xFFC9D2DD)
 
 /** Drag-to-inspect freeze: ages render relative to [freezeMark] so the conveyor halts. */
-private data class ScrubFreeze(val freezeMark: TimeMark, val cursorX: Float)
+private data class ScrubFreeze(val freezeMark: TimeSource.Monotonic.ValueTimeMark, val cursorX: Float)
 
 // Gesture verdicts for the manual tap / long-press / scrub state machine.
 private const val GESTURE_SCROLL = 0
@@ -132,38 +150,33 @@ private const val GESTURE_SCRUB = 3
 /**
  * Full graph panel view:
  *
- * - A canvas at the top drawing the ping history. Tapping the canvas switches
- *   the sheet below between **statistics** (default) and **settings** modes;
- *   a motionless long-press resets tuning preferences; a horizontal drag
- *   freezes the conveyor and scrubs bar-by-bar with an exact readout chip.
- * - Newborn bars overshoot and glow briefly, timeouts burn a short red fizzle
- *   at the start of their gap, and a slowly-falling peak-hold line marks the
- *   recent maximum like a VU meter.
- * - A neon current-ping readout sits on the canvas, throttled to stay readable
- *   at zero-interval probe rates.
- * - A standalone minimize/expand [IconButton] overlaid on the canvas' top-right
- *   corner toggles the sheet's expanded/collapsed state.
- * - The bottom sheet contains either stats or tuning sliders, all reactive via
- *   the panel's StateFlows.
+ * - A canvas at the top drawing the ping history. Tapping it collapses or
+ *   expands the deck below; a motionless long-press resets tuning
+ *   preferences; a horizontal drag freezes the conveyor and scrubs
+ *   bar-by-bar with an exact readout chip.
+ * - Newborn bars overshoot and glow briefly, and a slowly-falling peak-hold
+ *   line marks the recent maximum like a VU meter.
+ * - The readout plate carries the live value AND the target address,
+ *   throttled to stay readable at zero-interval probe rates.
+ * - Floating controls on the canvas' top-right corner: per-panel graph
+ *   style, the settings deck, and panel discard.
+ * - The deck below shows windowed stats or the tuning dials, all reactive
+ *   via the panel's StateFlows.
  */
 @Composable
 fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
     val textMeasurer = rememberTextMeasurer()
     val windowInfo = LocalWindowInfo.current
-    val windowHeightDp by derivedStateOf { windowInfo.containerDpSize.height }
+    val windowHeightDp by remember(windowInfo) { derivedStateOf { windowInfo.containerDpSize.height } }
 
     val pings = this.pings
-    val graphStyleVal by LocalViewmodel.current.graphStyle.collectAsState()
-    val version by pingVersion.collectAsState()
+    val viewmodel = LocalViewmodel.current
+    val globalStyle by viewmodel.graphStyle.collectAsState()
+    val styleOverrideVal by styleOverride.collectAsState()
+    val graphStyleVal = styleOverrideVal ?: globalStyle
+    val layoutVal by viewmodel.panelLayout.collectAsState()
     val expanded by expanded.collectAsState()
     val showSettings by showSettings.collectAsState()
-
-    val pingsSentVal by pingsSent.collectAsState()
-    val pingsLostVal by pingsLost.collectAsState()
-    val lowestPingVal by lowestPing.collectAsState()
-    val highestPingVal by highestPing.collectAsState()
-    val averagePingVal by averagePing.collectAsState()
-    val jitterVal by jitter.collectAsState()
 
     val roofVal by roof.collectAsState()
     val angleOfAttackVal by angleOfAttack.collectAsState()
@@ -199,7 +212,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
     // More per-frame holders in the same spirit: the aura color chases its
     // target instead of snapping, and a released scrub glides back to now.
     val auraSmooth = remember { object { var color: Color? = null } }
-    val glide = remember { object { var startMark: TimeMark? = null; var fromOffsetMs = 0L } }
+    val glide = remember { object { var startMark: TimeSource.Monotonic.ValueTimeMark? = null; var fromOffsetMs = 0L } }
 
     // Neon readout, sampled at ~7 Hz. At interval 0 a per-ping readout would
     // strobe hundreds of times a second; a throttled sample stays readable
@@ -217,6 +230,20 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
         }
     }
 
+    // Windowed stats: computed over the SAME visible timeframe as the graph,
+    // so the numbers describe what the eye currently sees instead of dragging
+    // ancient losses around forever. Sampled at 2.5 Hz, far away from the
+    // per-frame draw path and the recomposition path.
+    var windowStats by remember { mutableStateOf(WindowStats.EMPTY) }
+    LaunchedEffect(this@PingGraphView) {
+        while (true) {
+            val base = timeframeMs.value
+            val effective = if (viewmodel.panelLayout.value == PanelLayout.GRID) base / 2 else base
+            windowStats = computeWindowStats(pings, effective)
+            delay(400)
+        }
+    }
+
     var scrub by remember { mutableStateOf<ScrubFreeze?>(null) }
 
     // The readout's hue glides between samples; the text itself stays discrete.
@@ -228,13 +255,8 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
         animationSpec = tween(durationMillis = 300),
     )
 
-    val interFont = FontFamily(Font(Res.font.Inter_Regular))
-    val txtstyle = TextStyle(
-        color = SettingsTextColor,
-        fontSize = 14.sp,
-        fontFamily = interFont,
-        shadow = Shadow(color = Color.Black, blurRadius = 4f)
-    )
+    val inter = Font(Res.font.Inter_Regular)
+    val interFont = remember(inter) { FontFamily(inter) }
     val chipStyle = remember(interFont) {
         TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = interFont)
     }
@@ -262,9 +284,9 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
             Canvas(
                 modifier = Modifier
                     .fillMaxSize()
-                    // Manual gesture FSM instead of combinedClickable: tap flips
-                    // stats/settings, motionless long-press resets preferences
-                    // (both as before), and a horizontal drag scrubs the frozen
+                    // Manual gesture FSM instead of combinedClickable: tap folds
+                    // or unfolds the deck, motionless long-press resets
+                    // preferences, and a horizontal drag scrubs the frozen
                     // timeline. Vertical drags are left unconsumed so the outer
                     // list keeps scrolling from the graph surface.
                     .pointerInput(this@PingGraphView) {
@@ -291,8 +313,12 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                                 @Suppress("UNREACHABLE_CODE") GESTURE_SCROLL
                             }
                             when (verdict) {
-                                null -> resetPreferences() // held still past the long-press timeout
-                                GESTURE_TAP -> this@PingGraphView.showSettings.update { !it }
+                                null -> {
+                                    // Held still past the long-press timeout.
+                                    resetPreferences()
+                                    viewmodel.notify("$ip settings reset")
+                                }
+                                GESTURE_TAP -> this@PingGraphView.expanded.update { !it }
                                 GESTURE_SCRUB -> try {
                                     while (true) {
                                         val event = awaitPointerEvent()
@@ -368,10 +394,11 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                     )
                 }
 
-                // Force redraw every frame for smooth scrolling. Reading pingVersion
-                // as well keeps the callback-driven invalidation path alive.
-                @Suppress("UNUSED_VARIABLE") val v = version
+                // Force redraw every frame for smooth scrolling: reading the
+                // ticker state invalidates draw without recomposition. One
+                // clock read serves every age computed in this pass.
                 val nowFrameMs = frameTick.longValue
+                val frameNow = TimeSource.Monotonic.markNow()
                 val dtSec = ((nowFrameMs - peakHold.lastFrameMs).coerceIn(0L, 100L)) / 1000f
                 peakHold.lastFrameMs = nowFrameMs
 
@@ -394,31 +421,93 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                     } ?: 0L
                 }
 
-                // Collect the subset of pings within the user-chosen timeframe.
-                // Reuses the outer `visibleBuf` to avoid a per-frame allocation.
-                // The newest ALREADY-EVICTED ping rides along as index 0: it is
-                // the left anchor of the slope (and the width donor of the bar)
-                // that bridges into the window. Without it, that whole span
-                // vanishes the frame its anchor leaves, punching a gap as wide
-                // as the ping lasted instead of sliding out under the border.
-                val thresholdMs = timeframeMsVal
-                visibleBuf.clear()
-                var evictedAnchor: Ping? = null
-                pings.fastForEachWithIndex { p, _ ->
-                    if (p != null) {
-                        val age = p.timestamp.elapsedNow().inWholeMilliseconds - freezeOffsetMs
-                        if (age > thresholdMs) {
-                            evictedAnchor = p
-                        } else if (age >= 0) {
-                            if (visibleBuf.isEmpty()) evictedAnchor?.let { visibleBuf.add(it) }
-                            visibleBuf.add(p)
-                        }
-                    }
-                }
-
+                // Celluloid cells are half as wide, so they show half the
+                // window: pixel density per millisecond stays constant and
+                // the stored preference is untouched.
+                val thresholdMs = if (layoutVal == PanelLayout.GRID) timeframeMsVal / 2 else timeframeMsVal
                 val canvasW = size.width
                 val canvasH = size.height
                 val pxPerMs = canvasW / thresholdMs.toFloat()
+                val minBarPx = 2.5.dp.toPx()
+
+                // Collect the visible window newest-first. Walking backwards
+                // from the freshest entry stops at the horizon instead of
+                // scanning the whole ring, and moves AWAY from the writer's
+                // cursor (which clobbers the oldest slot). Timestamps are
+                // SEND moments while the buffer appends in COMPLETION order,
+                // so ages may wobble by up to a timeout: only a jump past
+                // REORDER_SLACK_MS means the writer caught us, and the walk
+                // continues one slack past the window so a late-reaped loss
+                // near the edge is not mistaken for the horizon.
+                //
+                // The window is then sorted oldest-first and folded: entries
+                // denser than one pixel column collapse into each other, a
+                // loss always surviving the fold, otherwise the worst RTT.
+                // The entry just OLDER than the window rides along as the
+                // left anchor of the slope/bar bridging into view; without
+                // it that whole span would vanish the frame its anchor left.
+                visibleBuf.clear()
+                var evictedAnchor: Ping? = null
+                var anchorAge = Long.MAX_VALUE
+                run {
+                    var prevAge = Long.MIN_VALUE
+                    pings.forEachNewestFirst { p ->
+                        val age = (frameNow - p.timestamp).inWholeMilliseconds - freezeOffsetMs
+                        when {
+                            age + REORDER_SLACK_MS < prevAge -> false
+                            age > thresholdMs + REORDER_SLACK_MS -> false
+                            else -> {
+                                if (age > thresholdMs) {
+                                    if (age < anchorAge) {
+                                        anchorAge = age
+                                        evictedAnchor = p
+                                    }
+                                } else if (age >= 0) {
+                                    visibleBuf.add(p)
+                                }
+                                if (age > prevAge) prevAge = age
+                                true
+                            }
+                        }
+                    }
+                }
+                evictedAnchor?.let { visibleBuf.add(it) }
+                visibleBuf.sortWith(PingTimeOrder)
+
+                // Fold pass: collapse same-column neighbours in place. The
+                // anchor (index 0, off-canvas column) never matches an
+                // in-window column, so it survives untouched.
+                var newestValidAge = Long.MIN_VALUE
+                if (visibleBuf.size > 1) {
+                    var write = 1
+                    var keptCol = ((canvasW - ((frameNow - visibleBuf[0].timestamp).inWholeMilliseconds - freezeOffsetMs) * pxPerMs)).toInt()
+                    for (read in 1 until visibleBuf.size) {
+                        val p = visibleBuf[read]
+                        val col = ((canvasW - ((frameNow - p.timestamp).inWholeMilliseconds - freezeOffsetMs) * pxPerMs)).toInt()
+                        val kept = visibleBuf[write - 1]
+                        if (col == keptCol) {
+                            val keptLost = kept.value == null || kept.value < 0
+                            val pLost = p.value == null || p.value < 0
+                            when {
+                                keptLost -> Unit // a loss marker outranks the fold
+                                pLost -> visibleBuf[write - 1] = p
+                                p.value > kept.value -> visibleBuf[write - 1] = p
+                            }
+                        } else {
+                            visibleBuf[write] = p
+                            write++
+                            keptCol = col
+                        }
+                    }
+                    while (visibleBuf.size > write) visibleBuf.removeAt(visibleBuf.lastIndex)
+                }
+                for (i in visibleBuf.indices.reversed()) {
+                    val v = visibleBuf[i].value
+                    if (v != null && v >= 0) {
+                        newestValidAge = (frameNow - visibleBuf[i].timestamp).inWholeMilliseconds - freezeOffsetMs
+                        break
+                    }
+                }
 
                 // Scrub bookkeeping: the cursor maps to an age, and the slot loop
                 // records the geometry of whichever ping lands closest.
@@ -456,7 +545,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                     var index = 0
                     while (index < n) {
                         val ping = visibleBuf[index]
-                        val ageA = ping.timestamp.elapsedNow().inWholeMilliseconds - freezeOffsetMs
+                        val ageA = (frameNow - ping.timestamp).inWholeMilliseconds - freezeOffsetMs
                         val xA = canvasW - ageA * pxPerMs
                         val vA = ping.value
                         val lostA = vA == null || vA < 0
@@ -464,6 +553,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                         var cA = Color.White
                         if (!lostA) {
                             yA = calculatePingY(vA, canvasH, roofVal.toFloat(), angleOfAttackVal)
+                                .coerceAtLeast(minBarPx)
                             cA = calcPingColor(vA)
                             if (activeScrub == null && ageA < BIRTH_MS) {
                                 val life = ageA / BIRTH_MS
@@ -482,18 +572,26 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                                 if (!lostA) pickValue = vA
                             }
                         }
-                        newestAge = ageA
-                        newestIsValid = !lostA
-                        if (!lostA) { newestY = yA; newestColor = cA }
+                        // Only good replies advance the wedge anchor: with
+                        // pipelined probing, lost verdicts stream in during an
+                        // outage and would otherwise reset the ripening wall
+                        // every watchdog tick.
+                        if (!lostA) {
+                            newestAge = ageA
+                            newestIsValid = true
+                            newestY = yA
+                            newestColor = cA
+                        }
 
                         // Fill the columns of the slope from this point to the next.
                         if (index + 1 < n && !lostA) {
                             val next = visibleBuf[index + 1]
                             val vB = next.value
                             if (vB != null && vB >= 0) {
-                                val ageB = next.timestamp.elapsedNow().inWholeMilliseconds - freezeOffsetMs
+                                val ageB = (frameNow - next.timestamp).inWholeMilliseconds - freezeOffsetMs
                                 val xB = canvasW - ageB * pxPerMs
                                 var yB = calculatePingY(vB, canvasH, roofVal.toFloat(), angleOfAttackVal)
+                                    .coerceAtLeast(minBarPx)
                                 var cB = calcPingColor(vB)
                                 if (activeScrub == null && ageB < BIRTH_MS) {
                                     val life = ageB / BIRTH_MS
@@ -531,10 +629,10 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                         index++
                     }
 
-                    // The in-flight probe is the range's leading slope: a wedge
-                    // climbing from the newest point toward the "now" edge,
-                    // ripening in color and dissolving over its final stretch
-                    // exactly like the pinglette wall does.
+                    // The leading slope: a wedge climbing from the newest
+                    // GOOD point toward the "now" edge, ripening with the
+                    // silence since that reply and dissolving over its final
+                    // stretch exactly like the pinglette wall does.
                     if (activeScrub == null) {
                         val inFlightMs = (newestAge - intervalVal).coerceAtLeast(0L)
                         if (inFlightMs > 0L) {
@@ -605,18 +703,16 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                     // background — the gap itself carries the "lost packet"
                     // signal at a glance.
                     var prevAgeMs = 0L
-                    var lastAgeMs = 0L
                     // First iteration has no predecessor, treat as invalid
                     // so widthMs falls back to the ping's own RTT.
                     var prevWasInvalid = true
 
                     for (i in visibleBuf.indices) {
                         val ping = visibleBuf[i]
-                        val ageMs = ping.timestamp.elapsedNow().inWholeMilliseconds - freezeOffsetMs
+                        val ageMs = (frameNow - ping.timestamp).inWholeMilliseconds - freezeOffsetMs
                         val previousAgeMs = prevAgeMs
                         val predecessorWasInvalid = prevWasInvalid
                         prevAgeMs = ageMs
-                        lastAgeMs = ageMs
 
                         val value = ping.value
                         val isLost = value == null || value < 0
@@ -656,6 +752,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                         val leftEdgePx = rightEdgePx - widthPx
 
                         var y = calculatePingY(value, canvasH, roofVal.toFloat(), angleOfAttackVal)
+                            .coerceAtLeast(minBarPx)
                         var color = calcPingColor(value)
 
                         // Birth ritual, resumed after the chameleon: for its
@@ -705,7 +802,13 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                     if (activeScrub == null) {
                         var chameleonColor: Color? = null
                         var chameleonPresence = 1f
-                        val newestAge = lastAgeMs.coerceAtLeast(0L)
+                        // Silence-of-success drives the wall: with pipelined
+                        // probing, lost verdicts keep arriving DURING an
+                        // outage, so "age of the newest verdict" would reset
+                        // the wall every watchdog tick. Time since the last
+                        // GOOD reply is what actually ripens toward the void.
+                        val newestAge = if (newestValidAge == Long.MIN_VALUE) 0L
+                                        else newestValidAge.coerceAtLeast(0L)
                         val inFlightMs = (newestAge - intervalVal).coerceAtLeast(0L)
                         if (inFlightMs > 0L) {
                             val widthPx = inFlightMs.toFloat() * pxPerMs
@@ -800,22 +903,29 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                     )
                 }
 
-                // Neon current-ping readout, colored by the same scale as the
-                // bars. Throttled upstream so it never strobes; its color tweens
-                // between samples instead of snapping. A host that has only ever
-                // timed out still earns its red ×.
+                // Current-ping readout + target address on one HUD plate,
+                // colored by the same scale as the bars. Throttled upstream so
+                // it never strobes; its color tweens between samples instead
+                // of snapping. A host that has only ever timed out still earns
+                // its red ×.
                 if (readoutLost || readoutValue != null) {
                     val neonColor = readoutColor
                     val neonText = if (readoutLost) "×" else "$readoutValue ms"
                     val neon = textMeasurer.measure(
-                        AnnotatedString(neonText),
-                        TextStyle(
-                            color = neonColor,
-                            fontSize = 26.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = interFont,
-                            shadow = Shadow(color = neonColor, blurRadius = 22f),
-                        ),
+                        buildAnnotatedString {
+                            withStyle(
+                                SpanStyle(
+                                    color = neonColor,
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    shadow = Shadow(color = neonColor, blurRadius = 14f),
+                                )
+                            ) { append(neonText) }
+                            withStyle(
+                                SpanStyle(color = StatsLabelColor, fontSize = 11.sp)
+                            ) { append("   $ip") }
+                        },
+                        TextStyle(fontFamily = interFont),
                     )
                     // Dark HUD plate so the number stays readable when bars of
                     // the same color rise behind it.
@@ -878,23 +988,67 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 }
             }
 
-            // Standalone minimize toggle: small button in the top-right of the graph.
-            // Sits above the canvas so it intercepts clicks in its small area
-            // before the canvas' gestures can fire.
-            IconButton(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(6.dp)
-                    .size(32.dp),
-                onClick = { this@PingGraphView.expanded.value = !expanded }
+            // Panel controls, floating over the canvas' top-right corner so
+            // they intercept taps before the graph gestures can fire:
+            // per-panel style flip, settings deck, and discard.
+            Row(
+                modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    imageVector = if (expanded) Icons.Filled.UnfoldLessDouble
-                                  else Icons.Filled.UnfoldMoreDouble,
-                    contentDescription = if (expanded) "Minimize sheet" else "Expand sheet",
-                    tint = Color.White,
-                    modifier = Modifier.size(22.dp)
-                )
+                IconButton(
+                    modifier = Modifier.size(30.dp),
+                    onClick = {
+                        val next = when (graphStyleVal) {
+                            GraphStyle.PINGLETTES -> GraphStyle.MOUNTAIN_SLOPES
+                            GraphStyle.MOUNTAIN_SLOPES -> GraphStyle.PINGLETTES
+                        }
+                        styleOverride.value = next
+                        viewmodel.notify(
+                            "$ip: " + if (next == GraphStyle.PINGLETTES) "bars" else "ridge"
+                        )
+                    },
+                ) {
+                    // Previews the style a tap would switch this panel to.
+                    Icon(
+                        imageVector = if (graphStyleVal == GraphStyle.MOUNTAIN_SLOPES) Icons.Filled.BarChart
+                                      else Icons.AutoMirrored.Filled.ShowChart,
+                        contentDescription = "Switch this panel's graph style",
+                        tint = Color.White.copy(alpha = 0.72f),
+                        modifier = Modifier.size(17.dp)
+                    )
+                }
+                IconButton(
+                    modifier = Modifier.size(30.dp),
+                    onClick = {
+                        if (!expanded) {
+                            this@PingGraphView.expanded.value = true
+                            this@PingGraphView.showSettings.value = true
+                        } else {
+                            this@PingGraphView.showSettings.update { !it }
+                        }
+                    },
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Settings,
+                        contentDescription = "Panel settings",
+                        tint = if (showSettings && expanded) Paletting.SGN else Color.White.copy(alpha = 0.72f),
+                        modifier = Modifier.size(17.dp)
+                    )
+                }
+                IconButton(
+                    modifier = Modifier.size(30.dp),
+                    onClick = {
+                        viewmodel.notify("$ip removed")
+                        viewmodel.removePanel(this@PingGraphView)
+                    },
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = "Remove $ip",
+                        tint = Color.White.copy(alpha = 0.72f),
+                        modifier = Modifier.size(17.dp)
+                    )
+                }
             }
         }
 
@@ -916,34 +1070,11 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                         .height(1.dp)
                         .background(Color.White.copy(alpha = 0.20f))
                 )
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    // Small indicator of the current mode (not clickable — mode switching
-                    // happens exclusively via the graph canvas click).
-                    Icon(
-                        imageVector = if (showSettings) Icons.Filled.Settings
-                                      else Icons.AutoMirrored.Filled.ShowChart,
-                        contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.35f),
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(8.dp)
-                            .size(18.dp)
-                    )
-
-                    AnimatedContent(targetState = showSettings) { isSettings ->
-                        if (isSettings) {
-                            SettingsSheet(txtstyle = txtstyle)
-                        } else {
-                            StatsSheet(
-                                ip = ip,
-                                average = averagePingVal,
-                                jitterMs = jitterVal,
-                                sent = pingsSentVal,
-                                lost = pingsLostVal,
-                                lowest = lowestPingVal,
-                                highest = highestPingVal,
-                            )
-                        }
+                AnimatedContent(targetState = showSettings) { isSettings ->
+                    if (isSettings) {
+                        SettingsSheet(fontFamily = interFont)
+                    } else {
+                        StatsSheet(stats = windowStats, fontFamily = interFont)
                     }
                 }
             }
@@ -953,106 +1084,88 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
 }
 
 /**
- * Instrument-cluster stats: a 2×2 grid of glowing readouts on a dark surface.
- * Every value carries the same RTT color language as the graph above it, so a
- * glance at the hues tells the story before the numbers do. The sample size
- * lives inside the LOSS cell as its denominator instead of wasting a line.
+ * Windowed instrument strip on ONE line, always. The whole strip is a single
+ * annotated string with relative (em) span sizes, and auto-size shrinks the
+ * base until it fits the panel's width — so a half-width celluloid cell just
+ * renders the same line smaller instead of wrapping. Every number describes
+ * the SAME slice of time the canvas shows.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun StatsSheet(
-    ip: String,
-    average: Int?,
-    jitterMs: Int?,
-    sent: Int,
-    lost: Int,
-    lowest: Int?,
-    highest: Int?,
-) {
-    val interFont = FontFamily(Font(Res.font.Inter_Regular))
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 11.dp),
-    ) {
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(18.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            InlineStat(
-                label = "PINGING",
-                value = ip,
-                valueColor = SettingsTextColor,
-                fontFamily = interFont,
-                glow = false,
-            )
-            InlineStat(
-                label = "AVG",
-                value = average?.let { "${it}ms" } ?: "—",
-                valueColor = average?.let(::calcPingColor) ?: StatsDimColor,
-                fontFamily = interFont,
-            )
-            InlineStat(
-                label = "JIT",
-                value = jitterMs?.let { "±$it" } ?: "—",
-                valueColor = SettingsTextColor,
-                fontFamily = interFont,
-                glow = false,
-            )
-            run {
-                val lossPercent = if (sent > 0) lost * 100f / sent else null
-                InlineStat(
-                    label = "LOSS",
-                    value = lossPercent?.let { "${formatFloat1(it)}% ($lost/$sent)" } ?: "—",
-                    // Loss only earns color once packets actually die.
-                    valueColor = when {
-                        lossPercent == null -> StatsDimColor
-                        lossPercent <= 0.001f -> SettingsTextColor
-                        else -> lossColor(lossPercent)
-                    },
-                    fontFamily = interFont,
-                    glow = lossPercent != null && lossPercent > 0.001f,
+private fun StatsSheet(stats: WindowStats, fontFamily: FontFamily) {
+    val line = buildAnnotatedString {
+        fun label(text: String) {
+            withStyle(
+                SpanStyle(
+                    color = StatsLabelColor,
+                    fontSize = 0.72.em,
+                    letterSpacing = 0.09.em,
+                    fontWeight = FontWeight.Medium,
                 )
+            ) { append(text) }
+        }
+
+        fun value(text: String, color: Color, glow: Boolean) {
+            withStyle(
+                SpanStyle(
+                    color = color,
+                    fontWeight = FontWeight.Bold,
+                    shadow = if (glow) Shadow(color = color, blurRadius = 12f) else null,
+                )
+            ) { append(text) }
+        }
+
+        label("AVG ")
+        value(stats.avg?.let { "${it}ms" } ?: "—", stats.avg?.let(::calcPingColor) ?: StatsDimColor, stats.avg != null)
+        label("  JIT ")
+        value(stats.jitter?.let { "±$it" } ?: "—", SettingsTextColor, false)
+        label("  LOSS ")
+        run {
+            val lossPercent = if (stats.count > 0) stats.lost * 100f / stats.count else null
+            // Loss only earns color once packets actually die.
+            val color = when {
+                lossPercent == null -> StatsDimColor
+                lossPercent <= 0.001f -> SettingsTextColor
+                else -> lossColor(lossPercent)
             }
-            InlineStat(
-                label = "RANGE",
-                value = if (lowest != null && highest != null) "$lowest–${highest}ms" else "—",
-                valueColor = SettingsTextColor,
-                fontFamily = interFont,
-                glow = false,
+            value(
+                lossPercent?.let { "${formatFloat1(it)}% (${stats.lost}/${stats.count})" } ?: "—",
+                color,
+                lossPercent != null && lossPercent > 0.001f,
             )
         }
-    }
-}
-
-/** One strip element: dim label sitting beside its glowing value. */
-@Composable
-private fun InlineStat(
-    label: String,
-    value: String,
-    valueColor: Color,
-    fontFamily: FontFamily,
-    glow: Boolean = true,
-) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = label,
-            fontSize = 11.sp,
-            letterSpacing = 1.2.sp,
-            color = StatsLabelColor,
-            fontFamily = fontFamily,
+        label("  GONE ")
+        run {
+            val gone = stats.gonePct
+            // Time-based loss: how much of the window was actually dark.
+            value(
+                gone?.let { "${formatFloat1(it)}%" } ?: "—",
+                when {
+                    gone == null -> StatsDimColor
+                    gone <= 0.05f -> SettingsTextColor
+                    else -> lossColor(gone)
+                },
+                gone != null && gone > 0.05f,
+            )
+        }
+        label("  RANGE ")
+        value(
+            if (stats.min != null && stats.max != null) "${stats.min}–${stats.max}ms" else "—",
+            SettingsTextColor,
+            false,
         )
-        Text(
-            text = value,
-            modifier = Modifier.padding(start = 7.dp),
-            style = TextStyle(
-                color = valueColor,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = fontFamily,
-                shadow = if (glow) Shadow(color = valueColor, blurRadius = 12f) else null,
-            ),
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 11.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BasicText(
+            text = line,
+            maxLines = 1,
+            softWrap = false,
+            style = TextStyle(fontFamily = fontFamily, fontSize = 15.sp, color = SettingsTextColor),
+            autoSize = TextAutoSize.StepBased(minFontSize = 6.sp, maxFontSize = 15.sp, stepSize = 0.25.sp),
         )
     }
 }
@@ -1066,103 +1179,138 @@ private fun lossColor(percent: Float): Color = when {
 }
 
 /**
- * Settings sheet with sliders bound directly to the panel's StateFlows.
- * All changes take effect on-the-fly.
+ * Settings deck: one slim row per dial — label, slider, live value — plus a
+ * persist switch. Bound directly to the panel's StateFlows; everything
+ * applies on-the-fly.
  */
 @Composable
-private fun PingPanel.SettingsSheet(txtstyle: TextStyle) {
+private fun PingPanel.SettingsSheet(fontFamily: FontFamily) {
+    val viewmodel = LocalViewmodel.current
     val packetSizeVal by packetSize.collectAsState()
+    val intervalVal by interval.collectAsState()
     val roofVal by roof.collectAsState()
     val angleOfAttackVal by angleOfAttack.collectAsState()
     val timeframeMsVal by timeframeMs.collectAsState()
     val canvasHeightFractionVal by canvasHeightFraction.collectAsState()
+    val persistVal by persistAcrossSessions.collectAsState()
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp)
-            .padding(top = 16.dp, bottom = 14.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(horizontal = 14.dp, vertical = 6.dp),
     ) {
-        Text(text = "Settings — $ip", color = StatsLabelColor)
-        Text(
-            text = "(long-press graph to reset settings)",
-            color = StatsSubColor,
-            style = txtstyle.copy(fontSize = 11.sp, color = StatsSubColor)
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "$ip · long-press the graph to reset",
+                color = StatsSubColor,
+                fontSize = 10.sp,
+                fontFamily = fontFamily,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = "REMEMBER",
+                color = StatsLabelColor,
+                fontSize = 10.sp,
+                letterSpacing = 1.2.sp,
+                fontFamily = fontFamily,
+            )
+            Switch(
+                checked = persistVal,
+                onCheckedChange = { checked ->
+                    persistAcrossSessions.value = checked
+                    viewmodel.notify(
+                        if (checked) "$ip will be there on next launch"
+                        else "$ip will not come back on next launch"
+                    )
+                },
+                modifier = Modifier.scale(0.62f),
+                colors = SwitchDefaults.colors(checkedTrackColor = Paletting.SGN2),
+            )
+        }
 
-        // --- Packet size (ICMP payload bytes) — live-applied to the next probe. ---
-        SliderBlock(
-            label = "Packet size: ${packetSizeVal} bytes",
+        CompactSlider(
+            label = "Interval",
+            valueText = if (intervalVal <= 0L) "adaptive" else "${intervalVal}ms",
+            value = intervalVal.toFloat(),
+            range = 0f..2000f,
+            steps = 39, // 50ms steps; 0 = fire-as-fast-as-replies-land
+            fontFamily = fontFamily,
+        ) { interval.value = it.toLong() }
+        CompactSlider(
+            label = "Packet",
+            valueText = "${packetSizeVal} B",
             value = packetSizeVal.toFloat(),
             range = 16f..480f,
             steps = 28, // 16-byte steps
-            onValueChange = { packetSize.value = it.toInt() },
-            txtstyle = txtstyle
-        )
-
-        // --- Angle of attack (0 = linear 1:1, higher = more emphasis on low pings) ---
-        SliderBlock(
-            label = if (angleOfAttackVal <= 0.01f) "Angle of attack: linear (1:1)"
-                    else "Angle of attack: ${formatFloat1(angleOfAttackVal)}",
+            fontFamily = fontFamily,
+        ) { packetSize.value = it.toInt() }
+        CompactSlider(
+            label = "Attack",
+            valueText = if (angleOfAttackVal <= 0.01f) "linear" else formatFloat1(angleOfAttackVal),
             value = angleOfAttackVal,
             range = 0f..20f,
             steps = 40,
-            onValueChange = { angleOfAttack.value = it },
-            txtstyle = txtstyle
-        )
-
-        // --- Canvas height (fraction of window height) ---
-        SliderBlock(
-            label = "Canvas height: ${(canvasHeightFractionVal * 100).roundToInt()}%",
-            value = canvasHeightFractionVal,
-            range = 0.10f..0.45f,
-            steps = 34,
-            onValueChange = { canvasHeightFraction.value = it },
-            txtstyle = txtstyle
-        )
-
-        // --- Timeframe (history duration) ---
-        SliderBlock(
-            label = "Timeframe: ${formatTimeframe(timeframeMsVal)}",
+            fontFamily = fontFamily,
+        ) { angleOfAttack.value = it }
+        CompactSlider(
+            label = "Window",
+            valueText = formatTimeframe(timeframeMsVal),
             value = timeframeMsVal.toFloat(),
-            range = 1_000f..30_000f, // 1s .. 30s
-            steps = 28,              // 1s steps
-            onValueChange = { timeframeMs.value = it.toLong() },
-            txtstyle = txtstyle
-        )
-
-        // --- Max displayed ping (roof) — capped at 2s since RTT beyond that is unrealistic. ---
-        SliderBlock(
-            label = "Maximum Possible Value: ${roofVal} ms",
+            range = 1_000f..30_000f,
+            steps = 28, // 1s steps
+            fontFamily = fontFamily,
+        ) { timeframeMs.value = it.toLong() }
+        CompactSlider(
+            label = "Roof",
+            valueText = "${roofVal}ms",
             value = roofVal.toFloat(),
             range = 100f..2000f,
             steps = 18, // 100ms steps
-            onValueChange = { roof.value = it.toInt() },
-            txtstyle = txtstyle
-        )
+            fontFamily = fontFamily,
+        ) { roof.value = it.toInt() }
+        CompactSlider(
+            label = "Height",
+            valueText = "${(canvasHeightFractionVal * 100).roundToInt()}%",
+            value = canvasHeightFractionVal,
+            range = 0.10f..0.45f,
+            steps = 34,
+            fontFamily = fontFamily,
+        ) { canvasHeightFraction.value = it }
     }
 }
 
+/** One settings row: fixed label, elastic slider, fixed live value. */
 @Composable
-private fun SliderBlock(
+private fun CompactSlider(
     label: String,
+    valueText: String,
     value: Float,
     range: ClosedFloatingPointRange<Float>,
     steps: Int,
+    fontFamily: FontFamily,
     onValueChange: (Float) -> Unit,
-    txtstyle: TextStyle,
 ) {
-    Column(
-        modifier = Modifier.fillMaxWidth(0.9f).padding(vertical = 2.dp),
-        horizontalAlignment = Alignment.Start
+    Row(
+        modifier = Modifier.fillMaxWidth().height(36.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(text = label, style = txtstyle)
+        Text(
+            text = label,
+            color = StatsLabelColor,
+            fontSize = 11.sp,
+            fontFamily = fontFamily,
+            maxLines = 1,
+            modifier = Modifier.width(58.dp),
+        )
         Slider(
             value = value,
             onValueChange = onValueChange,
             valueRange = range,
             steps = steps,
+            modifier = Modifier.weight(1f),
             colors = SliderDefaults.colors(
                 thumbColor = Paletting.A_MAIN_COLOR,
                 activeTrackColor = Paletting.A_MAIN_COLOR,
@@ -1170,7 +1318,15 @@ private fun SliderBlock(
                 activeTickColor = Color.Transparent,
                 inactiveTickColor = Color.Transparent,
             ),
-            modifier = Modifier.fillMaxWidth()
+        )
+        Text(
+            text = valueText,
+            color = SettingsTextColor,
+            fontSize = 11.sp,
+            fontFamily = fontFamily,
+            maxLines = 1,
+            textAlign = TextAlign.End,
+            modifier = Modifier.width(62.dp),
         )
     }
 }
@@ -1213,19 +1369,25 @@ private fun formatFloat1(value: Float): String {
 }
 
 /** Exponential scaling to emphasize low ping values in the graph.
- * Uses the formula: f * (1 - 2^(-x * zoomFactor / f))
+ * Uses the normalized formula: f * (1 - 2^(-x*z/f)) / (1 - 2^(-z))
  *
- * When [zoomFactor] is 0, the mapping is exactly linear (1:1) — the graph
- * shows y-proportional-to-x. Higher zoom factors push low pings further up,
- * which is useful for gamers who care most about small RTT differences.
+ * Normalizing by (1 - 2^(-z)) pins the roof to full height for EVERY zoom
+ * factor and makes the family continuous: as z shrinks toward 0 the curve
+ * settles onto the linear 1:1 line instead of collapsing toward zero height
+ * (the old un-normalized formula squashed the whole graph to about a third
+ * of its height at z=0.5, one notch away from linear). Higher factors push
+ * low pings further up, which is what gamers care about.
  */
 private fun exponentialize(x: Float, f: Float, zoomFactor: Float): Double {
+    val xc = x.toDouble().coerceIn(0.0, f.toDouble())
     if (zoomFactor <= 0.001f) {
         // Pure linear mapping.
-        return x.toDouble().coerceIn(0.0, f.toDouble())
+        return xc
     }
-    if (x == f) return f.toDouble()
-    return f.toDouble() * (1.0 - 2.0.pow((-x.toDouble() * zoomFactor / f.toDouble())))
+    val z = zoomFactor.toDouble()
+    val curved = 1.0 - 2.0.pow(-xc * z / f.toDouble())
+    val fullScale = 1.0 - 2.0.pow(-z)
+    return f.toDouble() * (curved / fullScale)
 }
 
 /** Calculates a ping height on the current panel based on its value. */
@@ -1235,4 +1397,110 @@ private fun calculatePingY(ping: Int, panelHeight: Float, pingMaxVal: Float, zoo
 
 /** The app-wide RTT color scale lives in the theme; the graph just speaks it. */
 private fun calcPingColor(ping: Int): Color = pingColor(ping)
+
+/** Stats over the visible timeframe. [count] includes losses. [gonePct] is
+ * the time-based loss: the share of the window's resolved time covered by
+ * spans that ended in a lost verdict. */
+private data class WindowStats(
+    val count: Int,
+    val lost: Int,
+    val avg: Int?,
+    val min: Int?,
+    val max: Int?,
+    val jitter: Int?,
+    val gonePct: Float?,
+) {
+    companion object {
+        val EMPTY = WindowStats(0, 0, null, null, null, null, null)
+    }
+}
+
+/** One pass over the ring, newest-first, stopping at the window's horizon.
+ *
+ * Jitter pairs only consecutive valid samples — a loss breaks adjacency, so
+ * the wobble number never spans a gap.
+ *
+ * GONE uses completion-gap attribution: each verdict owns the time span
+ * back to the previous verdict (the oldest one owns its span back to the
+ * window edge), and a span counts as gone when its verdict was a loss.
+ * With pipelined probing this is honest in both directions: during a real
+ * outage lost verdicts stream at the watchdog cadence and their spans tile
+ * the whole dark stretch, while a single dropped packet resolves BETWEEN
+ * two healthy replies and owns only milliseconds. The still-unresolved
+ * stretch between the newest verdict and "now" belongs to nobody. */
+private fun computeWindowStats(pings: RingBuffer<Ping>, windowMs: Long): WindowStats {
+    val now = TimeSource.Monotonic.markNow()
+
+    // Gather the window, tolerant of send-time entries appended in
+    // completion order (a reaped loss sits up to a timeout out of place),
+    // then sort oldest-first so spans and jitter pair true time-neighbours.
+    val window = ArrayList<Ping>(256)
+    var prevAge = Long.MIN_VALUE
+    pings.forEachNewestFirst { p ->
+        val age = (now - p.timestamp).inWholeMilliseconds
+        when {
+            age + REORDER_SLACK_MS < prevAge -> return@forEachNewestFirst false
+            age > windowMs + REORDER_SLACK_MS -> return@forEachNewestFirst false
+            else -> {
+                if (age in 0..windowMs) window.add(p)
+                if (age > prevAge) prevAge = age
+                true
+            }
+        }
+    }
+    window.sortWith(PingTimeOrder)
+
+    var count = 0
+    var lost = 0
+    var sum = 0L
+    var valid = 0
+    var min = Int.MAX_VALUE
+    var max = Int.MIN_VALUE
+    var jitterSum = 0L
+    var jitterCount = 0
+    var olderValue = 0
+    var olderWasValid = false
+    var olderAge = Long.MIN_VALUE
+    var spanTotal = 0L
+    var spanGone = 0L
+    for (p in window) {
+        val age = (now - p.timestamp).inWholeMilliseconds
+        count++
+        val v = p.value
+        val isLost = v == null || v < 0
+        // Each verdict owns the span back to its predecessor; the oldest
+        // one owns its span back to the window edge. The unresolved tail
+        // between the newest verdict and "now" belongs to nobody.
+        val span = if (olderAge == Long.MIN_VALUE) windowMs - age else olderAge - age
+        if (span > 0) {
+            spanTotal += span
+            if (isLost) spanGone += span
+        }
+        olderAge = age
+        if (isLost) {
+            lost++
+            olderWasValid = false
+        } else {
+            sum += v
+            valid++
+            if (v < min) min = v
+            if (v > max) max = v
+            if (olderWasValid) {
+                jitterSum += abs(olderValue - v)
+                jitterCount++
+            }
+            olderValue = v
+            olderWasValid = true
+        }
+    }
+    return WindowStats(
+        count = count,
+        lost = lost,
+        avg = if (valid > 0) (sum / valid).toInt() else null,
+        min = if (valid > 0) min else null,
+        max = if (valid > 0) max else null,
+        jitter = if (jitterCount > 0) (jitterSum / jitterCount).toInt() else null,
+        gonePct = if (spanTotal > 0) spanGone * 100f / spanTotal else null,
+    )
+}
 

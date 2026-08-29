@@ -17,10 +17,12 @@ package com.yuroyami.pingy.utils
  * `inet` gid, so app UIDs are allowed to open these sockets without any
  * special permission.
  *
- * Three-entry API — the engine holds the socket open for its whole lifetime:
- *  - [nativeOpenSocket]   → socket() + connect() to the resolved IPv4, once.
- *  - [nativePingOnSocket] → send()/poll()/recv() over that fd, per probe.
- *  - [nativeCloseSocket]  → close(), once at engine shutdown.
+ * Pipelined API — the engine holds the socket open for its whole lifetime
+ * and keeps many probes in flight over it:
+ *  - [nativeOpenSocket]  → socket() + connect() to the resolved IPv4, once.
+ *  - [nativeSendProbe]   → build + send one seq-stamped request, no waiting.
+ *  - [nativeAwaitReply]  → poll()/recv() the next reply, whoever it answers.
+ *  - [nativeCloseSocket] → close(), once at engine shutdown.
  */
 internal object NativeIcmpPing {
     init {
@@ -31,9 +33,13 @@ internal object NativeIcmpPing {
     @JvmStatic
     external fun nativeOpenSocket(ipv4: String): Int
 
-    /** See [com.yuroyami.pingy.utils.pingOnSocket] for the sentinel contract. */
+    /** Send timestamp in monotonic usec (>= 0), or -1 on socket failure. */
     @JvmStatic
-    external fun nativePingOnSocket(fd: Int, timeoutMs: Int, payloadSize: Int): Double
+    external fun nativeSendProbe(fd: Int, seq: Int, payloadSize: Int): Long
+
+    /** See [com.yuroyami.pingy.utils.icmpAwaitReply] for the packed contract. */
+    @JvmStatic
+    external fun nativeAwaitReply(fd: Int, budgetMs: Int): Long
 
     /** Safe to call with `-1`; no-op in that case. */
     @JvmStatic

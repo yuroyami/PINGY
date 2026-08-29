@@ -1,7 +1,9 @@
 package com.yuroyami.pingy.logic
 
+import com.yuroyami.pingy.GraphStyle
 import com.yuroyami.pingy.utils.PingEngine
 import com.yuroyami.pingy.utils.loggye
+import kotlin.concurrent.Volatile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -10,14 +12,13 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlin.math.abs
 import kotlin.math.roundToInt
-import kotlin.time.TimeSource
 
-/** Maximum number of pings retained per panel to prevent unbounded memory growth. */
-private const val MAX_PINGS = 2000
+/** Maximum number of pings retained per panel. Sized for zero-interval LAN
+ * rates (roughly a thousand samples/sec) so the buffer still spans seconds
+ * of history at full speed, and minutes at normal internet cadence. */
+private const val MAX_PINGS = 6000
 
 /** Wrapper Model class for a single Ping graph panel and its current parameters.
  *
@@ -31,28 +32,26 @@ class PingPanel(
 ) {
     /** The whole collection of pings for this panel in a ring buffer.
      * Not wrapped in a Flow: the buffer is a single long-lived instance that
-     * mutates in place, so nothing ever re-emits. Observers instead watch
-     * [pingVersion], which ticks on every insert. */
+     * mutates in place. The draw pass and the throttled samplers read it
+     * directly every frame/tick. */
     val pings = RingBuffer<Ping>(MAX_PINGS)
 
     /** Pinging Parameters */
-    val isPinging = MutableStateFlow(true)
     val packetSize = MutableStateFlow(DEFAULT_PACKET_SIZE)
 
-    /** Interval between pings in ms. Default 200ms (5 pings/sec).
-     * A value of 0 means "fire the next ping as soon as the previous one returns",
-     * honored on both platforms via spawn-per-ping on Android and no-delay on iOS. */
+    /** Interval between pings in ms. 0 means "fire the next ping as soon as
+     * the previous one returns" (adaptive mode). */
     val interval = MutableStateFlow(DEFAULT_INTERVAL_MS)
 
     /** UI-related graph parameters */
     val roof = MutableStateFlow(DEFAULT_ROOF)                  // max displayed ping value
-    val angleOfAttack = MutableStateFlow(DEFAULT_ANGLE_OF_ATTACK) // exponential zoom factor; 0 = linear 1:1
+    val angleOfAttack = MutableStateFlow(DEFAULT_ANGLE_OF_ATTACK) // low-ping emphasis; 0 = linear 1:1
     val landMarks = MutableStateFlow(listOf(25f, 50f, 100f, 200f, 500f))
 
-    /** Sheet state: expanded (visible) or collapsed. Toggled by minimize button. */
+    /** Deck state: expanded (visible) or collapsed. Toggled by tapping the graph. */
     val expanded = MutableStateFlow(true)
 
-    /** Sheet content mode: stats (false) or settings (true). Toggled by clicking the graph. */
+    /** Deck content mode: stats (false) or settings (true). Toggled by the gear button. */
     val showSettings = MutableStateFlow(false)
 
     /** Time window (ms) of pings to keep visible on the canvas. */
@@ -61,27 +60,16 @@ class PingPanel(
     /** Canvas height as a fraction of the window's height (0.1 = 10%, 0.4 = 40%). */
     val canvasHeightFraction = MutableStateFlow(DEFAULT_CANVAS_HEIGHT_FRACTION)
 
-    /** For Statistics */
-    val pingsSent = MutableStateFlow(0)
-    val pingsLost = MutableStateFlow(0)
-    val lowestPing = MutableStateFlow<Int?>(null)
-    val highestPing = MutableStateFlow<Int?>(null)
-    val averagePing = MutableStateFlow<Int?>(null)
+    /** Per-panel graph style. null = follow the app-wide choice. */
+    val styleOverride = MutableStateFlow<GraphStyle?>(null)
 
-    /** Mean absolute difference between consecutive RTTs — the wobble a user feels. */
-    val jitter = MutableStateFlow<Int?>(null)
+    /** Whether this panel is saved and restored on the next launch. */
+    val persistAcrossSessions = MutableStateFlow(true)
 
-    private var rttSum = 0L
-    private var rttCount = 0L
-    private var jitterSum = 0L
-    private var jitterCount = 0L
-    private var previousRtt: Int? = null
-
-    /** The platform-specific ping engine tied to this panel's lifecycle */
+    /** The platform-specific ping engine tied to this panel's lifecycle.
+     * Volatile: written on Main, read from the preference observers below. */
+    @Volatile
     private var engine: PingEngine? = null
-
-    /** A version counter that bumps on every ping addition, used to trigger recomposition. */
-    val pingVersion = MutableStateFlow(0L)
 
     /** Panel-owned coroutine scope for observing preference changes. */
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -111,39 +99,12 @@ class PingPanel(
             packetSize = packetSize.value,
             intervalMs = interval.value,
         ).also { eng ->
-            eng.start { rttMs ->
+            eng.start { rttMs, sentAt ->
                 try {
-                    val value = rttMs?.roundToInt()
-                    val ping = Ping(
-                        value = value,
-                        timestamp = TimeSource.Monotonic.markNow()
-                    )
-
-                    pings.add(ping)
-                    pingVersion.update { it + 1 }
-
-                    pingsSent.update { it + 1 }
-                    if (ping.value == null || ping.value < 0) {
-                        pingsLost.update { it + 1 }
-                    }
-
-                    val v = ping.value
-                    if (v != null && v >= 0) {
-                        lowestPing.update { current -> if (current == null || v < current) v else current }
-                        highestPing.update { current -> if (current == null || v > current) v else current }
-                        rttSum += v
-                        rttCount += 1
-                        averagePing.value = (rttSum / rttCount).toInt()
-                        previousRtt?.let { previous ->
-                            jitterSum += abs(v - previous)
-                            jitterCount += 1
-                            jitter.value = (jitterSum / jitterCount).toInt()
-                        }
-                        previousRtt = v
-                    } else {
-                        // A gap breaks RTT adjacency; the next pair would span it.
-                        previousRtt = null
-                    }
+                    // Anchored at SEND time: the engine schedules sends evenly,
+                    // so the graph's x axis stays even too, and a reaped loss
+                    // appears where its probe actually flew, not 3s late.
+                    pings.add(Ping(value = rttMs?.roundToInt(), timestamp = sentAt))
                 } catch (e: Exception) {
                     loggye("PingPanel[$ip]: result callback failed", e)
                 }
@@ -168,10 +129,33 @@ class PingPanel(
         canvasHeightFraction.value = DEFAULT_CANVAS_HEIGHT_FRACTION
     }
 
+    /** Snapshot of everything worth remembering across sessions. */
+    fun toSpec() = PanelSpec(
+        ip = ip,
+        intervalMs = interval.value,
+        packetSize = packetSize.value,
+        roof = roof.value,
+        angleOfAttack = angleOfAttack.value,
+        timeframeMs = timeframeMs.value,
+        canvasHeightFraction = canvasHeightFraction.value,
+        style = styleOverride.value?.name,
+    )
+
+    /** Applies a restored snapshot. Call before [startPinging]. */
+    fun applySpec(spec: PanelSpec) {
+        interval.value = spec.intervalMs
+        packetSize.value = spec.packetSize
+        roof.value = spec.roof
+        angleOfAttack.value = spec.angleOfAttack
+        timeframeMs.value = spec.timeframeMs
+        canvasHeightFraction.value = spec.canvasHeightFraction
+        styleOverride.value = spec.style?.let { name -> GraphStyle.entries.firstOrNull { it.name == name } }
+    }
+
     /** Call when removing this panel entirely. */
     fun close() {
         stopPinging()
-        scope.cancel() // cancels intervalObserverJob too
+        scope.cancel()
     }
 
     companion object {

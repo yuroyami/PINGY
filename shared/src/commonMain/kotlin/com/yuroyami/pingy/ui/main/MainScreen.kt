@@ -1,8 +1,19 @@
 package com.yuroyami.pingy.ui.main
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,41 +26,44 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Equalizer
-import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Terrain
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.ViewAgenda
+import androidx.compose.material.icons.filled.ViewCarousel
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -58,17 +72,21 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.yuroyami.pingy.GraphStyle
+import com.yuroyami.pingy.PanelLayout
 import com.yuroyami.pingy.logic.Constants
-import com.yuroyami.pingy.logic.PingPanel
 import com.yuroyami.pingy.theme.Paletting
-import com.yuroyami.pingy.theme.pingColor
+import com.yuroyami.pingy.ui.Screen
 import com.yuroyami.pingy.ui.adam.LocalViewmodel
 import com.yuroyami.pingy.ui.main.components.PingGraphView
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.Font
 import pingy.shared.generated.resources.Inter_Regular
 import pingy.shared.generated.resources.Res
@@ -89,27 +107,47 @@ private fun sanitizeHost(raw: String): String? {
     return pathStripped.ifBlank { null }
 }
 
+/** The neon PINGY wordmark: black outline pass under a gradient+glow pass.
+ * Shared between the cockpit header and the about screen. */
+@Composable
+internal fun NeonWordmark(fontSize: TextUnit, fontFamily: FontFamily, modifier: Modifier = Modifier) {
+    Box(modifier) {
+        Text(
+            text = "PINGY",
+            letterSpacing = 1.sp,
+            style = TextStyle(
+                color = Color.Black,
+                drawStyle = Stroke(miter = 0f, width = 5f, join = StrokeJoin.Round),
+                fontFamily = fontFamily,
+                fontSize = fontSize,
+            )
+        )
+        Text(
+            text = "PINGY",
+            letterSpacing = 1.sp,
+            style = TextStyle(
+                brush = Brush.linearGradient(
+                    colors = listOf(Paletting.A_LIGHT_COLOR, Paletting.SGN, Paletting.A_LIGHT_COLOR)
+                ),
+                shadow = Shadow(color = Paletting.SGN, offset = Offset(1f, 1f), blurRadius = 12f),
+                fontFamily = fontFamily,
+                fontSize = fontSize,
+            )
+        )
+    }
+}
+
 /**
  * The cockpit. One dark space shared by chrome and panels: a compact neon
- * wordmark row, a single slim command strip to add targets, and live target
- * chips whose glowing dots carry each panel's current ping color. Ambient
- * auras and a vignette are drawn behind everything — no images anywhere.
+ * wordmark row (tap it for the about screen), a command strip whose preset
+ * list morphs open OVER the panels (never pushing them), a preallocated
+ * one-line notice slot, and
+ * the panels in the user's chosen arrangement. Ambient auras and a vignette
+ * are drawn behind everything — no images anywhere.
  */
 @Composable
 fun MainScreenUI() {
     val viewmodel = LocalViewmodel.current
-    val scope = rememberCoroutineScope()
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    LaunchedEffect(null) {
-        if (viewmodel.panels.isEmpty()) {
-            val panel = PingPanel(ip = "1.1.1.1")
-            panel.startPinging()
-            viewmodel.panels.add(panel)
-        }
-    }
-    // Panel lifecycle ownership lives on the ViewModel: PingyViewmodel.onCleared()
-    // calls close() on every panel when the VM itself is disposed.
 
     Box(
         Modifier
@@ -138,16 +176,62 @@ fun MainScreenUI() {
     ) {
         Scaffold(
             containerColor = Color.Transparent,
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            topBar = { CockpitHeader(snackbarHostState) },
+            topBar = { CockpitHeader() },
         ) { pv ->
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = pv.calculateTopPadding()),
-            ) {
-                items(viewmodel.panels) { panel ->
-                    panel.PingGraphView()
+            val layout by viewmodel.panelLayout.collectAsState()
+            val contentModifier = Modifier
+                .fillMaxSize()
+                .padding(top = pv.calculateTopPadding())
+            when (layout) {
+                PanelLayout.COLUMN -> LazyColumn(modifier = contentModifier) {
+                    items(viewmodel.panels, key = { it.ip }) { panel ->
+                        panel.PingGraphView()
+                    }
+                }
+
+                PanelLayout.GRID -> LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    modifier = contentModifier,
+                ) {
+                    items(viewmodel.panels.size, key = { viewmodel.panels[it].ip }) { index ->
+                        viewmodel.panels[index].PingGraphView()
+                    }
+                }
+
+                PanelLayout.PAGER -> Column(modifier = contentModifier) {
+                    val pagerState = rememberPagerState { viewmodel.panels.size }
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        key = { viewmodel.panels[it].ip },
+                    ) { page ->
+                        Column(
+                            Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                            viewmodel.panels[page].PingGraphView()
+                        }
+                    }
+                    if (viewmodel.panels.size > 1) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            repeat(viewmodel.panels.size) { i ->
+                                Box(
+                                    Modifier
+                                        .padding(horizontal = 3.dp)
+                                        .size(6.dp)
+                                        .background(
+                                            color = if (pagerState.currentPage == i) Paletting.SGN
+                                                    else Paletting.STRIP_BORDER,
+                                            shape = CircleShape,
+                                        )
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -155,10 +239,10 @@ fun MainScreenUI() {
 }
 
 @Composable
-private fun CockpitHeader(snackbarHostState: SnackbarHostState) {
+private fun CockpitHeader() {
     val viewmodel = LocalViewmodel.current
-    val scope = rememberCoroutineScope()
-    val interFont = FontFamily(Font(Res.font.Inter_Regular))
+    val inter = Font(Res.font.Inter_Regular)
+    val interFont = remember(inter) { FontFamily(inter) }
 
     Column(
         Modifier
@@ -166,129 +250,210 @@ private fun CockpitHeader(snackbarHostState: SnackbarHostState) {
             .systemBarsPadding()
             .padding(horizontal = 12.dp)
     ) {
-        // Wordmark row: neon PINGY left, artistic-direction toggle right.
+        // Wordmark row: neon PINGY (tap for about) left, layout + style right.
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box {
-                Text(
-                    modifier = Modifier.wrapContentWidth(),
-                    text = "PINGY",
-                    letterSpacing = 1.sp,
-                    style = TextStyle(
-                        color = Color.Black,
-                        drawStyle = Stroke(miter = 0f, width = 5f, join = StrokeJoin.Round),
-                        fontFamily = interFont,
-                        fontSize = 26.sp,
-                    )
+            NeonWordmark(
+                fontSize = 26.sp,
+                fontFamily = interFont,
+                modifier = Modifier.clickable { viewmodel.backstack.add(Screen.About) },
+            )
+            Spacer(Modifier.weight(1f))
+
+            val layout by viewmodel.panelLayout.collectAsState()
+            IconButton(onClick = {
+                val entries = PanelLayout.entries
+                val next = entries[(layout.ordinal + 1) % entries.size]
+                viewmodel.panelLayout.value = next
+                viewmodel.notify(
+                    when (next) {
+                        PanelLayout.COLUMN -> "Layout: stack"
+                        PanelLayout.GRID -> "Layout: celluloid"
+                        PanelLayout.PAGER -> "Layout: pages"
+                    }
                 )
-                Text(
-                    modifier = Modifier.wrapContentWidth(),
-                    text = "PINGY",
-                    letterSpacing = 1.sp,
-                    style = TextStyle(
-                        brush = Brush.linearGradient(
-                            colors = listOf(Paletting.A_LIGHT_COLOR, Paletting.SGN, Paletting.A_LIGHT_COLOR)
-                        ),
-                        shadow = Shadow(color = Paletting.SGN, offset = Offset(1f, 1f), blurRadius = 12f),
-                        fontFamily = interFont,
-                        fontSize = 26.sp,
-                    )
+            }) {
+                Icon(
+                    imageVector = when (layout) {
+                        PanelLayout.COLUMN -> Icons.Filled.ViewAgenda
+                        PanelLayout.GRID -> Icons.Filled.GridView
+                        PanelLayout.PAGER -> Icons.Filled.ViewCarousel
+                    },
+                    contentDescription = "Cycle panel layout",
+                    tint = Color(0xFF8A95A3),
                 )
             }
-            Spacer(Modifier.weight(1f))
+
             val style by viewmodel.graphStyle.collectAsState()
             IconButton(onClick = {
-                viewmodel.graphStyle.value = when (style) {
+                val next = when (style) {
                     GraphStyle.PINGLETTES -> GraphStyle.MOUNTAIN_SLOPES
                     GraphStyle.MOUNTAIN_SLOPES -> GraphStyle.PINGLETTES
                 }
+                viewmodel.setGlobalStyle(next)
+                viewmodel.notify(
+                    if (next == GraphStyle.PINGLETTES) "All panels: bars" else "All panels: ridge"
+                )
             }) {
+                // The icon previews the style a tap would switch every panel to.
                 Icon(
-                    imageVector = if (style == GraphStyle.PINGLETTES) Icons.Filled.Equalizer
-                                  else Icons.Filled.Terrain,
-                    contentDescription = if (style == GraphStyle.PINGLETTES) {
-                        "Switch to mountain-slopes graph style"
+                    imageVector = if (style == GraphStyle.MOUNTAIN_SLOPES) Icons.Filled.BarChart
+                                  else Icons.AutoMirrored.Filled.ShowChart,
+                    contentDescription = if (style == GraphStyle.MOUNTAIN_SLOPES) {
+                        "Switch all panels to bars"
                     } else {
-                        "Switch to pinglettes graph style"
+                        "Switch all panels to the continuous ridge"
                     },
                     tint = Color(0xFF8A95A3),
                 )
             }
         }
 
-        // Command strip: input + preset chevron + glowing add, one slim row.
+        // Command strip. The presets are not a popup: the strip itself morphs
+        // open, growing downward into the list, so field and menu are one
+        // continuous surface with the same width and chassis.
         val txt = remember { mutableStateOf(Constants.iplist[0]) }
+        val presetsOpen = remember { mutableStateOf(false) }
         val addTarget: () -> Unit = {
+            presetsOpen.value = false
             val host = sanitizeHost(txt.value)
             when {
-                host == null -> scope.launch {
-                    snackbarHostState.showSnackbar("Please enter a valid address.")
-                }
-                viewmodel.panels.any { it.ip == host } -> scope.launch {
-                    snackbarHostState.showSnackbar("This address is already added.")
-                }
-                else -> {
-                    val panel = PingPanel(ip = host)
-                    panel.startPinging()
-                    viewmodel.panels.add(panel)
-                }
+                host == null -> viewmodel.notify("Not a valid address")
+                viewmodel.addPanel(host) -> viewmodel.notify("$host added")
+                else -> viewmodel.notify("$host is already added")
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Surface(
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(26.dp),
-                color = Paletting.STRIP_BG,
-                border = androidx.compose.foundation.BorderStroke(1.dp, Paletting.STRIP_BORDER),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextField(
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        value = txt.value,
-                        onValueChange = { txt.value = it },
-                        textStyle = TextStyle(
-                            color = Paletting.SGN,
-                            fontSize = 19.sp,
-                            fontFamily = interFont,
-                        ),
-                        placeholder = {
-                            Text("IP or domain", color = Color(0xFF5E6874), fontSize = 15.sp)
-                        },
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            disabledContainerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            cursorColor = Paletting.SGN,
-                        ),
-                    )
-                    Box {
-                        val displayPopup = remember { mutableStateOf(false) }
-                        IconButton(onClick = { displayPopup.value = !displayPopup.value }) {
+            // The strip stays fixed-height; its preset list renders in an
+            // overlay Popup anchored right under it, same width and chassis,
+            // so opening it never pushes the panels below. The strip's bottom
+            // corners animate flat while open, morphing into the list card.
+            var stripSize by remember { mutableStateOf(IntSize.Zero) }
+            val bottomCorner by animateDpAsState(
+                targetValue = if (presetsOpen.value) 0.dp else 26.dp,
+                animationSpec = tween(200),
+            )
+            Box(Modifier.weight(1f)) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onSizeChanged { stripSize = it },
+                    shape = RoundedCornerShape(
+                        topStart = 26.dp, topEnd = 26.dp,
+                        bottomStart = bottomCorner, bottomEnd = bottomCorner,
+                    ),
+                    color = Paletting.STRIP_BG,
+                    border = BorderStroke(1.dp, Paletting.STRIP_BORDER),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextField(
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            value = txt.value,
+                            onValueChange = { txt.value = it },
+                            textStyle = TextStyle(
+                                color = Paletting.SGN,
+                                fontSize = 19.sp,
+                                fontFamily = interFont,
+                            ),
+                            placeholder = {
+                                Text("IP or domain", color = Color(0xFF5E6874), fontSize = 15.sp)
+                            },
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                disabledContainerColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent,
+                                cursorColor = Paletting.SGN,
+                            ),
+                        )
+                        val chevronAngle by animateFloatAsState(
+                            targetValue = if (presetsOpen.value) 180f else 0f,
+                            animationSpec = tween(220),
+                        )
+                        IconButton(onClick = { presetsOpen.value = !presetsOpen.value }) {
                             Icon(
-                                imageVector = if (!displayPopup.value) Icons.Filled.ExpandMore
-                                              else Icons.Filled.ExpandLess,
+                                imageVector = Icons.Filled.ExpandMore,
                                 contentDescription = "Preset targets",
                                 tint = Color(0xFF7C8794),
+                                modifier = Modifier.rotate(chevronAngle),
                             )
                         }
-                        DropdownMenu(
-                            expanded = displayPopup.value,
-                            properties = PopupProperties(
-                                dismissOnBackPress = true,
-                                focusable = true,
-                                dismissOnClickOutside = true
-                            ),
-                            onDismissRequest = { displayPopup.value = !displayPopup.value },
+                    }
+                }
+
+                val listState = remember { MutableTransitionState(false) }
+                listState.targetState = presetsOpen.value
+                if (listState.currentState || listState.targetState) {
+                    val density = LocalDensity.current
+                    Popup(
+                        alignment = Alignment.TopStart,
+                        // 1dp overlap swallows the strip's bottom hairline so
+                        // the two surfaces read as one continuous chassis.
+                        offset = IntOffset(0, stripSize.height - with(density) { 1.dp.roundToPx() }),
+                        onDismissRequest = { presetsOpen.value = false },
+                        properties = PopupProperties(
+                            focusable = true,
+                            dismissOnBackPress = true,
+                            dismissOnClickOutside = true,
+                        ),
+                    ) {
+                        androidx.compose.animation.AnimatedVisibility(
+                            visibleState = listState,
+                            enter = expandVertically(animationSpec = tween(240)) + fadeIn(tween(180)),
+                            exit = shrinkVertically(animationSpec = tween(200)) + fadeOut(tween(120)),
                         ) {
-                            Constants.iplist.forEach { ip ->
-                                DropdownMenuItem(
-                                    text = { Text(ip) },
-                                    onClick = {
-                                        txt.value = ip
-                                        displayPopup.value = false
-                                    })
+                            Surface(
+                                modifier = Modifier.width(with(density) { stripSize.width.toDp() }),
+                                shape = RoundedCornerShape(
+                                    topStart = 0.dp, topEnd = 0.dp,
+                                    bottomStart = 26.dp, bottomEnd = 26.dp,
+                                ),
+                                color = Paletting.STRIP_BG,
+                                border = BorderStroke(1.dp, Paletting.STRIP_BORDER),
+                            ) {
+                                Column(Modifier.padding(bottom = 8.dp)) {
+                                    Box(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 18.dp)
+                                            .height(1.dp)
+                                            .background(Paletting.STRIP_BORDER.copy(alpha = 0.6f))
+                                    )
+                                    Constants.iplist.forEachIndexed { index, ip ->
+                                        // Small stagger so the list lands top-down.
+                                        val rowAlpha by animateFloatAsState(
+                                            targetValue = if (presetsOpen.value) 1f else 0f,
+                                            animationSpec = tween(160, delayMillis = 24 * index),
+                                        )
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    txt.value = ip
+                                                    presetsOpen.value = false
+                                                }
+                                                .padding(horizontal = 20.dp, vertical = 9.dp),
+                                        ) {
+                                            Box(
+                                                Modifier
+                                                    .size(6.dp)
+                                                    .background(
+                                                        Paletting.SGN.copy(alpha = 0.8f * rowAlpha),
+                                                        CircleShape
+                                                    )
+                                            )
+                                            Text(
+                                                text = ip,
+                                                modifier = Modifier.padding(start = 12.dp),
+                                                color = Color(0xFFD8E2EC).copy(alpha = rowAlpha),
+                                                fontSize = 15.sp,
+                                                fontFamily = interFont,
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -311,71 +476,35 @@ private fun CockpitHeader(snackbarHostState: SnackbarHostState) {
             }
         }
 
-        // Live target chips: each dot glows in its panel's current ping color.
-        Row(
+        // Preallocated notice slot: always this tall, so a message never
+        // shifts the panels below. Borderless, dim, one line, self-clearing.
+        val noticeVal by viewmodel.notice.collectAsState()
+        LaunchedEffect(noticeVal?.id) {
+            val shown = noticeVal ?: return@LaunchedEffect
+            delay(2_200)
+            if (viewmodel.notice.value?.id == shown.id) viewmodel.notice.value = null
+        }
+        Box(
             Modifier
                 .fillMaxWidth()
-                .padding(top = 10.dp, bottom = 8.dp)
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(top = 3.dp, bottom = 3.dp)
+                .height(20.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            for (panel in viewmodel.panels) {
-                LiveTargetChip(
-                    panel = panel,
-                    fontFamily = interFont,
-                    onRemove = {
-                        panel.close()
-                        viewmodel.panels.remove(panel)
-                    },
-                )
-            }
-        }
-    }
-}
-
-/** A target pill whose dot and border tint follow the panel's latest result live. */
-@Composable
-private fun LiveTargetChip(
-    panel: PingPanel,
-    fontFamily: FontFamily,
-    onRemove: () -> Unit,
-) {
-    val version by panel.pingVersion.collectAsState()
-    val latest = remember(version) { panel.pings.last() }
-    val dotColor = when {
-        latest == null -> Color(0xFF5A6470)
-        latest.value == null || latest.value < 0 -> Paletting.LOST_RED
-        else -> pingColor(latest.value)
-    }
-    Surface(
-        shape = CircleShape,
-        color = Paletting.CHIP_BG,
-        border = androidx.compose.foundation.BorderStroke(1.dp, Paletting.STRIP_BORDER),
-    ) {
-        Row(
-            modifier = Modifier.padding(start = 12.dp, end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                Modifier
-                    .size(9.dp)
-                    .background(dotColor, CircleShape)
-                    .border(2.dp, dotColor.copy(alpha = 0.25f), CircleShape)
-            )
-            Text(
-                text = panel.ip,
-                modifier = Modifier.padding(start = 8.dp),
-                color = Color(0xFFD8E2EC),
-                fontSize = 13.sp,
-                fontFamily = fontFamily,
-            )
-            IconButton(onClick = onRemove, modifier = Modifier.size(34.dp)) {
-                Icon(
-                    Icons.Filled.Close,
-                    contentDescription = "Remove ${panel.ip}",
-                    tint = Color(0xFF7C8794),
-                    modifier = Modifier.size(16.dp),
-                )
+            AnimatedContent(
+                targetState = noticeVal,
+                transitionSpec = { fadeIn(tween(160)) togetherWith fadeOut(tween(160)) },
+            ) { n ->
+                if (n != null) {
+                    Text(
+                        text = n.text,
+                        color = Color(0xFF9FE0B8),
+                        fontSize = 12.sp,
+                        letterSpacing = 0.3.sp,
+                        fontFamily = interFont,
+                        maxLines = 1,
+                    )
+                }
             }
         }
     }

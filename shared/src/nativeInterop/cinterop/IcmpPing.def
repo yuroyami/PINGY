@@ -20,6 +20,10 @@ static inline int get_errno(void) {
     return errno;
 }
 
+/* Sequence numbers come from the Kotlin engine, which keeps an outstanding
+   table and matches replies to sends by seq. The id field stays fixed
+   because the kernel rewrites it per socket anyway. */
+
 /* Standard BSD Internet checksum used for ICMP packets (same algorithm as SPLPing's in_cksum). */
 static inline uint16_t icmp_in_cksum(const uint8_t *buffer, int len) {
     int32_t sum = 0;
@@ -245,31 +249,40 @@ static inline void close_icmp_socket(int fd) {
     if (fd >= 0) close(fd);
 }
 
-/* Perform one ICMP probe over a previously opened+connected socket.
- * Mirrors nativePingOnSocket in shared/native/icmp_ping.c — the whole
- * send/poll/recv/timestamp dance runs inside this single C function so the
- * measured window stays free of K/N↔C boundary crossings.
- *
- * Return contract (same as the JNI side):
- *   rtt >= 0.0  — success, RTT in ms
- *   -1.0        — socket-level failure; caller should close+reopen the fd
- *   -2.0        — timeout / no matching reply; socket is still healthy
+/* Build + send one echo request carrying the caller-supplied sequence
+ * number. Returns the send timestamp in monotonic MICROSECONDS (>= 0), or
+ * -1 on any socket-level failure. Never waits: the Kotlin engine keeps the
+ * outstanding table and pipelines many probes over this one socket.
  */
-static inline double ping_once_on_socket(int fd, int timeout_ms, int payload_size) {
-    if (fd < 0 || timeout_ms <= 0 || payload_size < 0 || payload_size > 480) {
-        return -1.0;
-    }
+static inline int64_t icmp_send_probe(int fd, int seq, int payload_size) {
+    if (fd < 0 || payload_size < 0 || payload_size > 480) return (int64_t)-1;
 
     unsigned char packet[512];
-    int packet_size = build_icmp_echo_request(packet, sizeof(packet), 0xABCD, 1, payload_size);
-    if (packet_size < 0) return -1.0;
+    int packet_size = build_icmp_echo_request(packet, sizeof(packet), 0xABCD,
+                                              (uint16_t)(seq & 0xFFFF), payload_size);
+    if (packet_size < 0) return (int64_t)-1;
 
     int64_t send_us = get_time_usec();
     /* send() instead of sendto() — socket is connected, kernel skips route lookup. */
-    if (send(fd, packet, packet_size, 0) < 0) return -1.0;
+    if (send(fd, packet, packet_size, 0) < 0) return (int64_t)-1;
+    return send_us;
+}
+
+/* Wait up to budget_ms for the NEXT echo reply, whichever outstanding probe
+ * it answers. Returns:
+ *   -1  socket-level failure (caller closes + reopens)
+ *   -2  nothing valid arrived within the budget
+ *   else ((recv_usec & 47-bit mask) << 16) | reply_seq
+ * The engine matches reply_seq against its outstanding table and computes
+ * the RTT from the two native timestamps. Checksum-invalid and non-echo
+ * packets are skipped without burning the whole budget. (id is not matched:
+ * the kernel rewrites it per socket.)
+ */
+static inline int64_t icmp_await_reply(int fd, int budget_ms) {
+    if (fd < 0 || budget_ms <= 0) return (int64_t)-2;
 
     unsigned char recv_buf[1024];
-    int remaining_ms = timeout_ms;
+    int remaining_ms = budget_ms;
     while (remaining_ms > 0) {
         int64_t wait_start_us = get_time_usec();
         struct pollfd pfd;
@@ -277,22 +290,18 @@ static inline double ping_once_on_socket(int fd, int timeout_ms, int payload_siz
         pfd.events = POLLIN;
         pfd.revents = 0;
         int pr = poll(&pfd, 1, remaining_ms);
-        if (pr < 0) return -1.0;
-        if (pr == 0) return -2.0;
+        if (pr < 0) return (int64_t)-1;
+        if (pr == 0) return (int64_t)-2;
 
         int n = (int)recv(fd, recv_buf, sizeof(recv_buf), 0);
-        if (n < 0) return -1.0;
+        if (n < 0) return (int64_t)-1;
 
         uint16_t id_out = 0, seq_out = 0;
         uint8_t type_out = 0, code_out = 0;
         int parsed = parse_icmp_echo_reply(recv_buf, n, &id_out, &seq_out, &type_out, &code_out);
-        /* type 0 = ECHOREPLY. Darwin's kernel demuxes per-socket so any
-           ECHOREPLY we see is already ours — no id/seq match required. */
         if (parsed == 0 && type_out == 0) {
             int64_t recv_us = get_time_usec();
-            double rtt_ms = (double)(recv_us - send_us) / 1000.0;
-            if (rtt_ms < 0.0) rtt_ms = 0.0;
-            return rtt_ms;
+            return (int64_t)(((recv_us & 0x7FFFFFFFFFFFLL) << 16) | (int64_t)seq_out);
         }
 
         int64_t now_us = get_time_usec();
@@ -300,5 +309,5 @@ static inline double ping_once_on_socket(int fd, int timeout_ms, int payload_siz
         if (elapsed_ms < 1) elapsed_ms = 1;
         remaining_ms -= elapsed_ms;
     }
-    return -2.0;
+    return (int64_t)-2;
 }

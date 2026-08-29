@@ -6,10 +6,14 @@ import kotlin.concurrent.Volatile
  * Fixed-capacity circular buffer used for ping history.
  *
  * Concurrency: single-writer / many-reader. The ping engine's coroutine is the
- * sole writer; the Compose render thread iterates via [fastForEachWithIndex].
+ * sole writer; the Compose render thread iterates via [forEachNewestFirst].
  * [writeIndex]/[readIndex]/[size] are [Volatile] so readers see a consistent
  * recent state — but [add] is NOT atomic, so a second concurrent writer would
  * race. That guarantee is enough for our one-engine-per-panel model.
+ *
+ * Readers walk backwards from the newest entry: that moves AWAY from the
+ * writer's cursor (which overwrites the oldest slot), so a concurrent add can
+ * never clobber an entry the reader is about to visit at the fresh end.
  *
  * @param capacity Maximum number of elements the buffer can hold
  * @param T The type of elements stored in the buffer (must be non-nullable)
@@ -46,32 +50,31 @@ class RingBuffer<T : Any>(val capacity: Int) {
         writeIndex = newWriteIndex
     }
 
-    inline fun fastForEachWithIndex(crossinline action: (T?, Int) -> Unit) {
-        val currentSize = size
-        val currentReadIndex = readIndex
-        if (currentSize == 0) return
-
-        val remainingToEnd = capacity - currentReadIndex
-
-        if (currentSize <= remainingToEnd) {
-            for (i in 0 until currentSize) {
-                action(buffer[currentReadIndex + i], currentReadIndex + i)
-            }
-        } else {
-            for (i in 0 until remainingToEnd) {
-                action(buffer[currentReadIndex + i], currentReadIndex + i)
-            }
-            val remainingCount = currentSize - remainingToEnd
-            for (i in 0 until remainingCount) {
-                action(buffer[i], i)
-            }
+    /**
+     * Visit entries newest-to-oldest until [action] returns false. The element
+     * store happens before the volatile [writeIndex] advance, so every slot
+     * behind the observed cursor is fully published. Early exit is the point:
+     * the caller stops at its time horizon instead of scanning the whole ring.
+     */
+    inline fun forEachNewestFirst(action: (T) -> Boolean) {
+        val count = size
+        var idx = (writeIndex + capacity - 1) % capacity
+        for (i in 0 until count) {
+            val element = buffer[idx] ?: return
+            if (!action(element)) return
+            idx = (idx + capacity - 1) % capacity
         }
     }
 
+    /** Newest entry. Derives everything from one volatile [writeIndex] read:
+     * the writer stores the element before advancing the cursor, so whatever
+     * cursor a reader observes, the slot behind it is fully published.
+     * (Reading `size` here instead would race: `size` is bumped before
+     * `writeIndex`, so a reader could compute the slot from a stale cursor.) */
     fun last(): T? {
-        if (size == 0) return null
-        val lastIndex = (writeIndex + capacity - 1) % capacity
-        return buffer[lastIndex]
+        val w = writeIndex
+        if (w == 0 && size == 0) return null
+        return buffer[(w + capacity - 1) % capacity]
     }
 
     fun first(): T? {

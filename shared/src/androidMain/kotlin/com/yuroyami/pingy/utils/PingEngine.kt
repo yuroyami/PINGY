@@ -2,8 +2,6 @@ package com.yuroyami.pingy.utils
 
 import java.net.Inet4Address
 import java.net.InetAddress
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /**
  * Android [openIcmpSocket] actual: thin wrapper around the JNI entry that
@@ -11,18 +9,14 @@ import kotlinx.coroutines.withContext
  */
 actual fun openIcmpSocket(ipv4: String): Int = NativeIcmpPing.nativeOpenSocket(ipv4)
 
-/**
- * Android [pingOnSocket] actual: delegates to the JNI `nativePingOnSocket`.
- * The native call blocks its thread in `poll(2)` up to [timeoutMs], so we
- * hop to the IO dispatcher.
- */
-actual suspend fun pingOnSocket(
-    fd: Int,
-    timeoutMs: Int,
-    payloadSize: Int,
-): Double = withContext(Dispatchers.IO) {
-    NativeIcmpPing.nativePingOnSocket(fd, timeoutMs, payloadSize)
-}
+/** Android [icmpSendProbe] actual: fire-and-forget JNI send. */
+actual fun icmpSendProbe(fd: Int, seq: Int, payloadSize: Int): Long =
+    NativeIcmpPing.nativeSendProbe(fd, seq, payloadSize)
+
+/** Android [icmpAwaitReply] actual: blocks in poll(2) on the engine's own
+ * single-lane dispatcher, which exists precisely for this call. */
+actual fun icmpAwaitReply(fd: Int, budgetMs: Int): Long =
+    NativeIcmpPing.nativeAwaitReply(fd, budgetMs)
 
 /** Android [closeIcmpSocket] actual — idempotent on negative fds. */
 actual fun closeIcmpSocket(fd: Int) {

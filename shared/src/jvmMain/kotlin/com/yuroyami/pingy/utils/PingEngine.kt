@@ -2,8 +2,6 @@ package com.yuroyami.pingy.utils
 
 import java.net.Inet4Address
 import java.net.InetAddress
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /**
  * JVM (desktop) [openIcmpSocket] actual: same JNI path as Android, just
@@ -16,14 +14,14 @@ import kotlinx.coroutines.withContext
  */
 actual fun openIcmpSocket(ipv4: String): Int = NativeIcmpPing.openSocket(ipv4)
 
-/** JVM [pingOnSocket] actual — delegates to the JNI, on the IO dispatcher. */
-actual suspend fun pingOnSocket(
-    fd: Int,
-    timeoutMs: Int,
-    payloadSize: Int,
-): Double = withContext(Dispatchers.IO) {
-    NativeIcmpPing.pingOnSocket(fd, timeoutMs, payloadSize)
-}
+/** JVM [icmpSendProbe] actual: fire-and-forget JNI send. */
+actual fun icmpSendProbe(fd: Int, seq: Int, payloadSize: Int): Long =
+    NativeIcmpPing.sendProbe(fd, seq, payloadSize)
+
+/** JVM [icmpAwaitReply] actual: blocks in poll(2) on the engine's own
+ * single-lane dispatcher, which exists precisely for this call. */
+actual fun icmpAwaitReply(fd: Int, budgetMs: Int): Long =
+    NativeIcmpPing.awaitReply(fd, budgetMs)
 
 /** JVM [closeIcmpSocket] actual — no-op when the lib isn't loaded. */
 actual fun closeIcmpSocket(fd: Int) {

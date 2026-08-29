@@ -1,15 +1,12 @@
 package com.yuroyami.pingy.utils
 
 import com.yuroyami.pingy.native.icmp.close_icmp_socket
+import com.yuroyami.pingy.native.icmp.icmp_await_reply
+import com.yuroyami.pingy.native.icmp.icmp_send_probe
 import com.yuroyami.pingy.native.icmp.open_icmp_socket_connected
-import com.yuroyami.pingy.native.icmp.ping_once_on_socket
 import com.yuroyami.pingy.native.icmp.resolve_host
 import kotlinx.cinterop.addressOf
-import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.usePinned
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
-import kotlinx.coroutines.withContext
 
 /**
  * iOS [openIcmpSocket] actual: single cinterop call into
@@ -18,18 +15,14 @@ import kotlinx.coroutines.withContext
  */
 actual fun openIcmpSocket(ipv4: String): Int = open_icmp_socket_connected(ipv4)
 
-/**
- * iOS [pingOnSocket] actual: single cinterop call into `ping_once_on_socket`,
- * which does build → send → poll → recv → timestamp entirely in C. Keeps
- * the measured window free of K/N ↔ C transitions and ByteArray pinning.
- */
-actual suspend fun pingOnSocket(
-    fd: Int,
-    timeoutMs: Int,
-    payloadSize: Int,
-): Double = withContext(Dispatchers.IO) {
-    ping_once_on_socket(fd, timeoutMs, payloadSize)
-}
+/** iOS [icmpSendProbe] actual: fire-and-forget cinterop send. */
+actual fun icmpSendProbe(fd: Int, seq: Int, payloadSize: Int): Long =
+    icmp_send_probe(fd, seq, payloadSize)
+
+/** iOS [icmpAwaitReply] actual: blocks in poll(2) on the engine's own
+ * single-lane dispatcher, which exists precisely for this call. */
+actual fun icmpAwaitReply(fd: Int, budgetMs: Int): Long =
+    icmp_await_reply(fd, budgetMs)
 
 /** iOS [closeIcmpSocket] actual — idempotent on negative fds. */
 actual fun closeIcmpSocket(fd: Int) {
@@ -41,9 +34,9 @@ actual fun closeIcmpSocket(fd: Int) {
  * `resolve_host`, which shortcuts IPv4 literals via `inet_pton` and
  * otherwise walks the system's `getaddrinfo`.
  */
-actual fun resolveHostToIpv4(host: String): String? = memScoped {
+actual fun resolveHostToIpv4(host: String): String? {
     val buf = ByteArray(64)
     val rc = buf.usePinned { resolve_host(host, it.addressOf(0), buf.size) }
-    if (rc != 0) return@memScoped null
-    buf.decodeToString().trimEnd('\u0000').takeIf { it.isNotEmpty() }
+    if (rc != 0) return null
+    return buf.decodeToString().trimEnd('\u0000').takeIf { it.isNotEmpty() }
 }

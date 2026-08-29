@@ -1,6 +1,6 @@
 [versions] ########################################################################################
 ## KMM
-kotlin = "2.3.20"
+kotlin = "2.4.10"
 agp = "9.1.1"
 kermit = "2.1.0"
 compose-multiplatform="1.11.0-beta02"
@@ -9,9 +9,10 @@ compose-material3 = "1.11.0-alpha06"
 lifecycleViewmodelCompose = "2.11.0-alpha03"
 navigation3Runtime = "1.1.0-rc01"
 navigation3Ui = "1.1.0-rc01"
-buildConfig = "6.0.9"
 koroutines = "1.10.2"
 kotlinx-datetime = "0.7.1"
+kotlinx-serialization = "1.11.0"
+datastore = "1.3.0-alpha10"
 
 ## Android-only
 coreSplashscreen = "1.2.0"
@@ -26,6 +27,8 @@ desugaring = "2.1.5"
 kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
 kotlin-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "koroutines" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
+androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences-core", version.ref = "datastore" }
 logging-kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }
 
 compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "compose-multiplatform" }
@@ -40,6 +43,9 @@ navigation3-ui = { module = "org.jetbrains.androidx.navigation3:navigation3-ui",
 
 ## Android-only
 kotlin-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "koroutines" }
+
+## Desktop-only
+kotlin-coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "koroutines" }
 jetpack-core = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
 jetpack-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "appcompat" }
 jetpack-splashscreen = { module = "androidx.core:core-splashscreen", version.ref = "coreSplashscreen" }
@@ -57,7 +63,9 @@ jetpack-androidx-extensions = ["jetpack-activity-compose", "jetpack-appcompat", 
 [plugins] ########################################################################################
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-cocoapods = { id = "org.jetbrains.kotlin.native.cocoapods", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 compose-plugin = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }
@@ -65,5 +73,3 @@ compose-plugin = { id = "org.jetbrains.compose", version.ref = "compose-multipla
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-kmp-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp"}
 android-legacy-library = { id = "com.android.library", version.ref = "agp" }
-
-buildConfig = { id = "com.github.gmazzo.buildconfig", version.ref = "buildConfig" }

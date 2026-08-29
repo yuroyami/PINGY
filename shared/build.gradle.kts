@@ -1,4 +1,4 @@
-import com.yuroyami.kmpssot.kmpSsot
+import io.github.yuroyami.kitessot.kiteSsot
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
@@ -6,17 +6,17 @@ plugins {
     alias(libs.plugins.android.kmp.library)
     alias(libs.plugins.compose.plugin)
     alias(libs.plugins.compose.compiler)
-    alias(libs.plugins.buildConfig)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 kotlin {
     jvmToolchain(21)
 
     compilerOptions {
+        // Backing fields and context parameters are stable language features
+        // since Kotlin 2.4; only the expect/actual-classes opt-in remains.
         freeCompilerArgs.addAll(
-            "-Xexplicit-backing-fields",
             "-Xexpect-actual-classes",
-            "-Xcontext-parameters",
         )
     }
 
@@ -53,9 +53,9 @@ kotlin {
     // iOS configuration. kmpSsot handles pbxproj version/bundleId/appName
     // propagation via the `syncIosConfig` task hooked into framework linking.
     cocoapods {
-        summary = "${kmpSsot.appName.get()} Common Code (Platform-agnostic)"
+        summary = "${kiteSsot.appName.get()} Common Code (Platform-agnostic)"
         homepage = "www.github.com/yuroyami/PINGY"
-        version = kmpSsot.versionName.get()
+        version = kiteSsot.version.get()
         ios.deploymentTarget = "14.0"
         podfile = project.file("../iosApp/Podfile")
         framework {
@@ -92,6 +92,12 @@ kotlin {
 
             /* Official JetBrains Kotlin Date 'n time manager (i.e: generating date from epoch) */
             implementation(libs.kotlinx.datetime)
+
+            /* JSON codec for persisted panel specs */
+            implementation(libs.kotlinx.serialization.json)
+
+            /* Preferences DataStore (KMP core) for cross-session persistence */
+            implementation(libs.androidx.datastore.preferences)
 
             /* Compose core dependencies */
             implementation(libs.bundles.compose.multiplatform)
@@ -185,10 +191,4 @@ run {
             dependsOn(buildJvmNative)
         }
     }
-}
-
-buildConfig {
-    buildConfigField("APP_NAME", kmpSsot.appName.get())
-    buildConfigField("APP_VERSION", kmpSsot.versionName.get())
-    buildConfigField("DEBUG", false)
 }

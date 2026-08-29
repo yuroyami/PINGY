@@ -32,9 +32,13 @@ internal object NativeIcmpPing {
      *  (including the lib not being loadable on this platform). */
     fun openSocket(ipv4: String): Int = if (loaded) nativeOpenSocket(ipv4) else -1
 
-    /** See [com.yuroyami.pingy.utils.pingOnSocket] for the sentinel contract. */
-    fun pingOnSocket(fd: Int, timeoutMs: Int, payloadSize: Int): Double =
-        if (loaded) nativePingOnSocket(fd, timeoutMs, payloadSize) else -1.0
+    /** Send timestamp in monotonic usec, or -1 (socket failure / lib missing). */
+    fun sendProbe(fd: Int, seq: Int, payloadSize: Int): Long =
+        if (loaded) nativeSendProbe(fd, seq, payloadSize) else -1L
+
+    /** See [com.yuroyami.pingy.utils.icmpAwaitReply] for the packed contract. */
+    fun awaitReply(fd: Int, budgetMs: Int): Long =
+        if (loaded) nativeAwaitReply(fd, budgetMs) else -1L
 
     /** Safe to call with `-1` or when the lib isn't loaded. */
     fun closeSocket(fd: Int) {
@@ -45,7 +49,10 @@ internal object NativeIcmpPing {
     external fun nativeOpenSocket(ipv4: String): Int
 
     @JvmStatic
-    external fun nativePingOnSocket(fd: Int, timeoutMs: Int, payloadSize: Int): Double
+    external fun nativeSendProbe(fd: Int, seq: Int, payloadSize: Int): Long
+
+    @JvmStatic
+    external fun nativeAwaitReply(fd: Int, budgetMs: Int): Long
 
     @JvmStatic
     external fun nativeCloseSocket(fd: Int)
