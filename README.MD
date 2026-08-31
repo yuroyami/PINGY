@@ -15,10 +15,12 @@
 </p>
 
 <p align="center">
-  <a href="https://apps.apple.com/app/pingy">App Store</a> ·
-  <a href="https://play.google.com/store/apps/details?id=com.yuroyami.pingy">Google Play</a> ·
-  <a href="https://github.com/yuroyami/PINGY/releases/latest">GitHub Releases</a>
+  <a href="https://github.com/yuroyami/PINGY/releases">Releases</a> ·
+  <a href="PRIVACY_POLICY.md">Privacy</a> ·
+  <a href="LICENSE">License</a>
 </p>
+
+<p align="center"><sub>Not yet published to the App Store or Google Play.</sub></p>
 
 ---
 
@@ -28,8 +30,8 @@ Type a host — `1.1.1.1`, `google.com`, your router, a game server. Pingy sends
 
 - **Multi-host monitoring** — one panel per host, as many as you want side by side.
 - **Live sliders** — packet size (16–480 bytes), time window (1–30 s), graph roof, graph height, zoom curve. Every change hits the very next probe, no restart.
-- **Adaptive cadence** — the next probe fires the moment the previous reply returns (or times out at 3 s). Fast links yield more samples per second, not the same handful.
-- **Rolling stats** — sent, lost, lowest, highest, packet-loss percentage, always on screen.
+- **Adaptive cadence** — the next probe fires as soon as the previous reply returns (or times out at 3 s), with a 10 ms floor so a sub-millisecond LAN target cannot be hammered at a thousand packets a second. Fast links yield more samples per second, not the same handful.
+- **Rolling stats** — sent, lost, lowest, highest, packet-loss percentage, always on screen. Failures that never left your device (DNS, no route, no socket) are reported separately and never counted as packet loss.
 - **Domain or IP** — DNS is paid once per panel, never per probe.
 - **Quick presets** — Cloudflare, Google, Quad9, OpenDNS, your LAN gateway.
 - **No telemetry** — no analytics, no crash reporter, no ads, no account.
@@ -40,17 +42,25 @@ Type a host — `1.1.1.1`, `google.com`, your router, a game server. Pingy sends
 |:---|:---|
 | **Android** | 8.0 (API 26) and above |
 | **iOS** | 16.0 and above |
-| **Desktop (JVM)** | Library only — engine compiles on macOS and Linux, no UI shell yet. Windows unsupported (Winsock doesn't expose unprivileged ICMP). |
+| **Desktop (JVM)** | macOS and Linux. A Compose Desktop app builds and runs; `packageDistributionForCurrentOS` produces a DMG or DEB. Windows is not supported: Winsock exposes no unprivileged ICMP socket, so no MSI target is configured. |
 
 ## Privacy
 
-No telemetry, no analytics, no crash reporter, no ads, no account. The only network traffic Pingy emits is the ICMP probes you explicitly start. Android permissions are limited to `INTERNET` and `ACCESS_NETWORK_STATE`. No credentials or keystore files are ever committed — `local.properties`, `*.jks`, and the `keystore/` directory are all `.gitignore`d.
+No telemetry, no analytics, no crash reporter, no ads, no account, no backend.
+
+Pingy emits ICMP probes to the hosts you add, plus a DNS lookup when you enter a
+name rather than a numeric address. It monitors nothing until you ask it to, and
+nothing leaves your device beyond those probes. Targets you mark as remembered
+are stored locally in app-private storage. Full details in
+[PRIVACY_POLICY.md](PRIVACY_POLICY.md).
+
+Android permissions are limited to `INTERNET` and `ACCESS_NETWORK_STATE`. No credentials or keystore files are ever committed — `local.properties`, `*.jks`, and the `keystore/` directory are all `.gitignore`d.
 
 ## Building
 
 **Requirements**
 
-- Android Studio 2025.3.1+ (Kotlin 2.2, Gradle 9)
+- Android Studio 2025.3.1+ (Kotlin 2.4, Gradle 9.4)
 - JDK 21 (auto-provisioned by the Gradle toolchain)
 - Xcode 16.3+ for iOS
 - CMake 3.22.1+ (NDK-managed on Android)
@@ -69,6 +79,15 @@ Release signing reads from `local.properties` (which is `.gitignore`d) — `keys
 cd iosApp && pod install
 open iosApp.xcworkspace
 ```
+
+## Tests
+
+```
+./gradlew :shared:jvmTest :shared:iosSimulatorArm64Test
+```
+
+The engine suite runs against real loopback sockets on both the JVM and
+Kotlin/Native, because several past defects only appeared on one of them.
 
 ## Feedback
 

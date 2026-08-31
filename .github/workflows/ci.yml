@@ -1,0 +1,148 @@
+# Adapted from the July 18 tree recovered on 2026-08-31.
+#
+# Steps that depended on things the current tree does not have were dropped:
+# dependency lockfiles, gradle/verification-metadata.xml, branding provenance
+# hashes, localized InfoPlist strings, the native sanitizer suite, and every
+# test task (there are no test sources yet). Re-add each one as its gap closes.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Android lint, APK and AAB
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Check out source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+
+      - name: Verify repository hygiene
+        run: |
+          set -euo pipefail
+          tracked_local_state="$(git ls-files | grep -E '(^|/)(\.DS_Store|xcuserdata)(/|$)|\.(jks|keystore|p12|pfx|mobileprovision|provisionprofile)$' || true)"
+          if [ -n "$tracked_local_state" ]; then
+            echo "Local or signing state must not be committed:" >&2
+            echo "$tracked_local_state" >&2
+            exit 1
+          fi
+
+      - name: Verify legal files are present and packaged
+        run: |
+          set -euo pipefail
+          for f in LICENSE NOTICE THIRD_PARTY_NOTICES.md SECURITY.md; do
+            test -s "$f" || { echo "missing $f" >&2; exit 1; }
+          done
+          # the in-app copies must match the canonical ones
+          cmp LICENSE androidApp/src/main/assets/legal/LICENSE
+          cmp NOTICE androidApp/src/main/assets/legal/NOTICE
+          cmp THIRD_PARTY_NOTICES.md androidApp/src/main/assets/legal/THIRD_PARTY_NOTICES.md
+
+      - name: Lint and build release artifacts
+        run: >-
+          ./gradlew --no-daemon --stacktrace
+          :androidApp:lintDebug
+          :androidApp:assembleDebug
+          :androidApp:assembleRelease
+          :androidApp:bundleRelease
+
+      - name: Guard against a zero-test green build
+        run: |
+          set -euo pipefail
+          count="$(find shared/src desktopApp/src androidApp/src -type d -name '*Test*' 2>/dev/null | wc -l | tr -d ' ')"
+          echo "test source directories found: $count"
+          if [ "$count" -eq 0 ]; then
+            echo "::warning::No test sources exist. A green build is not test evidence."
+          fi
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: android-artifacts
+          path: |
+            androidApp/build/outputs/apk/release/
+            androidApp/build/outputs/bundle/release/
+            androidApp/build/reports/lint-results-debug.html
+          if-no-files-found: warn
+
+  ios:
+    name: iOS simulator build and privacy manifest check
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Check out source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+
+      - name: Verify the privacy manifest declares its required-reason APIs
+        run: |
+          set -euo pipefail
+          M=iosApp/iosApp/PrivacyInfo.xcprivacy
+          test -s "$M"
+          plutil -lint "$M"
+          for cat in FileTimestamp UserDefaults SystemBootTime; do
+            plutil -p "$M" | grep -q "NSPrivacyAccessedAPICategory$cat" \
+              || { echo "privacy manifest is missing $cat" >&2; exit 1; }
+          done
+          grep -q "PrivacyInfo.xcprivacy in Resources" iosApp/iosApp.xcodeproj/project.pbxproj \
+            || { echo "manifest is not in the app target's Resources phase" >&2; exit 1; }
+
+      - name: Install CocoaPods dependencies
+        run: cd iosApp && pod install
+
+      # -destination is required. Without it xcodebuild also tries an x86_64
+      # simulator slice, which this project has no Kotlin/Native target for, and
+      # the shared pod build fails with "Unknown iOS simulator arch: 'x86_64'".
+      - name: Build the simulator app
+        run: >-
+          xcodebuild -workspace iosApp/iosApp.xcworkspace -scheme iosApp
+          -configuration Debug -sdk iphonesimulator
+          -destination 'platform=iOS Simulator,name=iPhone 17'
+          -derivedDataPath build/ios
+          CODE_SIGNING_ALLOWED=NO build
+
+      - name: Confirm the manifest is inside the built app bundle
+        run: |
+          set -euo pipefail
+          # the bundle is named after PRODUCT_NAME (Pingy), not the target
+          app="$(find build/ios -name '*.app' -type d -not -path '*/Frameworks/*' | head -1)"
+          test -n "$app" || { echo "no .app was produced" >&2; exit 1; }
+          test -f "$app/PrivacyInfo.xcprivacy" \
+            || { echo "PrivacyInfo.xcprivacy did not ship in the bundle" >&2; exit 1; }
+          echo "manifest present in $app"
