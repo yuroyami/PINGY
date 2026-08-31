@@ -8,6 +8,10 @@ set(ICMP_SRC "${CMAKE_CURRENT_SOURCE_DIR}/../../../../shared/native/icmp_ping.c"
 
 add_library(pingy_icmp SHARED ${ICMP_SRC})
 
+# icmp_core.h lives beside the .c file and holds the whole protocol.
+target_include_directories(pingy_icmp PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../../shared/native")
+
 target_compile_options(pingy_icmp PRIVATE
     -O2
     -Wall
