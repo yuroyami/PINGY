@@ -46,11 +46,14 @@ kotlin {
             }
             @Suppress("unused") val icmpPing by cinterops.creating {
                 defFile("src/nativeInterop/cinterop/IcmpPing.def")
+                // The .def includes shared/native/icmp_core.h, the one protocol
+                // implementation Android, the JVM and iOS all compile.
+                compilerOpts("-I${projectDir}/native")
             }
         }
     }
 
-    // iOS configuration. kmpSsot handles pbxproj version/bundleId/appName
+    // iOS configuration. KiteSSOT handles pbxproj version/bundleId/appName
     // propagation via the `syncIosConfig` task hooked into framework linking.
     cocoapods {
         summary = "${kiteSsot.appName.get()} Common Code (Platform-agnostic)"
@@ -125,6 +128,11 @@ kotlin {
             /* Nothing needed here */
         }
 
+        commonTest.dependencies {
+            implementation(libs.kotlin.test)
+            implementation(libs.kotlin.coroutines.test)
+        }
+
         jvmMain.dependencies {
             /* Desktop flavor of coroutines — Dispatchers.IO etc. */
             implementation(libs.kotlin.coroutines.core)
@@ -158,37 +166,52 @@ run {
     if (platformSpec != null && archDir != null) {
         val (platformDir, libExt, jniInclude) = platformSpec
 
+        // Output goes to build/, never back into src/. Writing a compiled binary
+        // into the source tree made it a tracked artifact: the committed dylib
+        // carried an absolute developer path as its install name, declared a
+        // minimum macOS of whatever the build machine happened to run, and was
+        // only ad-hoc signed. None of that is distributable.
+        val outDir = layout.buildDirectory.dir("nativeLibs/native/$platformDir-$archDir")
+        val outFile = outDir.map { it.file("libpingy_icmp.$libExt") }
+
         val buildJvmNative = tasks.register<Exec>("buildJvmNative") {
             group = "build"
             description = "Compile libpingy_icmp for the host JVM"
 
             val srcFile = layout.projectDirectory.file("native/icmp_ping.c")
-            val outDir = layout.projectDirectory.dir(
-                "src/jvmMain/resources/native/$platformDir-$archDir"
-            )
-            val outFile = outDir.file("libpingy_icmp.$libExt")
+            val coreHeader = layout.projectDirectory.file("native/icmp_core.h")
 
             inputs.file(srcFile)
+            inputs.file(coreHeader)
             outputs.file(outFile)
 
-            doFirst { outDir.asFile.mkdirs() }
+            doFirst { outDir.get().asFile.mkdirs() }
 
             val javaHome = System.getProperty("java.home")
-            commandLine(
-                "cc",
-                "-shared",
-                "-fPIC",
-                "-O2",
-                "-fvisibility=hidden",
+            val args = mutableListOf(
+                "cc", "-shared", "-fPIC", "-O2", "-fvisibility=hidden",
+                "-Wall", "-Wextra",
+                "-I${projectDir}/native",
                 "-I$javaHome/include",
                 "-I$javaHome/include/$jniInclude",
-                "-o", outFile.asFile.absolutePath,
-                srcFile.asFile.absolutePath,
             )
+            if (hostOs.isMacOsX) {
+                // A stable, portable identity instead of the build machine's
+                // absolute path and whatever SDK it happened to have.
+                args += listOf(
+                    "-install_name", "@rpath/libpingy_icmp.dylib",
+                    "-mmacosx-version-min=11.0",
+                )
+            }
+            args += listOf("-o", outFile.get().asFile.absolutePath, srcFile.asFile.absolutePath)
+            commandLine(args)
         }
 
-        tasks.named("jvmProcessResources") {
-            dependsOn(buildJvmNative)
+        // Packaged into the jar from build/, so `src/jvmMain/resources` stays
+        // free of generated binaries.
+        sourceSets.named("jvmMain") {
+            resources.srcDir(layout.buildDirectory.dir("nativeLibs"))
         }
+        tasks.named("jvmProcessResources") { dependsOn(buildJvmNative) }
     }
 }

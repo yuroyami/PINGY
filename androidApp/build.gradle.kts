@@ -15,7 +15,7 @@ android {
     compileSdk = providers.gradleProperty("android.compileSdk").get().toInt()
 
     // applicationId, versionCode/Name, manifestPlaceholders[appName],
-    // compileOptions (java version), resourceConfigurations — handled by kmpSsot.
+    // compileOptions (java version), resourceConfigurations — handled by kiteSsot.
 
     signingConfigs {
         file("${rootDir}/keystore/pingykey.jks").takeIf { it.exists() }?.let { keystoreFile ->

@@ -41,3 +41,6 @@ libswresample.so
 lbswscale.so
 splpingsrccode/
 .claude/
+
+# Compiled native output belongs in build/, never in src/
+shared/src/jvmMain/resources/native/

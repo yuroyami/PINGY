@@ -22,8 +22,16 @@ compose.desktop {
     application {
         mainClass = "com.yuroyami.pingy.desktop.MainKt"
         nativeDistributions {
-            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            // packageName/version/bundle id come from the root kiteSsot { desktop { } } block.
+            // No MSI. Winsock exposes no SOCK_DGRAM + IPPROTO_ICMP, so a Windows
+            // installer would ship an app that cannot ping anything. Add the
+            // target back together with a real Windows transport, not before.
+            targetFormats(TargetFormat.Dmg, TargetFormat.Deb)
+
+            packageName = "Pingy"
+
+            // Package version only; the product's marketing version stays 0.1.0.
+            // jpackage requires a non-zero first component.
+            packageVersion = "1.0.0"
         }
     }
 }

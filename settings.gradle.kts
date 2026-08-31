@@ -2,7 +2,6 @@ enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 pluginManagement {
     repositories {
-        mavenLocal() // kitessot: remove once 3.1.0 is live on the Gradle Plugin Portal
         google()
         gradlePluginPortal()
         mavenCentral()
