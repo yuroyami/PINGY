@@ -1,8 +1,6 @@
-import io.github.yuroyami.kitessot.kiteSsot
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
-    alias(libs.plugins.kotlin.cocoapods)
     alias(libs.plugins.android.kmp.library)
     alias(libs.plugins.compose.plugin)
     alias(libs.plugins.compose.compiler)
@@ -55,16 +53,19 @@ kotlin {
 
     // iOS configuration. KiteSSOT handles pbxproj version/bundleId/appName
     // propagation via the `syncIosConfig` task hooked into framework linking.
-    cocoapods {
-        summary = "${kiteSsot.appName.get()} Common Code (Platform-agnostic)"
-        homepage = "www.github.com/yuroyami/PINGY"
-        version = kiteSsot.version.get()
-        // Must match the Podfile and the Xcode project, both of which say 16.0.
-        // Three different minimums (14 here, 15 in the produced framework, 16 in
-        // the app) meant the framework advertised support the app did not have.
-        ios.deploymentTarget = "16.0"
-        podfile = project.file("../iosApp/Podfile")
-        framework {
+    //
+    // Direct framework embedding rather than CocoaPods. The Podfile consumed
+    // exactly one pod, this project's own `shared` framework, so CocoaPods was
+    // never providing a dependency; it was only a mechanism for getting the
+    // Kotlin framework into the app. That mechanism cost a Ruby toolchain, a
+    // generated Pods directory and podspec that kept landing in commits, three
+    // extra Xcode build phases, two injected xcconfigs, and a `pod install` step
+    // in CI that has to run after a Gradle task to work at all.
+    //
+    // SPM was considered and rejected: it solves distributing a framework to
+    // other projects, and there is one local consumer in this same repository.
+    targets.withType<org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget>().configureEach {
+        binaries.framework {
             baseName = "shared"
             isStatic = false
         }

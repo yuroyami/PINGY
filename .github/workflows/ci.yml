@@ -51,10 +51,11 @@ jobs:
             echo "$tracked_local_state" >&2
             exit 1
           fi
-          # Generated CocoaPods output drifts against the build that produced it.
-          tracked_generated="$(git ls-files 'iosApp/Pods/**' 'shared/shared.podspec' || true)"
+          # CocoaPods was removed in favour of direct framework embedding.
+          # Fail loudly if any of it comes back.
+          tracked_generated="$(git ls-files 'iosApp/Pods/**' 'shared/shared.podspec' 'iosApp/Podfile*' || true)"
           if [ -n "$tracked_generated" ]; then
-            echo "Generated CocoaPods files must not be committed:" >&2
+            echo "CocoaPods files must not come back; the framework is embedded directly:" >&2
             echo "$tracked_generated" >&2
             exit 1
           fi
@@ -100,13 +101,28 @@ jobs:
 
   ios:
     name: iOS simulator build and privacy manifest check
-    runs-on: macos-15
+    # macos-15 ships Xcode 16.4, whose SDK lacks the UIUtilities framework that
+    # Compose Multiplatform 1.11 auto-links, so the link step fails with
+    # "framework 'UIUtilities' not found". That is a Compose requirement and is
+    # unrelated to how the framework is embedded, so it still applies now that
+    # CocoaPods is gone.
+    runs-on: macos-26
     timeout-minutes: 60
     steps:
       - name: Check out source
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
+
+      # Images carry several Xcode versions and do not always default to the
+      # newest. Pick it explicitly rather than inheriting whatever is selected.
+      - name: Select the newest installed Xcode
+        run: |
+          set -euo pipefail
+          latest="$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)"
+          echo "selecting ${latest:-/Applications/Xcode.app}"
+          sudo xcode-select -s "${latest:-/Applications/Xcode.app}/Contents/Developer"
+          xcodebuild -version
 
       - name: Set up JDK 21
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
@@ -130,21 +146,12 @@ jobs:
           grep -q "PrivacyInfo.xcprivacy in Resources" iosApp/iosApp.xcodeproj/project.pbxproj \
             || { echo "manifest is not in the app target's Resources phase" >&2; exit 1; }
 
-      # pod install reads shared.podspec, which refuses to resolve until the
-      # Kotlin framework exists. Locally this passes only because a previous
-      # build left one behind; on a clean runner it has to be generated first.
-      - name: Generate the Kotlin framework for CocoaPods
-        run: ./gradlew --no-daemon :shared:generateDummyFramework
-
-      - name: Install CocoaPods dependencies
-        run: cd iosApp && pod install
-
       # -destination is required. Without it xcodebuild also tries an x86_64
       # simulator slice, which this project has no Kotlin/Native target for, and
       # the shared pod build fails with "Unknown iOS simulator arch: 'x86_64'".
       - name: Build the simulator app
         run: >-
-          xcodebuild -workspace iosApp/iosApp.xcworkspace -scheme iosApp
+          xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp
           -configuration Debug -sdk iphonesimulator
           -destination 'platform=iOS Simulator,name=iPhone 17'
           -derivedDataPath build/ios

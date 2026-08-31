@@ -62,7 +62,7 @@ Android permissions are limited to `INTERNET` and `ACCESS_NETWORK_STATE`. No cre
 
 - Android Studio 2025.3.1+ (Kotlin 2.4, Gradle 9.4)
 - JDK 21 (auto-provisioned by the Gradle toolchain)
-- Xcode 16.3+ for iOS
+- Xcode 16.3+ for iOS (Compose Multiplatform 1.11 needs an SDK that provides `UIUtilities`; Xcode 16.4 does not)
 - CMake 3.22.1+ (NDK-managed on Android)
 
 **Android**
@@ -76,9 +76,11 @@ Release signing reads from `local.properties` (which is `.gitignore`d) — `keys
 **iOS**
 
 ```
-cd iosApp && pod install
-open iosApp.xcworkspace
+open iosApp/iosApp.xcodeproj
 ```
+
+No CocoaPods step. The Kotlin framework is built and embedded by a Gradle build
+phase in the Xcode project, so opening the project and pressing Run is enough.
 
 ## Tests
 
