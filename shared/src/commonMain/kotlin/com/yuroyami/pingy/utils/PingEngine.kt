@@ -6,9 +6,6 @@ import com.yuroyami.pingy.logic.LocalFault
 import com.yuroyami.pingy.logic.Ping
 import kotlin.jvm.JvmName
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -118,6 +115,9 @@ private const val ADAPTIVE_WATCHDOG_MS = 250L
  */
 private const val MAX_POLL_SLICE_MS = 250L
 
+/** How often the engine re-reads battery and thermal state. */
+private const val POWER_POLL_MS = 15_000L
+
 /** Ceiling on unanswered probes tracked at once. */
 private const val MAX_OUTSTANDING = 64
 
@@ -132,7 +132,6 @@ private const val MAX_OUTSTANDING = 64
  * Descriptor ownership is single-owner. The loop opens, uses and closes its own
  * socket; nothing else touches it.
  */
-@OptIn(ExperimentalCoroutinesApi::class)
 class PingEngine(
     val host: String,
     packetSize: Int,
@@ -150,7 +149,8 @@ class PingEngine(
     /** Resolved IPv4, cached after first success. Cleared on socket errors. */
     @Volatile private var cachedTarget: String? = null
 
-    private val scope = CoroutineScope(Dispatchers.IO.limitedParallelism(1) + SupervisorJob())
+    // Shared bounded lane rather than a private view of the IO pool per engine.
+    private val scope = CoroutineScope(PingDispatchers.engine + SupervisorJob())
     private var loop: Job? = null
 
     /**
@@ -175,6 +175,11 @@ class PingEngine(
             var nextSeq = 1
             var fd = -1
             var nextSendAtMs = 0L
+
+            // Re-read power state occasionally rather than per probe: the query
+            // crosses into platform services and the state changes slowly.
+            var powerFloorMs = MIN_PROBE_GAP_MS
+            var powerCheckedAtMs = Long.MIN_VALUE
 
             fun flushOutstandingAsLost() {
                 outstanding.values.forEach { onPing(Ping.timeout(markAt(it[1]))) }
@@ -226,6 +231,12 @@ class PingEngine(
 
                     var now = nowMs()
 
+                    if (now - powerCheckedAtMs >= POWER_POLL_MS) {
+                        powerCheckedAtMs = now
+                        powerFloorMs = runCatching { currentPowerState() }
+                            .getOrDefault(PowerState.NORMAL).probeGapFloorMs
+                    }
+
                     if (now >= nextSendAtMs) {
                         if (outstanding.size < MAX_OUTSTANDING) {
                             val seq = nextSeq
@@ -244,7 +255,10 @@ class PingEngine(
                         }
                         val iv = _intervalMs
                         val gap = if (iv > 0L) iv else ADAPTIVE_WATCHDOG_MS
-                        nextSendAtMs = now + gap.coerceAtLeast(MIN_PROBE_GAP_MS)
+                        // Widen the floor under battery saver or thermal
+                        // pressure. Sampling slows rather than stopping, so the
+                        // graph never invents an outage the target did not have.
+                        nextSendAtMs = now + gap.coerceAtLeast(powerFloorMs)
                     }
 
                     val oldestDeadline = outstanding.values.firstOrNull()
@@ -278,7 +292,7 @@ class PingEngine(
                                     // once the pipeline is drained, otherwise every
                                     // watchdog probe ratchets the rate upward.
                                     if (_intervalMs <= 0L && outstanding.isEmpty()) {
-                                        nextSendAtMs = nowMs() + MIN_PROBE_GAP_MS
+                                        nextSendAtMs = nowMs() + powerFloorMs
                                     }
                                 }
                                 // else: a late reply for an already-reaped probe.
