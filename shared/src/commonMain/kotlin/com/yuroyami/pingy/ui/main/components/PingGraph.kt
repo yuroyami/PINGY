@@ -83,6 +83,9 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.yuroyami.pingy.GraphStyle
 import com.yuroyami.pingy.PanelLayout
+import com.yuroyami.pingy.i18n.Strings
+import com.yuroyami.pingy.ui.reduceMotion
+import com.yuroyami.pingy.i18n.strings
 import com.yuroyami.pingy.logic.Ping
 import com.yuroyami.pingy.logic.PingPanel
 import com.yuroyami.pingy.logic.RingBuffer
@@ -125,26 +128,14 @@ private const val PEAK_DECAY_PER_SEC = 0.22f // peak-hold line falls this canvas
 /** Buffer entries are appended in COMPLETION order while their timestamps
  * are SEND moments, so a reaped loss can sit up to a timeout out of place.
  * Any age jump beyond this is the ring writer clobbering under us. */
-private val REORDER_SLACK_MS = PING_TIMEOUT_MS + 1_000L
+internal val REORDER_SLACK_MS = PING_TIMEOUT_MS + 1_000L
 
-/** Oldest-first ordering for the visible window (timestamps ascending). */
-private val PingTimeOrder = Comparator<Ping> { a, b -> a.timestamp.compareTo(b.timestamp) }
 
-private val FizzleColor = Color(0xFFFF5252)
-private val PeakLineColor = Color(0xFFE2E8EF)
+/** Redraw cadence when the platform asks for reduced motion. */
+private const val REDUCED_MOTION_TICK_MS = 250L
 
-// Control deck: dark instrument surfaces with dim chrome around glowing values.
-// Settings sit on a slightly lifted shade so the mode flip registers without
-// ever leaving the chassis.
-private val StatsSurfaceColor = Color(0xFF14181E)
-private val SettingsSurfaceColor = Color(0xFF1B212B)
-private val StatsLabelColor = Color(0xFF7C8794)
-// Was #5E6874 at 3.41:1 against the cockpit background, below the 4.5:1
-// minimum for body text. #7C8794 measures 5.29:1.
-private val StatsSubColor = Color(0xFF7C8794)
-// Was #5A6470 at 3.21:1. #78838F measures 4.79:1.
-private val StatsDimColor = Color(0xFF78838F)
-private val SettingsTextColor = Color(0xFFC9D2DD)
+
+
 
 /** Drag-to-inspect freeze: ages render relative to [freezeMark] so the conveyor halts. */
 private data class ScrubFreeze(val freezeMark: TimeSource.Monotonic.ValueTimeMark, val cursorX: Float)
@@ -172,6 +163,7 @@ private const val GESTURE_SCRUB = 3
  */
 @Composable
 fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
+    val s = strings
     val textMeasurer = rememberTextMeasurer()
     val windowInfo = LocalWindowInfo.current
     val windowHeightDp by remember(windowInfo) { derivedStateOf { windowInfo.containerDpSize.height } }
@@ -206,9 +198,24 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
     // important in adaptive (RTT-duration) mode where long-RTT bars would
     // otherwise flash in at full width and feel jittery.
     val frameTick = remember { mutableLongStateOf(0L) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            withFrameMillis { frameTick.longValue = it }
+    val isRunning by running.collectAsState()
+    val animateGraph = !reduceMotion()
+
+    // Three loops used to run unconditionally for every composed panel, whether
+    // or not it was probing and whether or not the user had asked the system to
+    // reduce motion. They are now keyed on both.
+    //
+    // With motion reduced the canvas still updates, just on new data rather than
+    // on every frame, so the graph stays truthful without the conveyor effect.
+    LaunchedEffect(isRunning, animateGraph) {
+        if (!isRunning) return@LaunchedEffect
+        if (animateGraph) {
+            while (true) withFrameMillis { frameTick.longValue = it }
+        } else {
+            while (true) {
+                frameTick.longValue += 1
+                delay(REDUCED_MOTION_TICK_MS)
+            }
         }
     }
 
@@ -226,7 +233,8 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
     // while still feeling live.
     var readoutValue by remember { mutableStateOf<Int?>(null) }
     var readoutLost by remember { mutableStateOf(false) }
-    LaunchedEffect(this@PingGraphView) {
+    LaunchedEffect(this@PingGraphView, isRunning) {
+        if (!isRunning) return@LaunchedEffect
         while (true) {
             pings.last()?.let { last ->
                 val v = last.value
@@ -242,7 +250,8 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
     // ancient losses around forever. Sampled at 2.5 Hz, far away from the
     // per-frame draw path and the recomposition path.
     var windowStats by remember { mutableStateOf(WindowStats.EMPTY) }
-    LaunchedEffect(this@PingGraphView) {
+    LaunchedEffect(this@PingGraphView, isRunning) {
+        if (!isRunning) return@LaunchedEffect
         while (true) {
             val base = timeframeMs.value
             val effective = visibleWindowMs(base, viewmodel.panelLayout.value)
@@ -297,6 +306,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
             lost = readoutLost,
             stats = windowStats,
             windowMs = visibleWindowMs(timeframeMsVal, layoutVal),
+            s = s,
         )
         Box(
             modifier = Modifier
@@ -502,7 +512,11 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                     }
                 }
                 evictedAnchor?.let { visibleBuf.add(it) }
-                visibleBuf.sortWith(PingTimeOrder)
+                // Already-ordered is the overwhelmingly common case: entries
+                // are appended in completion order but the reorder is bounded
+                // by one timeout. Checking is O(n) and skips an O(n log n) sort
+                // plus its allocations on almost every frame.
+                if (!visibleBuf.isOrderedByTime()) visibleBuf.sortWith(PingTimeOrder)
 
                 // Fold pass: collapse same-column neighbours in place. The
                 // anchor (index 0, off-canvas column) never matches an
@@ -1041,7 +1055,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                         }
                         styleOverride.value = next
                         viewmodel.notify(
-                            "$ip: " + if (next == GraphStyle.PINGLETTES) "bars" else "ridge"
+                            if (next == GraphStyle.PINGLETTES) s.allPanelsBars else s.allPanelsRidge
                         )
                     },
                 ) {
@@ -1049,7 +1063,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                     Icon(
                         imageVector = if (graphStyleVal == GraphStyle.MOUNTAIN_SLOPES) Icons.Filled.BarChart
                                       else Icons.AutoMirrored.Filled.ShowChart,
-                        contentDescription = "Switch this panel's graph style",
+                        contentDescription = s.switchPanelStyle,
                         tint = Color.White.copy(alpha = 0.72f),
                         modifier = Modifier.size(17.dp)
                     )
@@ -1069,7 +1083,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Settings,
-                        contentDescription = "Panel settings",
+                        contentDescription = s.panelSettings,
                         tint = if (showSettings && expanded) Paletting.SGN else Color.White.copy(alpha = 0.72f),
                         modifier = Modifier.size(17.dp)
                     )
@@ -1085,7 +1099,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Close,
-                        contentDescription = "Remove $ip",
+                        contentDescription = s.removeTarget(ip),
                         tint = Color.White.copy(alpha = 0.72f),
                         modifier = Modifier.size(17.dp)
                     )
@@ -1123,530 +1137,3 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
         }
     }
 }
-
-/**
- * Windowed instrument strip on ONE line, always. The whole strip is a single
- * annotated string with relative (em) span sizes, and auto-size shrinks the
- * base until it fits the panel's width — so a half-width celluloid cell just
- * renders the same line smaller instead of wrapping. Every number describes
- * the SAME slice of time the canvas shows.
- */
-@Composable
-private fun StatsSheet(stats: WindowStats, fontFamily: FontFamily) {
-    val line = buildAnnotatedString {
-        fun label(text: String) {
-            withStyle(
-                SpanStyle(
-                    color = StatsLabelColor,
-                    fontSize = 0.72.em,
-                    letterSpacing = 0.09.em,
-                    fontWeight = FontWeight.Medium,
-                )
-            ) { append(text) }
-        }
-
-        fun value(text: String, color: Color, glow: Boolean) {
-            withStyle(
-                SpanStyle(
-                    color = color,
-                    fontWeight = FontWeight.Bold,
-                    shadow = if (glow) Shadow(color = color, blurRadius = 12f) else null,
-                )
-            ) { append(text) }
-        }
-
-        label("AVG ")
-        value(
-            stats.avg?.let { "${formatRtt(it)}ms" } ?: "—",
-            stats.avg?.let { calcPingColor(it.roundToInt()) } ?: StatsDimColor,
-            stats.avg != null,
-        )
-        // Mean absolute successive difference between consecutive replies. The
-        // old label was "±", which advertises a symmetric interval this never
-        // computed. Sub-millisecond values are now real rather than floored to
-        // zero, because the RTT is no longer rounded before the statistics run.
-        label("  JIT ")
-        value(stats.jitter?.let { formatRtt(it) } ?: "—", SettingsTextColor, false)
-        label("  LOSS ")
-        run {
-            val lossPercent = if (stats.count > 0) stats.lost * 100f / stats.count else null
-            // Loss only earns color once packets actually die.
-            val color = when {
-                lossPercent == null -> StatsDimColor
-                lossPercent <= 0.001f -> SettingsTextColor
-                else -> lossColor(lossPercent)
-            }
-            value(
-                lossPercent?.let { "${formatFloat1(it)}% (${stats.lost}/${stats.count})" } ?: "—",
-                color,
-                lossPercent != null && lossPercent > 0.001f,
-            )
-        }
-        label("  GONE ")
-        run {
-            val gone = stats.gonePct
-            // Time-based loss: how much of the window was actually dark.
-            value(
-                gone?.let { "${formatFloat1(it)}%" } ?: "—",
-                when {
-                    gone == null -> StatsDimColor
-                    gone <= 0.05f -> SettingsTextColor
-                    else -> lossColor(gone)
-                },
-                gone != null && gone > 0.05f,
-            )
-        }
-        label("  RANGE ")
-        value(
-            if (stats.min != null && stats.max != null) "${stats.min}–${stats.max}ms" else "—",
-            SettingsTextColor,
-            false,
-        )
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 11.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        BasicText(
-            text = line,
-            maxLines = 1,
-            softWrap = false,
-            style = TextStyle(fontFamily = fontFamily, fontSize = 15.sp, color = SettingsTextColor),
-            autoSize = TextAutoSize.StepBased(minFontSize = 6.sp, maxFontSize = 15.sp, stepSize = 0.25.sp),
-        )
-    }
-}
-
-/** Packet loss severity on the shared color scale: 0% reads healthy teal, 5%+ reads magenta. */
-private fun lossColor(percent: Float): Color = when {
-    percent <= 0.05f -> calcPingColor(40)
-    percent < 1f -> calcPingColor(300)
-    percent < 5f -> calcPingColor(650)
-    else -> calcPingColor(1_200)
-}
-
-/**
- * Settings deck: one slim row per dial — label, slider, live value — plus a
- * persist switch. Bound directly to the panel's StateFlows; everything
- * applies on-the-fly.
- */
-@Composable
-private fun PingPanel.SettingsSheet(fontFamily: FontFamily) {
-    val viewmodel = LocalViewmodel.current
-    val packetSizeVal by packetSize.collectAsState()
-    val intervalVal by interval.collectAsState()
-    val roofVal by roof.collectAsState()
-    val angleOfAttackVal by angleOfAttack.collectAsState()
-    val timeframeMsVal by timeframeMs.collectAsState()
-    val canvasHeightFractionVal by canvasHeightFraction.collectAsState()
-    val persistVal by persistAcrossSessions.collectAsState()
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 6.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "$ip · long-press the graph to reset",
-                color = StatsSubColor,
-                fontSize = 10.sp,
-                fontFamily = fontFamily,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                text = "REMEMBER",
-                color = StatsLabelColor,
-                fontSize = 10.sp,
-                letterSpacing = 1.2.sp,
-                fontFamily = fontFamily,
-            )
-            Switch(
-                checked = persistVal,
-                onCheckedChange = { checked ->
-                    persistAcrossSessions.value = checked
-                    viewmodel.notify(
-                        if (checked) "$ip will be there on next launch"
-                        else "$ip will not come back on next launch"
-                    )
-                },
-                modifier = Modifier.scale(0.62f),
-                colors = SwitchDefaults.colors(checkedTrackColor = Paletting.SGN2),
-            )
-        }
-
-        CompactSlider(
-            label = "Interval",
-            valueText = if (intervalVal <= 0L) "adaptive" else "${intervalVal}ms",
-            value = intervalVal.toFloat(),
-            range = 0f..2000f,
-            steps = 39, // 50ms steps; 0 = fire-as-fast-as-replies-land
-            fontFamily = fontFamily,
-        ) { interval.value = it.toLong() }
-        CompactSlider(
-            label = "Packet",
-            valueText = "${packetSizeVal} B",
-            value = packetSizeVal.toFloat(),
-            range = 16f..480f,
-            steps = 28, // 16-byte steps
-            fontFamily = fontFamily,
-        ) { packetSize.value = it.toInt() }
-        CompactSlider(
-            label = "Attack",
-            valueText = if (angleOfAttackVal <= 0.01f) "linear" else formatFloat1(angleOfAttackVal),
-            value = angleOfAttackVal,
-            range = 0f..20f,
-            steps = 40,
-            fontFamily = fontFamily,
-        ) { angleOfAttack.value = it }
-        CompactSlider(
-            label = "Window",
-            valueText = formatTimeframe(timeframeMsVal),
-            value = timeframeMsVal.toFloat(),
-            range = 1_000f..30_000f,
-            steps = 28, // 1s steps
-            fontFamily = fontFamily,
-        ) { timeframeMs.value = it.toLong() }
-        CompactSlider(
-            label = "Roof",
-            valueText = "${roofVal}ms",
-            value = roofVal.toFloat(),
-            range = 100f..2000f,
-            steps = 18, // 100ms steps
-            fontFamily = fontFamily,
-        ) { roof.value = it.toInt() }
-        CompactSlider(
-            label = "Height",
-            valueText = "${(canvasHeightFractionVal * 100).roundToInt()}%",
-            value = canvasHeightFractionVal,
-            range = 0.10f..0.45f,
-            steps = 34,
-            fontFamily = fontFamily,
-        ) { canvasHeightFraction.value = it }
-    }
-}
-
-/** One settings row: fixed label, elastic slider, fixed live value. */
-@Composable
-private fun CompactSlider(
-    label: String,
-    valueText: String,
-    value: Float,
-    range: ClosedFloatingPointRange<Float>,
-    steps: Int,
-    fontFamily: FontFamily,
-    onValueChange: (Float) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().height(36.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = label,
-            color = StatsLabelColor,
-            fontSize = 11.sp,
-            fontFamily = fontFamily,
-            maxLines = 1,
-            modifier = Modifier.width(58.dp),
-        )
-        Slider(
-            value = value,
-            onValueChange = onValueChange,
-            valueRange = range,
-            steps = steps,
-            modifier = Modifier.weight(1f),
-            colors = SliderDefaults.colors(
-                thumbColor = Paletting.A_MAIN_COLOR,
-                activeTrackColor = Paletting.A_MAIN_COLOR,
-                inactiveTrackColor = Paletting.A_MAIN_COLOR.copy(alpha = 0.25f),
-                activeTickColor = Color.Transparent,
-                inactiveTickColor = Color.Transparent,
-            ),
-        )
-        Text(
-            text = valueText,
-            color = SettingsTextColor,
-            fontSize = 11.sp,
-            fontFamily = fontFamily,
-            maxLines = 1,
-            textAlign = TextAlign.End,
-            modifier = Modifier.width(62.dp),
-        )
-    }
-}
-
-private fun formatTimeframe(ms: Long): String {
-    val totalSec = ms / 1000
-    return when {
-        totalSec < 60 -> "${totalSec}s"
-        totalSec < 3600 -> {
-            val m = totalSec / 60
-            val s = totalSec % 60
-            if (s == 0L) "${m}m" else "${m}m ${s}s"
-        }
-        else -> "${totalSec / 3600}h"
-    }
-}
-
-/** Fast start, gentle landing — the shape of every glide in this file. */
-private fun easeOutCubic(t: Double): Double {
-    val u = 1.0 - t.coerceIn(0.0, 1.0)
-    return 1.0 - u * u * u
-}
-
-/** Sub-second-precision age for the scrub chip, e.g. "0.4s" / "2.3s" / "1m 5s". */
-private fun formatShortAge(ms: Long): String = if (ms < 60_000) {
-    val tenths = (ms / 100).coerceAtLeast(0)
-    "${tenths / 10}.${tenths % 10}s"
-} else {
-    formatTimeframe(ms)
-}
-
-/**
- * Format an RTT for display. Sub-millisecond values keep two decimals so a LAN
- * target does not read as a flat "0ms"; anything above 10 ms rounds to a whole
- * millisecond, which is all the precision a reader can use.
- */
-private fun formatRtt(ms: Double): String = when {
-    ms < 1.0 -> {
-        val hundredths = (ms * 100).roundToInt()
-        "0.${(hundredths % 100).toString().padStart(2, '0')}"
-    }
-    ms < 10.0 -> formatFloat1(ms.toFloat())
-    else -> ms.roundToInt().toString()
-}
-
-/** One-decimal formatter without depending on platform `Locale` / `String.format`. */
-private fun formatFloat1(value: Float): String {
-    val negative = value < 0f
-    val absTenths = (abs(value) * 10f).roundToInt()
-    val whole = absTenths / 10
-    val frac = absTenths % 10
-    val sign = if (negative && (whole != 0 || frac != 0)) "-" else ""
-    return "$sign$whole.$frac"
-}
-
-/** Exponential scaling to emphasize low ping values in the graph.
- * Uses the normalized formula: f * (1 - 2^(-x*z/f)) / (1 - 2^(-z))
- *
- * Normalizing by (1 - 2^(-z)) pins the roof to full height for EVERY zoom
- * factor and makes the family continuous: as z shrinks toward 0 the curve
- * settles onto the linear 1:1 line instead of collapsing toward zero height
- * (the old un-normalized formula squashed the whole graph to about a third
- * of its height at z=0.5, one notch away from linear). Higher factors push
- * low pings further up, which is what gamers care about.
- */
-private fun exponentialize(x: Float, f: Float, zoomFactor: Float): Double {
-    val xc = x.toDouble().coerceIn(0.0, f.toDouble())
-    if (zoomFactor <= 0.001f) {
-        // Pure linear mapping.
-        return xc
-    }
-    val z = zoomFactor.toDouble()
-    val curved = 1.0 - 2.0.pow(-xc * z / f.toDouble())
-    val fullScale = 1.0 - 2.0.pow(-z)
-    return f.toDouble() * (curved / fullScale)
-}
-
-/**
- * Spoken equivalent of the graph.
- *
- * Everything the picture conveys, in one sentence: what is being monitored, the
- * newest reading, the window it covers, and the same aggregates rendered beside
- * it. Local faults are named rather than folded into loss, matching what the
- * numbers now do.
- */
-private fun buildGraphSummary(
-    ip: String,
-    latest: Int?,
-    lost: Boolean,
-    stats: WindowStats,
-    windowMs: Long,
-): String = buildString {
-    append(ip)
-    append(". ")
-    when {
-        lost -> append("Latest probe timed out. ")
-        latest != null -> append("Latest round trip ").append(latest).append(" milliseconds. ")
-        else -> append("No reading yet. ")
-    }
-    append("Over the last ").append(windowMs / 1000).append(" seconds: ")
-    if (stats.count == 0) {
-        append("no probes sent")
-    } else {
-        append(stats.count).append(" sent, ").append(stats.lost).append(" lost")
-        stats.avg?.let { append(", average ").append(it.roundToInt()).append(" milliseconds") }
-        stats.min?.let { append(", best ").append(it.roundToInt()) }
-        stats.max?.let { append(", worst ").append(it.roundToInt()) }
-    }
-    if (stats.localFaults > 0) {
-        append(". ").append(stats.localFaults)
-        append(" probe attempts could not leave this device and are excluded")
-    }
-    append(".")
-}
-
-/**
- * The window actually drawn, in milliseconds.
- *
- * Grid cells are half as wide, so they show half the window to keep pixels per
- * millisecond constant. That is fine right up until the result drops below
- * [PING_TIMEOUT_MS], at which point a timeout can never be rendered at all, and
- * the graph quietly disagrees with the loss counter beside it.
- */
-internal fun visibleWindowMs(timeframeMs: Long, layout: PanelLayout): Long {
-    val scaled = if (layout == PanelLayout.GRID) timeframeMs / 2 else timeframeMs
-    return scaled.coerceAtLeast(PING_TIMEOUT_MS.toLong())
-}
-
-/** Calculates a ping height on the current panel based on its value. */
-private fun calculatePingY(ping: Int, panelHeight: Float, pingMaxVal: Float, zoomFactor: Float): Float {
-    return (exponentialize(ping.toFloat(), pingMaxVal, zoomFactor) * (panelHeight.toDouble() / pingMaxVal)).toFloat()
-}
-
-/** The app-wide RTT color scale lives in the theme; the graph just speaks it. */
-private fun calcPingColor(ping: Int): Color = pingColor(ping)
-
-/**
- * Stats over the visible timeframe.
- *
- * [count] counts probes that actually left the device, so it is the honest
- * denominator for [lost]. [localFaults] is reported separately because a DNS or
- * socket failure says nothing about the target.
- *
- * [gonePct] is time-based loss over [coveredMs], the span actually observed,
- * rather than over the whole window. Values stay in milliseconds as doubles;
- * rounding happens only at the point of display.
- */
-private data class WindowStats(
-    val count: Int,
-    val lost: Int,
-    val localFaults: Int,
-    val avg: Double?,
-    val min: Double?,
-    val max: Double?,
-    /** Mean absolute successive difference between consecutive replies. */
-    val jitter: Double?,
-    val gonePct: Float?,
-    val coveredMs: Long,
-) {
-    companion object {
-        val EMPTY = WindowStats(0, 0, 0, null, null, null, null, null, 0L)
-    }
-}
-
-/** One pass over the ring, newest-first, stopping at the window's horizon.
- *
- * Jitter pairs only consecutive valid samples — a loss breaks adjacency, so
- * the wobble number never spans a gap.
- *
- * GONE uses completion-gap attribution: each verdict owns the time span
- * back to the previous verdict (the oldest one owns its span back to the
- * window edge), and a span counts as gone when its verdict was a loss.
- * With pipelined probing this is honest in both directions: during a real
- * outage lost verdicts stream at the watchdog cadence and their spans tile
- * the whole dark stretch, while a single dropped packet resolves BETWEEN
- * two healthy replies and owns only milliseconds. The still-unresolved
- * stretch between the newest verdict and "now" belongs to nobody. */
-private fun computeWindowStats(pings: RingBuffer<Ping>, windowMs: Long): WindowStats {
-    val now = TimeSource.Monotonic.markNow()
-
-    // Gather the window, tolerant of send-time entries appended in
-    // completion order (a reaped loss sits up to a timeout out of place),
-    // then sort oldest-first so spans and jitter pair true time-neighbours.
-    val window = ArrayList<Ping>(256)
-    var prevAge = Long.MIN_VALUE
-    pings.forEachNewestFirst { p ->
-        val age = (now - p.timestamp).inWholeMilliseconds
-        when {
-            age + REORDER_SLACK_MS < prevAge -> return@forEachNewestFirst false
-            age > windowMs + REORDER_SLACK_MS -> return@forEachNewestFirst false
-            else -> {
-                if (age in 0..windowMs) window.add(p)
-                if (age > prevAge) prevAge = age
-                true
-            }
-        }
-    }
-    window.sortWith(PingTimeOrder)
-
-    var count = 0
-    var lost = 0
-    var localFaults = 0
-    var sum = 0.0
-    var valid = 0
-    var min = Double.MAX_VALUE
-    var max = -Double.MAX_VALUE
-    var jitterSum = 0.0
-    var jitterCount = 0
-    var olderValue = 0.0
-    var olderWasValid = false
-    var olderAge = Long.MIN_VALUE
-    var spanTotal = 0L
-    var spanGone = 0L
-
-    // The oldest sample in the window may be the oldest we HAVE, not the oldest
-    // there was. Attributing everything back to the window edge invented outage
-    // time that was never observed: two failures a second apart could report
-    // 100% gone across a five second window the app had not even been running
-    // for. Coverage starts at the oldest sample we actually hold.
-    val oldestAge = window.firstOrNull()?.let { (now - it.timestamp).inWholeMilliseconds }
-    val coveredMs = oldestAge?.coerceAtMost(windowMs) ?: 0L
-
-    for (p in window) {
-        val age = (now - p.timestamp).inWholeMilliseconds
-
-        // A local fault means no probe ever left this device. It is not evidence
-        // about the target, so it enters neither the sent count, the loss count,
-        // nor the time-based outage share.
-        if (p.isLocalFault) {
-            localFaults++
-            continue
-        }
-
-        count++
-        val v = p.rttMs
-        val isLost = p.isLoss
-
-        // Each verdict owns the span back to its predecessor. The oldest owns
-        // only back to the start of observed coverage.
-        val span = if (olderAge == Long.MIN_VALUE) coveredMs - age else olderAge - age
-        if (span > 0) {
-            spanTotal += span
-            if (isLost) spanGone += span
-        }
-        olderAge = age
-        if (isLost || v == null) {
-            lost++
-            olderWasValid = false
-        } else {
-            sum += v
-            valid++
-            if (v < min) min = v
-            if (v > max) max = v
-            if (olderWasValid) {
-                jitterSum += abs(olderValue - v)
-                jitterCount++
-            }
-            olderValue = v
-            olderWasValid = true
-        }
-    }
-    return WindowStats(
-        count = count,
-        lost = lost,
-        localFaults = localFaults,
-        avg = if (valid > 0) sum / valid else null,
-        min = if (valid > 0) min else null,
-        max = if (valid > 0) max else null,
-        jitter = if (jitterCount > 0) jitterSum / jitterCount else null,
-        gonePct = if (spanTotal > 0) spanGone * 100f / spanTotal else null,
-        coveredMs = coveredMs,
-    )
-}
-

@@ -59,7 +59,10 @@ kotlin {
         summary = "${kiteSsot.appName.get()} Common Code (Platform-agnostic)"
         homepage = "www.github.com/yuroyami/PINGY"
         version = kiteSsot.version.get()
-        ios.deploymentTarget = "14.0"
+        // Must match the Podfile and the Xcode project, both of which say 16.0.
+        // Three different minimums (14 here, 15 in the produced framework, 16 in
+        // the app) meant the framework advertised support the app did not have.
+        ios.deploymentTarget = "16.0"
         podfile = project.file("../iosApp/Podfile")
         framework {
             baseName = "shared"
@@ -80,9 +83,15 @@ kotlin {
                 optIn("kotlin.ExperimentalStdlibApi")
                 optIn("kotlin.io.encoding.ExperimentalEncodingApi")
                 optIn("androidx.compose.material3.ExperimentalMaterial3ExpressiveApi")
-                optIn("kotlinx.cinterop.ExperimentalForeignApi") //for iOS
-                optIn("kotlinx.cinterop.BetaInteropApi") //for iOS
                 optIn("kotlin.time.ExperimentalTime")
+                // cinterop markers. These only exist on Apple targets, so
+                // Android and JVM compiles emit one "unresolved opt-in marker"
+                // warning each. Scoping them to nativeMain is not an option:
+                // Kotlin requires a source set and its dependents to declare
+                // the same opt-in set, so it would have to be repeated on every
+                // leaf. Two known warnings is the smaller cost.
+                optIn("kotlinx.cinterop.ExperimentalForeignApi")
+                optIn("kotlinx.cinterop.BetaInteropApi")
             }
         }
 
@@ -113,6 +122,11 @@ kotlin {
 
             /* Logging */
             implementation(libs.logging.kermit)
+
+            /* Localization. Runtime API only, no annotation processor: KSP
+               trails new Kotlin releases and translations should not be
+               coupled to that. */
+            implementation(libs.lyricist)
         }
 
         androidMain.dependencies {

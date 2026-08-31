@@ -44,3 +44,8 @@ splpingsrccode/
 
 # Compiled native output belongs in build/, never in src/
 shared/src/jvmMain/resources/native/
+
+# Generated CocoaPods output. `pod install` regenerates Pods/ and the Kotlin
+# cocoapods plugin regenerates the podspec, so neither belongs in the tree.
+iosApp/Pods/
+shared/shared.podspec

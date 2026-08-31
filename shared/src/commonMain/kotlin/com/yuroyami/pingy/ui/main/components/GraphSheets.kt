@@ -1,0 +1,299 @@
+package com.yuroyami.pingy.ui.main.components
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.sp
+import com.yuroyami.pingy.i18n.strings
+import com.yuroyami.pingy.logic.PingPanel
+import com.yuroyami.pingy.theme.Paletting
+import com.yuroyami.pingy.ui.adam.LocalViewmodel
+import kotlin.math.roundToInt
+
+/**
+ * The two panels below the graph: the statistics strip and the settings sheet.
+ *
+ * Separated from the drawing because they share nothing with it but the data
+ * class, and they were the largest block of non-canvas code in the file.
+ */
+
+/**
+ * Windowed instrument strip on ONE line, always. The whole strip is a single
+ * annotated string with relative (em) span sizes, and auto-size shrinks the
+ * base until it fits the panel's width — so a half-width celluloid cell just
+ * renders the same line smaller instead of wrapping. Every number describes
+ * the SAME slice of time the canvas shows.
+ */
+@Composable
+internal fun StatsSheet(stats: WindowStats, fontFamily: FontFamily) {
+    val s = strings
+    val line = buildAnnotatedString {
+        fun label(text: String) {
+            withStyle(
+                SpanStyle(
+                    color = StatsLabelColor,
+                    fontSize = 0.72.em,
+                    letterSpacing = 0.09.em,
+                    fontWeight = FontWeight.Medium,
+                )
+            ) { append(text) }
+        }
+
+        fun value(text: String, color: Color, glow: Boolean) {
+            withStyle(
+                SpanStyle(
+                    color = color,
+                    fontWeight = FontWeight.Bold,
+                    shadow = if (glow) Shadow(color = color, blurRadius = 12f) else null,
+                )
+            ) { append(text) }
+        }
+
+        label(s.statAverage + " ")
+        value(
+            stats.avg?.let { "${formatRtt(it)}ms" } ?: "—",
+            stats.avg?.let { calcPingColor(it.roundToInt()) } ?: StatsDimColor,
+            stats.avg != null,
+        )
+        // Mean absolute successive difference between consecutive replies. The
+        // old label was "±", which advertises a symmetric interval this never
+        // computed. Sub-millisecond values are now real rather than floored to
+        // zero, because the RTT is no longer rounded before the statistics run.
+        label("  " + s.statJitter + " ")
+        value(stats.jitter?.let { formatRtt(it) } ?: "—", SettingsTextColor, false)
+        label("  " + s.statLoss + " ")
+        run {
+            val lossPercent = if (stats.count > 0) stats.lost * 100f / stats.count else null
+            // Loss only earns color once packets actually die.
+            val color = when {
+                lossPercent == null -> StatsDimColor
+                lossPercent <= 0.001f -> SettingsTextColor
+                else -> lossColor(lossPercent)
+            }
+            value(
+                lossPercent?.let { "${formatFloat1(it)}% (${stats.lost}/${stats.count})" } ?: "—",
+                color,
+                lossPercent != null && lossPercent > 0.001f,
+            )
+        }
+        label("  " + s.statGone + " ")
+        run {
+            val gone = stats.gonePct
+            // Time-based loss: how much of the window was actually dark.
+            value(
+                gone?.let { "${formatFloat1(it)}%" } ?: "—",
+                when {
+                    gone == null -> StatsDimColor
+                    gone <= 0.05f -> SettingsTextColor
+                    else -> lossColor(gone)
+                },
+                gone != null && gone > 0.05f,
+            )
+        }
+        label("  RANGE ")
+        value(
+            if (stats.min != null && stats.max != null) "${stats.min}–${stats.max}ms" else "—",
+            SettingsTextColor,
+            false,
+        )
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 11.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BasicText(
+            text = line,
+            maxLines = 1,
+            softWrap = false,
+            style = TextStyle(fontFamily = fontFamily, fontSize = 15.sp, color = SettingsTextColor),
+            autoSize = TextAutoSize.StepBased(minFontSize = 6.sp, maxFontSize = 15.sp, stepSize = 0.25.sp),
+        )
+    }
+}
+
+/**
+ * Settings deck: one slim row per dial — label, slider, live value — plus a
+ * persist switch. Bound directly to the panel's StateFlows; everything
+ * applies on-the-fly.
+ */
+@Composable
+internal fun PingPanel.SettingsSheet(fontFamily: FontFamily) {
+    val s = strings
+    val viewmodel = LocalViewmodel.current
+    val packetSizeVal by packetSize.collectAsState()
+    val intervalVal by interval.collectAsState()
+    val roofVal by roof.collectAsState()
+    val angleOfAttackVal by angleOfAttack.collectAsState()
+    val timeframeMsVal by timeframeMs.collectAsState()
+    val canvasHeightFractionVal by canvasHeightFraction.collectAsState()
+    val persistVal by persistAcrossSessions.collectAsState()
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 6.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = s.longPressToReset(ip),
+                color = StatsSubColor,
+                fontSize = 10.sp,
+                fontFamily = fontFamily,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = s.remember,
+                color = StatsLabelColor,
+                fontSize = 10.sp,
+                letterSpacing = 1.2.sp,
+                fontFamily = fontFamily,
+            )
+            Switch(
+                checked = persistVal,
+                onCheckedChange = { checked ->
+                    persistAcrossSessions.value = checked
+                    viewmodel.notify(
+                        if (checked) s.willReturnNextLaunch(ip)
+                        else s.willNotReturnNextLaunch(ip)
+                    )
+                },
+                modifier = Modifier.scale(0.62f),
+                colors = SwitchDefaults.colors(checkedTrackColor = Paletting.SGN2),
+            )
+        }
+
+        CompactSlider(
+            label = s.settingInterval,
+            valueText = if (intervalVal <= 0L) s.intervalAdaptive else "${intervalVal}ms",
+            value = intervalVal.toFloat(),
+            range = 0f..2000f,
+            steps = 39, // 50ms steps; 0 = fire-as-fast-as-replies-land
+            fontFamily = fontFamily,
+        ) { interval.value = it.toLong() }
+        CompactSlider(
+            label = s.settingPacket,
+            valueText = "${packetSizeVal} B",
+            value = packetSizeVal.toFloat(),
+            range = 16f..480f,
+            steps = 28, // 16-byte steps
+            fontFamily = fontFamily,
+        ) { packetSize.value = it.toInt() }
+        CompactSlider(
+            label = s.settingAttack,
+            valueText = if (angleOfAttackVal <= 0.01f) s.valueLinear else formatFloat1(angleOfAttackVal),
+            value = angleOfAttackVal,
+            range = 0f..20f,
+            steps = 40,
+            fontFamily = fontFamily,
+        ) { angleOfAttack.value = it }
+        CompactSlider(
+            label = s.settingWindow,
+            valueText = formatTimeframe(timeframeMsVal),
+            value = timeframeMsVal.toFloat(),
+            range = 1_000f..30_000f,
+            steps = 28, // 1s steps
+            fontFamily = fontFamily,
+        ) { timeframeMs.value = it.toLong() }
+        CompactSlider(
+            label = s.settingRoof,
+            valueText = "${roofVal}ms",
+            value = roofVal.toFloat(),
+            range = 100f..2000f,
+            steps = 18, // 100ms steps
+            fontFamily = fontFamily,
+        ) { roof.value = it.toInt() }
+        CompactSlider(
+            label = s.settingHeight,
+            valueText = "${(canvasHeightFractionVal * 100).roundToInt()}%",
+            value = canvasHeightFractionVal,
+            range = 0.10f..0.45f,
+            steps = 34,
+            fontFamily = fontFamily,
+        ) { canvasHeightFraction.value = it }
+    }
+}
+
+/** One settings row: fixed label, elastic slider, fixed live value. */
+@Composable
+internal fun CompactSlider(
+    label: String,
+    valueText: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    fontFamily: FontFamily,
+    onValueChange: (Float) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().height(36.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            color = StatsLabelColor,
+            fontSize = 11.sp,
+            fontFamily = fontFamily,
+            maxLines = 1,
+            modifier = Modifier.width(58.dp),
+        )
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = range,
+            steps = steps,
+            modifier = Modifier.weight(1f),
+            colors = SliderDefaults.colors(
+                thumbColor = Paletting.A_MAIN_COLOR,
+                activeTrackColor = Paletting.A_MAIN_COLOR,
+                inactiveTrackColor = Paletting.A_MAIN_COLOR.copy(alpha = 0.25f),
+                activeTickColor = Color.Transparent,
+                inactiveTickColor = Color.Transparent,
+            ),
+        )
+        Text(
+            text = valueText,
+            color = SettingsTextColor,
+            fontSize = 11.sp,
+            fontFamily = fontFamily,
+            maxLines = 1,
+            textAlign = TextAlign.End,
+            modifier = Modifier.width(62.dp),
+        )
+    }
+}

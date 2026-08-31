@@ -51,6 +51,13 @@ jobs:
             echo "$tracked_local_state" >&2
             exit 1
           fi
+          # Generated CocoaPods output drifts against the build that produced it.
+          tracked_generated="$(git ls-files 'iosApp/Pods/**' 'shared/shared.podspec' || true)"
+          if [ -n "$tracked_generated" ]; then
+            echo "Generated CocoaPods files must not be committed:" >&2
+            echo "$tracked_generated" >&2
+            exit 1
+          fi
 
       - name: Verify legal files are present and packaged
         run: |
@@ -122,6 +129,12 @@ jobs:
           done
           grep -q "PrivacyInfo.xcprivacy in Resources" iosApp/iosApp.xcodeproj/project.pbxproj \
             || { echo "manifest is not in the app target's Resources phase" >&2; exit 1; }
+
+      # pod install reads shared.podspec, which refuses to resolve until the
+      # Kotlin framework exists. Locally this passes only because a previous
+      # build left one behind; on a clean runner it has to be generated first.
+      - name: Generate the Kotlin framework for CocoaPods
+        run: ./gradlew --no-daemon :shared:generateDummyFramework
 
       - name: Install CocoaPods dependencies
         run: cd iosApp && pod install
