@@ -51,6 +51,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
@@ -135,8 +139,11 @@ private val PeakLineColor = Color(0xFFE2E8EF)
 private val StatsSurfaceColor = Color(0xFF14181E)
 private val SettingsSurfaceColor = Color(0xFF1B212B)
 private val StatsLabelColor = Color(0xFF7C8794)
-private val StatsSubColor = Color(0xFF5E6874)
-private val StatsDimColor = Color(0xFF5A6470)
+// Was #5E6874 at 3.41:1 against the cockpit background, below the 4.5:1
+// minimum for body text. #7C8794 measures 5.29:1.
+private val StatsSubColor = Color(0xFF7C8794)
+// Was #5A6470 at 3.21:1. #78838F measures 4.79:1.
+private val StatsDimColor = Color(0xFF78838F)
 private val SettingsTextColor = Color(0xFFC9D2DD)
 
 /** Drag-to-inspect freeze: ages render relative to [freezeMark] so the conveyor halts. */
@@ -238,7 +245,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
     LaunchedEffect(this@PingGraphView) {
         while (true) {
             val base = timeframeMs.value
-            val effective = if (viewmodel.panelLayout.value == PanelLayout.GRID) base / 2 else base
+            val effective = visibleWindowMs(base, viewmodel.panelLayout.value)
             windowStats = computeWindowStats(pings, effective)
             delay(400)
         }
@@ -280,7 +287,26 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 .border(1.dp, color = Color.White, RoundedCornerShape(16.dp))
         ) {
         // Graph canvas + overlaid minimize toggle
-        Box(modifier = Modifier.fillMaxWidth().height(canvasHeight)) {
+        // The graph is a Canvas, so it exposes nothing to a screen reader on its
+        // own. This summary is the accessible equivalent of the picture: current
+        // reading, window, and the same statistics shown beside it. It is a live
+        // region so a reader hears it update instead of having to re-navigate.
+        val a11ySummary = buildGraphSummary(
+            ip = ip,
+            latest = readoutValue,
+            lost = readoutLost,
+            stats = windowStats,
+            windowMs = visibleWindowMs(timeframeMsVal, layoutVal),
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(canvasHeight)
+                .semantics(mergeDescendants = true) {
+                    contentDescription = a11ySummary
+                    liveRegion = LiveRegionMode.Polite
+                }
+        ) {
             Canvas(
                 modifier = Modifier
                     .fillMaxSize()
@@ -424,7 +450,11 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 // Celluloid cells are half as wide, so they show half the
                 // window: pixel density per millisecond stays constant and
                 // the stored preference is untouched.
-                val thresholdMs = if (layoutVal == PanelLayout.GRID) timeframeMsVal / 2 else timeframeMsVal
+                // A window narrower than the timeout can never contain a
+                // timed-out probe: the loss lands at its send moment, 3s in the
+                // past, already off the left edge. The grid used to halve the
+                // 5s default to 2.5s and silently hide every timeout.
+                val thresholdMs = visibleWindowMs(timeframeMsVal, layoutVal)
                 val canvasW = size.width
                 val canvasH = size.height
                 val pxPerMs = canvasW / thresholdMs.toFloat()
@@ -486,12 +516,17 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                         val col = ((canvasW - ((frameNow - p.timestamp).inWholeMilliseconds - freezeOffsetMs) * pxPerMs)).toInt()
                         val kept = visibleBuf[write - 1]
                         if (col == keptCol) {
-                            val keptLost = kept.value == null || kept.value < 0
-                            val pLost = p.value == null || p.value < 0
+                            // Read once into locals: Ping.value has a custom
+                            // getter, so it cannot be smart cast.
+                            val keptV = kept.value
+                            val pV = p.value
                             when {
-                                keptLost -> Unit // a loss marker outranks the fold
-                                pLost -> visibleBuf[write - 1] = p
-                                p.value > kept.value -> visibleBuf[write - 1] = p
+                                // A loss survives the fold ahead of any reply, so
+                                // a dropped packet can never be hidden by a
+                                // neighbouring success sharing its pixel column.
+                                keptV == null -> Unit
+                                pV == null -> visibleBuf[write - 1] = p
+                                pV > keptV -> visibleBuf[write - 1] = p
                             }
                         } else {
                             visibleBuf[write] = p
@@ -996,7 +1031,9 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(
-                    modifier = Modifier.size(30.dp),
+                    // 48dp meets the Android and iOS minimum touch target; the icon
+                    // inside stays 17dp so the visual density is unchanged.
+                    modifier = Modifier.size(48.dp),
                     onClick = {
                         val next = when (graphStyleVal) {
                             GraphStyle.PINGLETTES -> GraphStyle.MOUNTAIN_SLOPES
@@ -1018,7 +1055,9 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                     )
                 }
                 IconButton(
-                    modifier = Modifier.size(30.dp),
+                    // 48dp meets the Android and iOS minimum touch target; the icon
+                    // inside stays 17dp so the visual density is unchanged.
+                    modifier = Modifier.size(48.dp),
                     onClick = {
                         if (!expanded) {
                             this@PingGraphView.expanded.value = true
@@ -1036,7 +1075,9 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                     )
                 }
                 IconButton(
-                    modifier = Modifier.size(30.dp),
+                    // 48dp meets the Android and iOS minimum touch target; the icon
+                    // inside stays 17dp so the visual density is unchanged.
+                    modifier = Modifier.size(48.dp),
                     onClick = {
                         viewmodel.notify("$ip removed")
                         viewmodel.removePanel(this@PingGraphView)
@@ -1115,9 +1156,17 @@ private fun StatsSheet(stats: WindowStats, fontFamily: FontFamily) {
         }
 
         label("AVG ")
-        value(stats.avg?.let { "${it}ms" } ?: "—", stats.avg?.let(::calcPingColor) ?: StatsDimColor, stats.avg != null)
+        value(
+            stats.avg?.let { "${formatRtt(it)}ms" } ?: "—",
+            stats.avg?.let { calcPingColor(it.roundToInt()) } ?: StatsDimColor,
+            stats.avg != null,
+        )
+        // Mean absolute successive difference between consecutive replies. The
+        // old label was "±", which advertises a symmetric interval this never
+        // computed. Sub-millisecond values are now real rather than floored to
+        // zero, because the RTT is no longer rounded before the statistics run.
         label("  JIT ")
-        value(stats.jitter?.let { "±$it" } ?: "—", SettingsTextColor, false)
+        value(stats.jitter?.let { formatRtt(it) } ?: "—", SettingsTextColor, false)
         label("  LOSS ")
         run {
             val lossPercent = if (stats.count > 0) stats.lost * 100f / stats.count else null
@@ -1358,6 +1407,20 @@ private fun formatShortAge(ms: Long): String = if (ms < 60_000) {
     formatTimeframe(ms)
 }
 
+/**
+ * Format an RTT for display. Sub-millisecond values keep two decimals so a LAN
+ * target does not read as a flat "0ms"; anything above 10 ms rounds to a whole
+ * millisecond, which is all the precision a reader can use.
+ */
+private fun formatRtt(ms: Double): String = when {
+    ms < 1.0 -> {
+        val hundredths = (ms * 100).roundToInt()
+        "0.${(hundredths % 100).toString().padStart(2, '0')}"
+    }
+    ms < 10.0 -> formatFloat1(ms.toFloat())
+    else -> ms.roundToInt().toString()
+}
+
 /** One-decimal formatter without depending on platform `Locale` / `String.format`. */
 private fun formatFloat1(value: Float): String {
     val negative = value < 0f
@@ -1390,6 +1453,57 @@ private fun exponentialize(x: Float, f: Float, zoomFactor: Float): Double {
     return f.toDouble() * (curved / fullScale)
 }
 
+/**
+ * Spoken equivalent of the graph.
+ *
+ * Everything the picture conveys, in one sentence: what is being monitored, the
+ * newest reading, the window it covers, and the same aggregates rendered beside
+ * it. Local faults are named rather than folded into loss, matching what the
+ * numbers now do.
+ */
+private fun buildGraphSummary(
+    ip: String,
+    latest: Int?,
+    lost: Boolean,
+    stats: WindowStats,
+    windowMs: Long,
+): String = buildString {
+    append(ip)
+    append(". ")
+    when {
+        lost -> append("Latest probe timed out. ")
+        latest != null -> append("Latest round trip ").append(latest).append(" milliseconds. ")
+        else -> append("No reading yet. ")
+    }
+    append("Over the last ").append(windowMs / 1000).append(" seconds: ")
+    if (stats.count == 0) {
+        append("no probes sent")
+    } else {
+        append(stats.count).append(" sent, ").append(stats.lost).append(" lost")
+        stats.avg?.let { append(", average ").append(it.roundToInt()).append(" milliseconds") }
+        stats.min?.let { append(", best ").append(it.roundToInt()) }
+        stats.max?.let { append(", worst ").append(it.roundToInt()) }
+    }
+    if (stats.localFaults > 0) {
+        append(". ").append(stats.localFaults)
+        append(" probe attempts could not leave this device and are excluded")
+    }
+    append(".")
+}
+
+/**
+ * The window actually drawn, in milliseconds.
+ *
+ * Grid cells are half as wide, so they show half the window to keep pixels per
+ * millisecond constant. That is fine right up until the result drops below
+ * [PING_TIMEOUT_MS], at which point a timeout can never be rendered at all, and
+ * the graph quietly disagrees with the loss counter beside it.
+ */
+internal fun visibleWindowMs(timeframeMs: Long, layout: PanelLayout): Long {
+    val scaled = if (layout == PanelLayout.GRID) timeframeMs / 2 else timeframeMs
+    return scaled.coerceAtLeast(PING_TIMEOUT_MS.toLong())
+}
+
 /** Calculates a ping height on the current panel based on its value. */
 private fun calculatePingY(ping: Int, panelHeight: Float, pingMaxVal: Float, zoomFactor: Float): Float {
     return (exponentialize(ping.toFloat(), pingMaxVal, zoomFactor) * (panelHeight.toDouble() / pingMaxVal)).toFloat()
@@ -1398,20 +1512,31 @@ private fun calculatePingY(ping: Int, panelHeight: Float, pingMaxVal: Float, zoo
 /** The app-wide RTT color scale lives in the theme; the graph just speaks it. */
 private fun calcPingColor(ping: Int): Color = pingColor(ping)
 
-/** Stats over the visible timeframe. [count] includes losses. [gonePct] is
- * the time-based loss: the share of the window's resolved time covered by
- * spans that ended in a lost verdict. */
+/**
+ * Stats over the visible timeframe.
+ *
+ * [count] counts probes that actually left the device, so it is the honest
+ * denominator for [lost]. [localFaults] is reported separately because a DNS or
+ * socket failure says nothing about the target.
+ *
+ * [gonePct] is time-based loss over [coveredMs], the span actually observed,
+ * rather than over the whole window. Values stay in milliseconds as doubles;
+ * rounding happens only at the point of display.
+ */
 private data class WindowStats(
     val count: Int,
     val lost: Int,
-    val avg: Int?,
-    val min: Int?,
-    val max: Int?,
-    val jitter: Int?,
+    val localFaults: Int,
+    val avg: Double?,
+    val min: Double?,
+    val max: Double?,
+    /** Mean absolute successive difference between consecutive replies. */
+    val jitter: Double?,
     val gonePct: Float?,
+    val coveredMs: Long,
 ) {
     companion object {
-        val EMPTY = WindowStats(0, 0, null, null, null, null, null)
+        val EMPTY = WindowStats(0, 0, 0, null, null, null, null, null, 0L)
     }
 }
 
@@ -1452,32 +1577,51 @@ private fun computeWindowStats(pings: RingBuffer<Ping>, windowMs: Long): WindowS
 
     var count = 0
     var lost = 0
-    var sum = 0L
+    var localFaults = 0
+    var sum = 0.0
     var valid = 0
-    var min = Int.MAX_VALUE
-    var max = Int.MIN_VALUE
-    var jitterSum = 0L
+    var min = Double.MAX_VALUE
+    var max = -Double.MAX_VALUE
+    var jitterSum = 0.0
     var jitterCount = 0
-    var olderValue = 0
+    var olderValue = 0.0
     var olderWasValid = false
     var olderAge = Long.MIN_VALUE
     var spanTotal = 0L
     var spanGone = 0L
+
+    // The oldest sample in the window may be the oldest we HAVE, not the oldest
+    // there was. Attributing everything back to the window edge invented outage
+    // time that was never observed: two failures a second apart could report
+    // 100% gone across a five second window the app had not even been running
+    // for. Coverage starts at the oldest sample we actually hold.
+    val oldestAge = window.firstOrNull()?.let { (now - it.timestamp).inWholeMilliseconds }
+    val coveredMs = oldestAge?.coerceAtMost(windowMs) ?: 0L
+
     for (p in window) {
         val age = (now - p.timestamp).inWholeMilliseconds
+
+        // A local fault means no probe ever left this device. It is not evidence
+        // about the target, so it enters neither the sent count, the loss count,
+        // nor the time-based outage share.
+        if (p.isLocalFault) {
+            localFaults++
+            continue
+        }
+
         count++
-        val v = p.value
-        val isLost = v == null || v < 0
-        // Each verdict owns the span back to its predecessor; the oldest
-        // one owns its span back to the window edge. The unresolved tail
-        // between the newest verdict and "now" belongs to nobody.
-        val span = if (olderAge == Long.MIN_VALUE) windowMs - age else olderAge - age
+        val v = p.rttMs
+        val isLost = p.isLoss
+
+        // Each verdict owns the span back to its predecessor. The oldest owns
+        // only back to the start of observed coverage.
+        val span = if (olderAge == Long.MIN_VALUE) coveredMs - age else olderAge - age
         if (span > 0) {
             spanTotal += span
             if (isLost) spanGone += span
         }
         olderAge = age
-        if (isLost) {
+        if (isLost || v == null) {
             lost++
             olderWasValid = false
         } else {
@@ -1496,11 +1640,13 @@ private fun computeWindowStats(pings: RingBuffer<Ping>, windowMs: Long): WindowS
     return WindowStats(
         count = count,
         lost = lost,
-        avg = if (valid > 0) (sum / valid).toInt() else null,
+        localFaults = localFaults,
+        avg = if (valid > 0) sum / valid else null,
         min = if (valid > 0) min else null,
         max = if (valid > 0) max else null,
-        jitter = if (jitterCount > 0) (jitterSum / jitterCount).toInt() else null,
+        jitter = if (jitterCount > 0) jitterSum / jitterCount else null,
         gonePct = if (spanTotal > 0) spanGone * 100f / spanTotal else null,
+        coveredMs = coveredMs,
     )
 }
 

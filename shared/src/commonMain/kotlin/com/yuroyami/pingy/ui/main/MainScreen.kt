@@ -24,7 +24,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -59,7 +63,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.layout.onSizeChanged
@@ -81,7 +91,10 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.yuroyami.pingy.GraphStyle
 import com.yuroyami.pingy.PanelLayout
+import com.yuroyami.pingy.PingyViewmodel
 import com.yuroyami.pingy.logic.Constants
+import com.yuroyami.pingy.logic.TargetParse
+import com.yuroyami.pingy.logic.parseTarget
 import com.yuroyami.pingy.theme.Paletting
 import com.yuroyami.pingy.ui.Screen
 import com.yuroyami.pingy.ui.adam.LocalViewmodel
@@ -90,22 +103,6 @@ import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.Font
 import pingy.shared.generated.resources.Inter_Regular
 import pingy.shared.generated.resources.Res
-
-/**
- * Normalize whatever the user pasted into the "IP or Domain" field into the
- * string we actually pass to the resolver. Strips scheme ("https://"),
- * trailing paths ("/foo") and surrounding whitespace. Returns `null` when
- * nothing usable remains.
- */
-private fun sanitizeHost(raw: String): String? {
-    val trimmed = raw.trim()
-    if (trimmed.isEmpty()) return null
-    val noScheme = trimmed
-        .removePrefix("https://").removePrefix("http://")
-        .removePrefix("HTTPS://").removePrefix("HTTP://")
-    val pathStripped = noScheme.substringBefore('/').substringBefore('?')
-    return pathStripped.ifBlank { null }
-}
 
 /** The neon PINGY wordmark: black outline pass under a gradient+glow pass.
  * Shared between the cockpit header and the about screen. */
@@ -176,12 +173,18 @@ fun MainScreenUI() {
     ) {
         Scaffold(
             containerColor = Color.Transparent,
+            // The background above is deliberately edge to edge; only content
+            // is inset. safeDrawing covers status bar, navigation bar, cutout
+            // and IME in one, on every platform.
+            contentWindowInsets = WindowInsets.safeDrawing,
             topBar = { CockpitHeader() },
         ) { pv ->
             val layout by viewmodel.panelLayout.collectAsState()
+            // Consume the whole PaddingValues. Only the top was applied
+            // before, so the last panel sat under the home indicator.
             val contentModifier = Modifier
                 .fillMaxSize()
-                .padding(top = pv.calculateTopPadding())
+                .padding(pv)
             when (layout) {
                 PanelLayout.COLUMN -> LazyColumn(modifier = contentModifier) {
                     items(viewmodel.panels, key = { it.ip }) { panel ->
@@ -247,7 +250,9 @@ private fun CockpitHeader() {
     Column(
         Modifier
             .fillMaxWidth()
-            .systemBarsPadding()
+            .windowInsetsPadding(
+                WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top)
+            )
             .padding(horizontal = 12.dp)
     ) {
         // Wordmark row: neon PINGY (tap for about) left, layout + style right.
@@ -311,15 +316,24 @@ private fun CockpitHeader() {
         // Command strip. The presets are not a popup: the strip itself morphs
         // open, growing downward into the list, so field and menu are one
         // continuous surface with the same width and chassis.
-        val txt = remember { mutableStateOf(Constants.iplist[0]) }
+        // Starts empty. Pre-filling it with the first preset meant the very
+        // first Add always collided with the panel the app had already made.
+        val txt = remember { mutableStateOf("") }
         val presetsOpen = remember { mutableStateOf(false) }
         val addTarget: () -> Unit = {
             presetsOpen.value = false
-            val host = sanitizeHost(txt.value)
-            when {
-                host == null -> viewmodel.notify("Not a valid address")
-                viewmodel.addPanel(host) -> viewmodel.notify("$host added")
-                else -> viewmodel.notify("$host is already added")
+            when (val parsed = parseTarget(txt.value)) {
+                is TargetParse.Invalid -> viewmodel.notify(parsed.reason.message)
+                is TargetParse.Valid -> when (viewmodel.addPanel(parsed.host)) {
+                    PingyViewmodel.AddResult.Added -> {
+                        viewmodel.notify("${'$'}{parsed.host} added")
+                        txt.value = ""
+                    }
+                    PingyViewmodel.AddResult.Duplicate ->
+                        viewmodel.notify("${'$'}{parsed.host} is already being monitored")
+                    PingyViewmodel.AddResult.AtCapacity ->
+                        viewmodel.notify("Panel limit reached; remove one first")
+                }
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -346,10 +360,19 @@ private fun CockpitHeader() {
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         TextField(
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .semantics { contentDescription = "Target IP address or domain name" },
                             singleLine = true,
                             value = txt.value,
                             onValueChange = { txt.value = it },
+                            label = { Text("IP or domain", fontSize = 12.sp) },
+                            keyboardOptions = KeyboardOptions(
+                                autoCorrectEnabled = false,
+                                keyboardType = KeyboardType.Uri,
+                                imeAction = ImeAction.Go,
+                            ),
+                            keyboardActions = KeyboardActions(onGo = { addTarget() }),
                             textStyle = TextStyle(
                                 color = Paletting.SGN,
                                 fontSize = 19.sp,
@@ -481,7 +504,9 @@ private fun CockpitHeader() {
         val noticeVal by viewmodel.notice.collectAsState()
         LaunchedEffect(noticeVal?.id) {
             val shown = noticeVal ?: return@LaunchedEffect
-            delay(2_200)
+            // 2.2s was below the WCAG "enough time" guidance for a message a
+            // reader must notice, parse and act on.
+            delay(6_000)
             if (viewmodel.notice.value?.id == shown.id) viewmodel.notice.value = null
         }
         Box(
