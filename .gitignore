@@ -55,3 +55,6 @@ shared/shared.podspec
 
 # Legal texts are copied into the APK from the repository root at build time.
 androidApp/src/main/assets/legal/
+
+# Internal design notes, kept out of the published repository.
+Playbook/
