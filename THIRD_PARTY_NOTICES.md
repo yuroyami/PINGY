@@ -1,58 +1,134 @@
 # Third-party notices
 
-Pingy is distributed under the GNU Affero General Public License version 3. It
-also incorporates the following runtime component families. The versions are
-the direct roots pinned by the build; their platform and transitive modules use
-the same listed license unless their own packaged metadata states otherwise.
-Gradle dependency metadata remains enabled in Android artifacts so release
-tooling can inspect the exact resolved module graph.
+Pingy bundles the open-source components listed below. Every one of them is
+licensed under the **Apache License, Version 2.0**; the full text is in
+[licenses/APACHE-2.0.txt](licenses/APACHE-2.0.txt).
 
-| Component family | Version | Project/copyright steward | License text |
-|:--|:--|:--|:--|
-| Kotlin standard library | 2.3.20 | Kotlin Team / JetBrains | [Apache 2.0](licenses/APACHE-2.0.txt) |
-| Kotlin Coroutines | 1.11.0 | JetBrains Team / JetBrains | [Apache 2.0](licenses/APACHE-2.0.txt) |
-| Compose Multiplatform UI, Foundation, Resources | 1.11.1 | JetBrains and Android Open Source Project contributors | [Apache 2.0](licenses/APACHE-2.0.txt) |
-| Compose Material 3 | 1.9.0 | Android Open Source Project contributors | [Apache 2.0](licenses/APACHE-2.0.txt) |
-| Compose Material Icons Extended | 1.7.3 | Android Open Source Project contributors | [Apache 2.0](licenses/APACHE-2.0.txt) |
-| Jetpack Lifecycle | 2.10.0 | Android Open Source Project contributors | [Apache 2.0](licenses/APACHE-2.0.txt) |
-| AndroidX Activity Compose | 1.13.0 | Android Open Source Project contributors | [Apache 2.0](licenses/APACHE-2.0.txt) |
-| AndroidX AppCompat | 1.7.1 | Android Open Source Project contributors | [Apache 2.0](licenses/APACHE-2.0.txt) |
-| AndroidX Core | 1.18.0 | Android Open Source Project contributors | [Apache 2.0](licenses/APACHE-2.0.txt) |
-| AndroidX Core Splashscreen | 1.2.0 | Android Open Source Project contributors | [Apache 2.0](licenses/APACHE-2.0.txt) |
-| Multiplatform Settings | 1.3.0 | Russell Wolf and contributors | [Apache 2.0](licenses/APACHE-2.0.txt) |
-| Kermit | 2.1.0 | Touchlab and contributors | [Apache 2.0](licenses/APACHE-2.0.txt) |
-| Android desugar JDK libraries | 2.1.5 | Android Open Source Project and OpenJDK contributors | [GPL v2 with Classpath Exception](licenses/GPL-2.0-WITH-CLASSPATH-EXCEPTION.txt) |
+This list is generated from the resolved Android release runtime classpath, so
+it reflects what actually ships rather than what is declared as a direct
+dependency. Regenerate it whenever the dependency set changes.
 
-## Embedded graphics and image libraries
+Pingy itself is licensed under the GNU Affero General Public License v3.0; see
+[LICENSE](LICENSE) and [NOTICE](NOTICE).
 
-Compose Multiplatform resolves Skiko `0.144.6`. Its Apple framework links the
-Skia `m144-22f58c9fd4` binary bundle and the libraries below. These are not
-represented as separate Gradle modules, so they are inventoried explicitly
-from Skiko's native linker configuration and Skia's pinned `DEPS` revisions.
-The copied license files come from those exact upstream revisions.
+## Components
 
-| Embedded component | Pinned source revision | Project/copyright steward | License text |
-|:--|:--|:--|:--|
-| Skiko | 0.144.6 | JetBrains and contributors | [Apache 2.0](licenses/APACHE-2.0.txt) |
-| Skia | m144 / `22f58c9fd43d55bde818821c04b48fda5d7ec939` | Google and contributors | [BSD 3-Clause](licenses/SKIA-BSD-3-CLAUSE.txt) |
-| HarfBuzz | `08b52ae2e44931eef163dbad71697f911fadc323` | HarfBuzz contributors | [Old MIT](licenses/HARFBUZZ-OLD-MIT.txt) |
-| ICU | `364118a1d9da24bb5b770ac3d762ac144d6da5a4` | Unicode, Inc. and contributors | [Unicode License v3 and bundled notices](licenses/ICU-UNICODE-3.0.txt) |
-| libpng | `49363adcfaf098748d7a4c8c624ad8c45a8c3a86` | PNG Reference Library authors | [PNG Reference Library License v2](licenses/LIBPNG-2.0.txt) |
-| libjpeg-turbo | `e14cbfaa85529d47f9f55b0f104a579c1061f9ad` | Independent JPEG Group, libjpeg-turbo contributors, and others | [IJG and BSD-style licenses](licenses/LIBJPEG-TURBO.txt) |
-| libwebp | `845d5476a866141ba35ac133f856fa62f0b7445f` | Google and contributors | [BSD 3-Clause](licenses/WEBP-BSD-3-CLAUSE.txt) |
-| Wuffs | `e3f919ccfe3ef542cfc983a82146070258fb57f8` | Google and contributors | [Apache 2.0](licenses/WUFFS-APACHE-2.0.txt) |
-| Expat | `8e49998f003d693213b538ef765814c7d21abada` | Expat maintainers | [MIT](licenses/EXPAT-MIT.txt) |
-| zlib | `646b7f569718921d7d4b5b8e22572ff6c76f2596` | Jean-loup Gailly, Mark Adler, and contributors | [zlib License](licenses/ZLIB.txt) |
-| PIEX | `bb217acdca1cc0c16b704669dd6f91a1b509c406` | Google and contributors | [Apache 2.0](licenses/PIEX-APACHE-2.0.txt) |
-| Adobe DNG SDK | `dbe0a676450d9b8c71bf00688bb306409b779e90` | Adobe Systems Incorporated | [DNG SDK License Agreement](licenses/ADOBE-DNG-SDK.txt) |
+### AndroidX (Android Open Source Project)
 
-This software is based in part on the work of the Independent JPEG Group.
+Apache-2.0. 128 module(s) across 41 group(s):
 
-The complete license texts above are immutable files in the source distribution
-and are packaged into both Android and iOS app bundles. Project-specific AGPL
-terms are in [LICENSE](LICENSE). Build and test tools such as Gradle, the Android
-Gradle Plugin, AndroidX Test, CocoaPods, and Xcode are not linked into or
-redistributed inside the application.
+- `androidx.activity` — `activity`, `activity-compose`, `activity-ktx`
+- `androidx.annotation` — `annotation`, `annotation-experimental`, `annotation-jvm`
+- `androidx.appcompat` — `appcompat`, `appcompat-resources`
+- `androidx.arch.core` — `core-common`, `core-runtime`
+- `androidx.autofill` — `autofill`
+- `androidx.collection` — `collection`, `collection-jvm`, `collection-ktx`
+- `androidx.compose.animation` — `animation`, `animation-android`, `animation-core`, `animation-core-android`
+- `androidx.compose.foundation` — `foundation`, `foundation-android`, `foundation-layout`, `foundation-layout-android`
+- `androidx.compose.material` — `material-icons-core`, `material-icons-core-android`, `material-icons-extended`, `material-icons-extended-android`, `material-ripple`, `material-ripple-android`
+- `androidx.compose.material3` — `material3`, `material3-android`
+- `androidx.compose.runtime` — `runtime`, `runtime-android`, `runtime-annotation`, `runtime-annotation-android`, `runtime-retain`, `runtime-retain-android`, `runtime-saveable`, `runtime-saveable-android`
+- `androidx.compose.ui` — `ui`, `ui-android`, `ui-geometry`, `ui-geometry-android`, `ui-graphics`, `ui-graphics-android`, `ui-text`, `ui-text-android`, `ui-unit`, `ui-unit-android`, `ui-util`, `ui-util-android`
+- `androidx.concurrent` — `concurrent-futures`
+- `androidx.core` — `core`, `core-ktx`, `core-splashscreen`, `core-viewtree`
+- `androidx.cursoradapter` — `cursoradapter`
+- `androidx.customview` — `customview`, `customview-poolingcontainer`
+- `androidx.datastore` — `datastore-core`, `datastore-core-android`, `datastore-core-okio`, `datastore-core-okio-jvm`, `datastore-preferences-core`, `datastore-preferences-core-android`, `datastore-preferences-external-protobuf`, `datastore-preferences-proto`
+- `androidx.documentfile` — `documentfile`
+- `androidx.drawerlayout` — `drawerlayout`
+- `androidx.dynamicanimation` — `dynamicanimation`
+- `androidx.emoji2` — `emoji2`, `emoji2-views-helper`
+- `androidx.fragment` — `fragment`
+- `androidx.graphics` — `graphics-path`, `graphics-shapes`, `graphics-shapes-android`
+- `androidx.interpolator` — `interpolator`
+- `androidx.legacy` — `legacy-support-core-utils`
+- `androidx.lifecycle` — `lifecycle-common`, `lifecycle-common-java8`, `lifecycle-common-jvm`, `lifecycle-livedata`, `lifecycle-livedata-core`, `lifecycle-livedata-core-ktx`, `lifecycle-process`, `lifecycle-runtime`, `lifecycle-runtime-android`, `lifecycle-runtime-compose`, `lifecycle-runtime-compose-android`, `lifecycle-runtime-ktx`, `lifecycle-runtime-ktx-android`, `lifecycle-viewmodel`, `lifecycle-viewmodel-android`, `lifecycle-viewmodel-compose`, `lifecycle-viewmodel-compose-android`, `lifecycle-viewmodel-ktx`, `lifecycle-viewmodel-navigation3`, `lifecycle-viewmodel-navigation3-android`, `lifecycle-viewmodel-savedstate`, `lifecycle-viewmodel-savedstate-android`
+- `androidx.loader` — `loader`
+- `androidx.localbroadcastmanager` — `localbroadcastmanager`
+- `androidx.navigation3` — `navigation3-runtime`, `navigation3-runtime-android`, `navigation3-ui`, `navigation3-ui-android`
+- `androidx.navigationevent` — `navigationevent`, `navigationevent-android`, `navigationevent-compose`, `navigationevent-compose-android`
+- `androidx.print` — `print`
+- `androidx.profileinstaller` — `profileinstaller`
+- `androidx.resourceinspection` — `resourceinspection-annotation`
+- `androidx.savedstate` — `savedstate`, `savedstate-android`, `savedstate-compose`, `savedstate-compose-android`, `savedstate-ktx`
+- `androidx.startup` — `startup-runtime`
+- `androidx.tracing` — `tracing`, `tracing-android`
+- `androidx.transition` — `transition`
+- `androidx.vectordrawable` — `vectordrawable`, `vectordrawable-animated`
+- `androidx.versionedparcelable` — `versionedparcelable`
+- `androidx.viewpager` — `viewpager`
+- `androidx.window` — `window`, `window-core`, `window-core-android`
 
-Android, AndroidX, Jetpack, Kotlin, and Compose are trademarks of their
-respective owners. Their inclusion does not imply endorsement of Pingy.
+### Compose Multiplatform (JetBrains)
+
+Apache-2.0. 18 module(s) across 7 group(s):
+
+- `org.jetbrains.compose.animation` — `animation`, `animation-core`
+- `org.jetbrains.compose.components` — `components-resources`, `components-resources-android`
+- `org.jetbrains.compose.foundation` — `foundation`, `foundation-layout`
+- `org.jetbrains.compose.material` — `material-icons-core`, `material-icons-extended`, `material-ripple`
+- `org.jetbrains.compose.material3` — `material3`
+- `org.jetbrains.compose.runtime` — `runtime`, `runtime-saveable`
+- `org.jetbrains.compose.ui` — `ui`, `ui-geometry`, `ui-graphics`, `ui-text`, `ui-unit`, `ui-util`
+
+### Compose Multiplatform AndroidX ports (JetBrains)
+
+Apache-2.0. 11 module(s) across 4 group(s):
+
+- `org.jetbrains.androidx.lifecycle` — `lifecycle-common`, `lifecycle-runtime`, `lifecycle-runtime-compose`, `lifecycle-viewmodel`, `lifecycle-viewmodel-compose`, `lifecycle-viewmodel-navigation3`, `lifecycle-viewmodel-savedstate`
+- `org.jetbrains.androidx.navigation3` — `navigation3-ui`
+- `org.jetbrains.androidx.navigationevent` — `navigationevent-compose`
+- `org.jetbrains.androidx.savedstate` — `savedstate`, `savedstate-compose`
+
+### Google
+
+Apache-2.0. 1 module(s) across 1 group(s):
+
+- `com.google.guava` — `listenablefuture`
+
+### JSpecify
+
+Apache-2.0. 1 module(s) across 1 group(s):
+
+- `org.jspecify` — `jspecify`
+
+### JetBrains
+
+Apache-2.0. 1 module(s) across 1 group(s):
+
+- `org.jetbrains` — `annotations`
+
+### Kotlin (JetBrains)
+
+Apache-2.0. 2 module(s) across 1 group(s):
+
+- `org.jetbrains.kotlin` — `kotlin-stdlib`, `kotlin-stdlib-common`
+
+### Square
+
+Apache-2.0. 2 module(s) across 1 group(s):
+
+- `com.squareup.okio` — `okio`, `okio-jvm`
+
+### Touchlab
+
+Apache-2.0. 4 module(s) across 1 group(s):
+
+- `co.touchlab` — `kermit`, `kermit-android`, `kermit-core`, `kermit-core-android`
+
+### kotlinx (JetBrains)
+
+Apache-2.0. 13 module(s) across 1 group(s):
+
+- `org.jetbrains.kotlinx` — `atomicfu`, `atomicfu-jvm`, `kotlinx-coroutines-android`, `kotlinx-coroutines-bom`, `kotlinx-coroutines-core`, `kotlinx-coroutines-core-jvm`, `kotlinx-datetime`, `kotlinx-datetime-jvm`, `kotlinx-serialization-bom`, `kotlinx-serialization-core`, `kotlinx-serialization-core-jvm`, `kotlinx-serialization-json`, `kotlinx-serialization-json-jvm`
+
+## Native code
+
+`shared/native/icmp_core.h` and `shared/native/icmp_ping.c` are original work,
+covered by Pingy's own license. They use only the platform C library and the
+POSIX socket API; no third-party C code is vendored.
+
+## Fonts and artwork
+
+The Inter typeface is used under the SIL Open Font License 1.1. Application
+icons and the wordmark are original work by the Pingy author.

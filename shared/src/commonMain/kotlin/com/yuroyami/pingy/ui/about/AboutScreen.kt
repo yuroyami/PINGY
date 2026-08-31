@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -33,6 +34,8 @@ import androidx.compose.ui.unit.sp
 import com.yuroyami.pingy.theme.Paletting
 import com.yuroyami.pingy.ui.adam.LocalViewmodel
 import com.yuroyami.pingy.ui.main.NeonWordmark
+import com.yuroyami.pingy.i18n.strings
+import com.yuroyami.pingy.ui.Screen
 import kitessot.generated.BuildConfig
 import org.jetbrains.compose.resources.Font
 import org.jetbrains.compose.resources.painterResource
@@ -45,6 +48,7 @@ import pingy.shared.generated.resources.pingy_vector
  * wordmark plays label). */
 @Composable
 fun AboutScreenUI() {
+    val s = strings
     val viewmodel = LocalViewmodel.current
     val inter = Font(Res.font.Inter_Regular)
     val interFont = remember(inter) { FontFamily(inter) }
@@ -77,7 +81,7 @@ fun AboutScreenUI() {
         ) {
             Icon(
                 Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Back",
+                contentDescription = s.back,
                 tint = Color(0xFF8A95A3),
             )
         }
@@ -106,27 +110,30 @@ fun AboutScreenUI() {
             )
             Spacer(Modifier.height(26.dp))
             Text(
-                text = "Live ping panels for every target you care about.",
+                text = s.aboutTagline,
                 color = Color(0xFFC9D2DD),
                 fontSize = 14.sp,
                 fontFamily = interFont,
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                text = "Kotlin Multiplatform + Compose. Unprivileged ICMP, no root.",
+                text = s.aboutTech,
                 color = Color(0xFF5E6874),
                 fontSize = 12.sp,
                 fontFamily = interFont,
             )
 
             Spacer(Modifier.height(30.dp))
-            val uriHandler = LocalUriHandler.current
+            // Store policy expects a privacy route inside the app, and an AGPL
+            // binary has to carry its licence with it. Both live one tap away.
             Text(
-                text = "github.com/yuroyami/PINGY",
+                text = s.legalTitle,
                 color = Paletting.SGN,
-                fontSize = 14.sp,
+                fontSize = 15.sp,
                 fontFamily = interFont,
-                modifier = Modifier.clickable { uriHandler.openUri("https://github.com/yuroyami/PINGY") },
+                modifier = Modifier
+                    .clickable(role = Role.Button) { viewmodel.backstack.add(Screen.Legal) }
+                    .padding(vertical = 14.dp, horizontal = 24.dp),
             )
         }
     }
