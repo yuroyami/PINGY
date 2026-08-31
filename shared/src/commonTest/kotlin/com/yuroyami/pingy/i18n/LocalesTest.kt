@@ -140,6 +140,7 @@ class LocalesTest {
                 "statJitter" to s.statJitter,
                 "statLoss" to s.statLoss,
                 "statGone" to s.statGone,
+                "statRange" to s.statRange,
             ).forEach { (name, value) ->
                 assertTrue(value.length <= 10, "$tag.$name is ${value.length} chars: `$value`")
             }

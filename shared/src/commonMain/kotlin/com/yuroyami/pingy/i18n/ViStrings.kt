@@ -40,8 +40,7 @@ val ViStrings = Strings(
     statJitter = "JITTER",
     statLoss = "MẤT",
     statGone = "GIÁN ĐOẠN",
-    statLow = "THẤP",
-    statHigh = "CAO",
+    statRange = "KHOẢNG",
 
     firstRunTitle = "Chưa theo dõi gì cả",
     firstRunBody = "Thêm một máy chủ ở trên để bắt đầu. Trước đó Pingy không gửi gì.",

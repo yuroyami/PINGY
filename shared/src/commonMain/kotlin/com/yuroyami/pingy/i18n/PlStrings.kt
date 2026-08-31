@@ -40,8 +40,7 @@ val PlStrings = Strings(
     statJitter = "JITTER",
     statLoss = "STRATY",
     statGone = "PRZERWA",
-    statLow = "MIN",
-    statHigh = "MAKS",
+    statRange = "ZAKRES",
 
     firstRunTitle = "Nic nie jest monitorowane",
     firstRunBody = "Dodaj hosta powyżej, aby zacząć. Wcześniej Pingy nie wysyła ruchu.",

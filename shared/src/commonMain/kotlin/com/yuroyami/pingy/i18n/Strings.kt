@@ -59,8 +59,7 @@ data class Strings(
     val statJitter: String,
     val statLoss: String,
     val statGone: String,
-    val statLow: String,
-    val statHigh: String,
+    val statRange: String,
 
     // Empty and error states
     val firstRunTitle: String,

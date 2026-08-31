@@ -40,8 +40,7 @@ val EnStrings = Strings(
     statJitter = "JIT",
     statLoss = "LOSS",
     statGone = "GONE",
-    statLow = "LOW",
-    statHigh = "HIGH",
+    statRange = "RANGE",
 
     firstRunTitle = "Nothing is being monitored",
     firstRunBody = "Add a host above to start. Pingy sends no traffic until you do.",

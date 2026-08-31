@@ -40,8 +40,7 @@ val ZhHantStrings = Strings(
     statJitter = "抖動",
     statLoss = "遺失",
     statGone = "中斷",
-    statLow = "最低",
-    statHigh = "最高",
+    statRange = "範圍",
 
     firstRunTitle = "目前沒有監控任何目標",
     firstRunBody = "在上方新增主機即可開始。在此之前 Pingy 不會送出任何流量。",

@@ -40,8 +40,7 @@ val ZhHansStrings = Strings(
     statJitter = "抖动",
     statLoss = "丢包",
     statGone = "中断",
-    statLow = "最低",
-    statHigh = "最高",
+    statRange = "范围",
 
     firstRunTitle = "当前没有监控任何目标",
     firstRunBody = "在上方添加主机即可开始。在此之前 Pingy 不会发送任何流量。",

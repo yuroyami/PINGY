@@ -40,8 +40,7 @@ val ArStrings = Strings(
     statJitter = "تذبذب",
     statLoss = "فقد",
     statGone = "انقطاع",
-    statLow = "أدنى",
-    statHigh = "أعلى",
+    statRange = "مدى",
 
     firstRunTitle = "لا توجد مراقبة حالياً",
     firstRunBody = "أضف مضيفاً بالأعلى للبدء. لا يرسل Pingy أي بيانات قبل ذلك.",

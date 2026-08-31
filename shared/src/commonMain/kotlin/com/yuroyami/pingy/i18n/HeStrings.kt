@@ -40,8 +40,7 @@ val HeStrings = Strings(
     statJitter = "ריצוד",
     statLoss = "אובדן",
     statGone = "ניתוק",
-    statLow = "מינ",
-    statHigh = "מקס",
+    statRange = "טווח",
 
     firstRunTitle = "לא מתבצע מעקב",
     firstRunBody = "הוסף מארח למעלה כדי להתחיל. עד אז Pingy לא שולח תעבורה.",

@@ -40,8 +40,7 @@ val PtStrings = Strings(
     statJitter = "JITTER",
     statLoss = "PERDA",
     statGone = "QUEDA",
-    statLow = "MÍN",
-    statHigh = "MÁX",
+    statRange = "FAIXA",
 
     firstRunTitle = "Nada sendo monitorado",
     firstRunBody = "Adicione um host acima para começar. O Pingy não envia tráfego antes disso.",

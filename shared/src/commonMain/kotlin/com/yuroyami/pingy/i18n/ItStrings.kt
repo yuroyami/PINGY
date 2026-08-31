@@ -40,8 +40,7 @@ val ItStrings = Strings(
     statJitter = "JITTER",
     statLoss = "PERDITA",
     statGone = "ASSENZA",
-    statLow = "MIN",
-    statHigh = "MAX",
+    statRange = "INTERVALLO",
 
     firstRunTitle = "Nessun monitoraggio in corso",
     firstRunBody = "Aggiungi un host qui sopra per iniziare. Prima Pingy non invia nulla.",

@@ -131,7 +131,7 @@ internal fun StatsSheet(stats: WindowStats, fontFamily: FontFamily) {
                 gone != null && gone > 0.05f,
             )
         }
-        label("  RANGE ")
+        label("  " + s.statRange + " ")
         value(
             // Format, do not interpolate: these are Doubles now, and printing
             // one raw gives "35.567–26866.845ms".

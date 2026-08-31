@@ -40,8 +40,7 @@ val EsStrings = Strings(
     statJitter = "JITTER",
     statLoss = "PÉRD",
     statGone = "CAÍDA",
-    statLow = "MÍN",
-    statHigh = "MÁX",
+    statRange = "RANGO",
 
     firstRunTitle = "No se está monitorizando nada",
     firstRunBody = "Añade un host arriba para empezar. Pingy no envía tráfico hasta entonces.",

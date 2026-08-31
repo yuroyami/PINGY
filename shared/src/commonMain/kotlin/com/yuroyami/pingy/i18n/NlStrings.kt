@@ -40,8 +40,7 @@ val NlStrings = Strings(
     statJitter = "JITTER",
     statLoss = "VERLIES",
     statGone = "UITVAL",
-    statLow = "MIN",
-    statHigh = "MAX",
+    statRange = "BEREIK",
 
     firstRunTitle = "Er wordt niets gemonitord",
     firstRunBody = "Voeg hierboven een host toe om te beginnen. Tot dan verstuurt Pingy niets.",

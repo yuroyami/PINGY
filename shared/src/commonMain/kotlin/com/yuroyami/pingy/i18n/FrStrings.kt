@@ -40,8 +40,7 @@ val FrStrings = Strings(
     statJitter = "GIGUE",
     statLoss = "PERTE",
     statGone = "COUPÉ",
-    statLow = "MIN",
-    statHigh = "MAX",
+    statRange = "PLAGE",
 
     firstRunTitle = "Aucune surveillance en cours",
     firstRunBody = "Ajoutez un hôte ci-dessus pour commencer. Pingy n'envoie rien avant.",

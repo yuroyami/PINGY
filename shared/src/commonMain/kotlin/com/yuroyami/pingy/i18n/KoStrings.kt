@@ -40,8 +40,7 @@ val KoStrings = Strings(
     statJitter = "지터",
     statLoss = "손실",
     statGone = "중단",
-    statLow = "최소",
-    statHigh = "최대",
+    statRange = "범위",
 
     firstRunTitle = "모니터링 중인 대상 없음",
     firstRunBody = "위에서 호스트를 추가하면 시작합니다. 그전까지 Pingy는 트래픽을 보내지 않습니다.",

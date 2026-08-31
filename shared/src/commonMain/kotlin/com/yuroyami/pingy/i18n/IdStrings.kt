@@ -40,8 +40,7 @@ val IdStrings = Strings(
     statJitter = "JITTER",
     statLoss = "HILANG",
     statGone = "PUTUS",
-    statLow = "MIN",
-    statHigh = "MAKS",
+    statRange = "RENTANG",
 
     firstRunTitle = "Tidak ada yang dipantau",
     firstRunBody = "Tambahkan host di atas untuk memulai. Sebelum itu Pingy tidak mengirim apa pun.",

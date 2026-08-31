@@ -40,8 +40,7 @@ val UkStrings = Strings(
     statJitter = "ДЖИТЕР",
     statLoss = "ВТРАТИ",
     statGone = "ПРОСТІЙ",
-    statLow = "МІН",
-    statHigh = "МАКС",
+    statRange = "ДІАПАЗОН",
 
     firstRunTitle = "Нічого не відстежується",
     firstRunBody = "Додайте вузол вище, щоб почати. До того Pingy не надсилає трафік.",

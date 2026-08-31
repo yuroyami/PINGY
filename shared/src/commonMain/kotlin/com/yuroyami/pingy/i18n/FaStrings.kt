@@ -40,8 +40,7 @@ val FaStrings = Strings(
     statJitter = "لرزش",
     statLoss = "افت",
     statGone = "قطعی",
-    statLow = "کمینه",
-    statHigh = "بیشینه",
+    statRange = "بازه",
 
     firstRunTitle = "چیزی زیر نظر نیست",
     firstRunBody = "برای شروع، بالا یک میزبان بیفزایید. تا آن زمان Pingy چیزی نمی‌فرستد.",

@@ -40,8 +40,7 @@ val JaStrings = Strings(
     statJitter = "ジッタ",
     statLoss = "損失",
     statGone = "断絶",
-    statLow = "最小",
-    statHigh = "最大",
+    statRange = "範囲",
 
     firstRunTitle = "監視対象はありません",
     firstRunBody = "上でホストを追加すると開始します。それまで Pingy は通信しません。",

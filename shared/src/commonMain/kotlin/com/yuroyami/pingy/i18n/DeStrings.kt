@@ -40,8 +40,7 @@ val DeStrings = Strings(
     statJitter = "JITTER",
     statLoss = "VERLUST",
     statGone = "AUSFALL",
-    statLow = "MIN",
-    statHigh = "MAX",
+    statRange = "SPANNE",
 
     firstRunTitle = "Es wird nichts überwacht",
     firstRunBody = "Oben einen Host hinzufügen, um zu starten. Vorher sendet Pingy nichts.",

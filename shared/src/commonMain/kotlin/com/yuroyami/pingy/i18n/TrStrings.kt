@@ -40,8 +40,7 @@ val TrStrings = Strings(
     statJitter = "TİTREŞİM",
     statLoss = "KAYIP",
     statGone = "KESİNTİ",
-    statLow = "EN AZ",
-    statHigh = "EN ÇOK",
+    statRange = "ARALIK",
 
     firstRunTitle = "Hiçbir şey izlenmiyor",
     firstRunBody = "Başlamak için yukarıdan bir sunucu ekleyin. O ana kadar Pingy trafik göndermez.",

@@ -40,8 +40,7 @@ val HiStrings = Strings(
     statJitter = "जिटर",
     statLoss = "हानि",
     statGone = "बंद",
-    statLow = "न्यून",
-    statHigh = "उच्च",
+    statRange = "परास",
 
     firstRunTitle = "कुछ भी नहीं देखा जा रहा",
     firstRunBody = "शुरू करने के लिए ऊपर होस्ट जोड़ें। तब तक Pingy कोई ट्रैफ़िक नहीं भेजता।",

@@ -40,8 +40,7 @@ val RuStrings = Strings(
     statJitter = "ДЖИТТЕР",
     statLoss = "ПОТЕРИ",
     statGone = "ПРОСТОЙ",
-    statLow = "МИН",
-    statHigh = "МАКС",
+    statRange = "ДИАПАЗОН",
 
     firstRunTitle = "Ничего не отслеживается",
     firstRunBody = "Добавьте узел выше, чтобы начать. До этого Pingy не шлёт трафик.",
