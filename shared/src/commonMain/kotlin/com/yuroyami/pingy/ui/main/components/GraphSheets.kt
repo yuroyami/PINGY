@@ -156,8 +156,8 @@ internal fun StatsSheet(stats: WindowStats, fontFamily: FontFamily) {
         )
     }
 
-    // UX-17: AVG, JIT, LOSS and GONE were four unexplained abbreviations. The
-    // explanation is one tap away rather than absent.
+    // The strip is four abbreviations and a span. Without this the reader has
+    // to guess what each one measures, so the explanation sits one tap away.
     Text(
         text = s.whatDoTheseMean,
         color = StatsLabelColor,
@@ -285,8 +285,8 @@ internal fun PingPanel.SettingsSheet(fontFamily: FontFamily) {
             steps = 18, // 100ms steps
             fontFamily = fontFamily,
         ) { roof.value = it.toInt() }
-        // UX-14: reset had no visible control at all. It existed only as a long
-        // press on the graph, which nothing announced and nothing hinted at.
+        // Reset needs a control that can be seen and read out. A long press on
+        // the graph alone is invisible to a screen reader and hints at nothing.
         Text(
             text = s.resetPanelSettings,
             color = Paletting.SGN,
