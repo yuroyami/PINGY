@@ -17,8 +17,8 @@ import kotlin.concurrent.Volatile
  * costs at most one element at the tail. Callers needing a stable view across
  * several passes should take a [snapshot].
  *
- * The internals are private on purpose. They used to be public, which let any
- * caller break the single-writer invariant the whole design rests on.
+ * The internals are private on purpose. Exposed, they let any caller break the
+ * single-writer rule the whole design rests on.
  */
 class RingBuffer<T : Any>(val capacity: Int) {
 

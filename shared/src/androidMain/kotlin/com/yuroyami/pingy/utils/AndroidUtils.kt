@@ -11,12 +11,12 @@ import androidx.activity.enableEdgeToEdge
  * Apply the PINGY-specific window chrome: edge-to-edge layout (content drawn
  * under the status and navigation bars) and display-cutout tolerance on P+.
  *
- * The screen is deliberately NOT forced awake. FLAG_KEEP_SCREEN_ON used to be
- * set unconditionally for the whole app lifetime, so leaving Pingy open drained
- * the battery and heated the device with no control and no disclosure. Keeping
- * the display on is now opt-in per session via [setKeepScreenOn].
+ * The screen is deliberately NOT forced awake. Holding FLAG_KEEP_SCREEN_ON for
+ * the whole app lifetime would drain the battery and heat the device with
+ * nothing telling the user why, so keeping the display on is opt-in per session
+ * via [setKeepScreenOn].
  *
- * Must run before setContent in [ComponentActivity.onCreate] — later
+ * Must run before setContent in [ComponentActivity.onCreate], because later
  * insets already reference the decor state this sets up.
  */
 fun ComponentActivity.applyActivityUiProperties() {
@@ -24,9 +24,9 @@ fun ComponentActivity.applyActivityUiProperties() {
     //
     // The default `enableEdgeToEdge()` picks icon contrast from the SYSTEM
     // theme, not from what the app actually paints. Pingy's cockpit is always
-    // near-black, so on a phone set to light mode the system drew black status
-    // icons on a black background and the clock and signal bars vanished.
-    // Forcing the dark-scrim style ties the icons to the app's own surface.
+    // near-black, so on a phone set to light mode that means black status icons
+    // on a black background: the clock and signal bars disappear. Forcing the
+    // dark-scrim style ties the icons to the app's own surface.
     enableEdgeToEdge(
         statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
         navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),

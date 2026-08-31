@@ -41,7 +41,7 @@ val PingyLocales: Map<String, Strings> = mapOf(
     "zh-Hant" to ZhHantStrings,
 )
 
-/** Languages written right to left. Used to assert mirrored layout in tests. */
+/** Languages written right to left. Drives the mirrored-layout assertions in tests. */
 val RtlLanguageTags: Set<String> = setOf("ar", "fa", "he")
 
 /**

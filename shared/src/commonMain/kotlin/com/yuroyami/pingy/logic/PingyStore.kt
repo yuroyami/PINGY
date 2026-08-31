@@ -39,9 +39,9 @@ data class PanelSpec(
      *
      * Persisted values cross a trust boundary: the file is editable, can be
      * corrupted, and can outlive a schema change. An unchecked `Long.MAX_VALUE`
-     * interval used to overflow the engine's deadline arithmetic into a
-     * negative number and spin the loop at full CPU, sending as fast as it
-     * could. Returns null when the record is not salvageable.
+     * interval overflows the engine's deadline arithmetic into a negative
+     * number, which spins the loop at full CPU and sends as fast as the socket
+     * allows. Returns null when the record is not salvageable.
      */
     fun validated(): PanelSpec? {
         val host = ip.trim()

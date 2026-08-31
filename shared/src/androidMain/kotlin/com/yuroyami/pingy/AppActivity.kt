@@ -30,10 +30,10 @@ class AppActivity : ComponentActivity() {
     /**
      * Monitoring is bound to the foreground.
      *
-     * Nothing used to stop the engines when the app left the screen, so probes
-     * kept streaming, the radio kept waking and the battery kept draining with
-     * the app out of sight and no way for the user to tell. Pending preference
-     * edits are flushed here too, since the process may not come back.
+     * Engines stop here. Left running, they would keep streaming probes and
+     * waking the radio while the app is off screen, draining the battery with
+     * nothing on screen to hint at it. Pending preference edits are flushed
+     * here too, since the process may not come back.
      */
     override fun onStop() {
         super.onStop()

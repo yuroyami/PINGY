@@ -153,7 +153,7 @@ internal fun NeonWordmark(fontSize: TextUnit, fontFamily: FontFamily, modifier: 
  * list morphs open OVER the panels (never pushing them), a preallocated
  * one-line notice slot, and
  * the panels in the user's chosen arrangement. Ambient auras and a vignette
- * are drawn behind everything — no images anywhere.
+ * are drawn behind everything, with no images anywhere.
  */
 @Composable
 fun MainScreenUI() {
@@ -264,10 +264,10 @@ fun MainScreenUI() {
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            // Explicit controls. Paging used to be swipe-only,
-                            // and a horizontal swipe on a panel is also the
-                            // graph's scrub gesture, so the two competed and
-                            // neither was reachable without a pointer.
+                            // Explicit controls, because a horizontal swipe on
+                            // a panel is already the graph's scrub gesture.
+                            // Swipe-only paging would put the two in direct
+                            // competition and leave neither reliable.
                             IconButton(
                                 onClick = {
                                     scope.launch { pagerState.animateScrollToPage((current - 1).coerceAtLeast(0)) }

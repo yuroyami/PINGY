@@ -39,7 +39,7 @@ object Paletting {
 }
 
 /**
- * Maps a ping RTT (ms) to the color it carries everywhere in the app — bars,
+ * Maps a ping RTT (ms) to the color it carries everywhere in the app: bars,
  * slopes, readouts, stat values, and the live dots on target chips.
  *
  * Anchors (interpolated in HSV, log-scale on ping): ≤10ms ocean blue, ~40ms

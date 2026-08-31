@@ -117,8 +117,8 @@ private const val BIRTH_BRIGHTEN = 0.35f
 /**
  * There is no death animation. The chameleon's one transition, running since
  * birth, simply continues: over its final stretch before the deadline the wall
- * dissolves — alpha sliding to zero so the panel's real texture shows through
- * it — and when the timeout verdict lands there is nothing left to remove.
+ * dissolves, alpha sliding to zero so the panel's real texture shows through
+ * it, and when the timeout verdict lands there is nothing left to remove.
  * (A color-lerp cannot do this: the background is a texture, and fading toward
  * any flat color paints a slab instead of revealing what is behind.)
  */
@@ -218,9 +218,9 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
     val isRunning by running.collectAsState()
     val animateGraph = !reduceMotion()
 
-    // Three loops used to run unconditionally for every composed panel, whether
-    // or not it was probing and whether or not the user had asked the system to
-    // reduce motion. They are now keyed on both.
+    // Three loops, keyed on whether the panel is probing and on the system's
+    // reduce-motion setting. Running them for every composed panel regardless
+    // would burn frames on panels that have nothing to animate.
     //
     // With motion reduced the canvas still updates, just on new data rather than
     // on every frame, so the graph stays truthful without the conveyor effect.
@@ -304,7 +304,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
             .wrapContentHeight()
     ) {
         // One chassis. The clip and border wrap the graph AND its deck below,
-        // so they share corners, width, and outline — a single instrument.
+        // so they share corners, width, and outline: a single instrument.
         // When the deck folds away, the body seals its own bottom corners.
         Column(
             Modifier
@@ -481,8 +481,9 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 // While scrubbing, every age is shifted back by the time elapsed
                 // since the freeze, which halts the conveyor without copying the
                 // buffer. Pings born after the freeze land in negative ages and
-                // are simply not drawn until release — when the leftover offset
-                // eases out instead of teleporting the belt forward.
+                // are simply not drawn until release, at which point the
+                // leftover offset eases out instead of teleporting the belt
+                // forward.
                 val activeScrub = scrub
                 val freezeOffsetMs = when {
                     activeScrub != null -> activeScrub.freezeMark.elapsedNow().inWholeMilliseconds
@@ -497,13 +498,15 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                     } ?: 0L
                 }
 
-                // Celluloid cells are half as wide, so they show half the
-                // window: pixel density per millisecond stays constant and
-                // the stored preference is untouched.
+                // Grid cells are half as wide, so they show half the window:
+                // pixels per millisecond stay constant and the stored
+                // preference is untouched.
+                //
                 // A window narrower than the timeout can never contain a
-                // timed-out probe: the loss lands at its send moment, 3s in the
-                // past, already off the left edge. The grid used to halve the
-                // 5s default to 2.5s and silently hide every timeout.
+                // timed-out probe, because the loss lands at its send moment,
+                // 3s in the past and already off the left edge. Halving the 5s
+                // default would give 2.5s and hide every timeout, so
+                // visibleWindowMs floors the result at the timeout.
                 val thresholdMs = visibleWindowMs(timeframeMsVal, layoutVal)
                 val canvasW = size.width
                 val canvasH = size.height
@@ -616,7 +619,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 if (visibleBuf.isNotEmpty() && graphStyleVal == GraphStyle.MOUNTAIN_SLOPES) {
                     // MOUNTAIN-SLOPES: one continuous ridge instead of bars.
                     // Between consecutive valid points the crest runs as a
-                    // straight diagonal — steep when the value jumped — and the
+                    // straight diagonal (steep when the value jumped), and the
                     // fill below blends each point's color into the next, so
                     // every ping keeps its chameleon identity without owning a
                     // rectangle. Lost pings break the range: the massif ends,
@@ -781,7 +784,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
 
                 if (visibleBuf.isNotEmpty() && graphStyleVal == GraphStyle.PINGLETTES) {
                     // Slot-based drawing. Each valid bar tiles against its
-                    // predecessor when that predecessor was also valid — the
+                    // predecessor when that predecessor was also valid. The
                     // width in time is (this_ping.ts - prev_ping.ts), which
                     // keeps a long-RTT bar visibly wider because it ate more
                     // real time before the next probe could land.
@@ -789,7 +792,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                     // Void (null-valued) pings DRAW NOTHING but a short-lived
                     // fizzle burst. A timeout has no duration to represent, and
                     // the slot before the next valid bar is rendered as literal
-                    // background — the gap itself carries the "lost packet"
+                    // background: the gap itself carries the "lost packet"
                     // signal at a glance.
                     var prevAgeMs = 0L
                     // First iteration has no predecessor, treat as invalid
@@ -812,7 +815,8 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                         if (isLost) {
                             // No death drawing: the chameleon already faded the
                             // wall into the background during its final stretch,
-                            // so the honest gap it leaves is a seamless swap.
+                            // so the gap it leaves reads as the end of that
+                            // fade, not as a missing bar.
                             if (cursorAgeMs != null) {
                                 val diff = abs(ageMs - cursorAgeMs)
                                 if (diff < pickDiff) {
@@ -847,7 +851,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                         // Birth ritual, resumed after the chameleon: for its
                         // first BIRTH_MS the bar overshoots its true height and
                         // carries extra brightness, both easing back to truth.
-                        // Skipped while frozen — a scrubbed past shouldn't wiggle.
+                        // Skipped while frozen: a scrubbed past shouldn't wiggle.
                         if (activeScrub == null && ageMs < BIRTH_MS) {
                             val life = ageMs / BIRTH_MS
                             y = (y * (1f + BIRTH_OVERSHOOT * sin(PI * life).toFloat())).coerceAtMost(canvasH)
@@ -883,7 +887,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                         }
                     }
 
-                    // Chameleon — the in-flight slot between the newest buffer
+                    // Chameleon: the in-flight slot between the newest buffer
                     // entry and the present moment. Colorizes in real time with
                     // elapsed in-flight duration so the user watches the probe
                     // "ripen" on the way to its resolved RTT. Suppressed while
@@ -912,8 +916,8 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                                     angleOfAttackVal
                                 )
                                 // Past the fade threshold the wall dissolves in
-                                // place — transparency, not a color shift, is the
-                                // only way to become a textured background.
+                                // place. Transparency, not a color shift, is
+                                // the only way to become a textured background.
                                 if (colorMs > CHAMELEON_FADE_START_MS) {
                                     chameleonPresence = 1f - (
                                         (colorMs - CHAMELEON_FADE_START_MS) /
@@ -980,10 +984,10 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
 
                 // Landmark labels, right-aligned.
                 //
-                // They used to sit at a raw x = 20 pixels on the left, directly
-                // under the readout plate. At large text scales the plate grew
-                // over them and the axis became unreadable. The right edge is
-                // always clear, and the x is measured rather than assumed.
+                // The left side is where the readout plate sits, and at large
+                // text scales that plate grows over anything parked there. The
+                // right edge stays clear at every scale, and the x is measured
+                // rather than assumed.
                 for (y in landMarksVal) {
                     val h = calculatePingY(y.toInt(), canvasH, roofVal.toFloat(), angleOfAttackVal)
                     val axisStyle = TextStyle(fontSize = (8 * canvasSp).sp, color = Color(200, 200, 220, 170))
@@ -1161,8 +1165,8 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
         }
 
         // The control deck: same body as the graph, joined by a hairline seam.
-        // Stats and settings are both dark now — flipping modes changes the
-        // instruments, never the chassis.
+        // Stats and settings are both dark, so flipping modes changes the
+        // instruments and never the chassis.
         AnimatedVisibility(
             visible = expanded,
             enter = slideInVertically() + fadeIn(),

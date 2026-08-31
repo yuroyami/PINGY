@@ -81,7 +81,7 @@ internal data class WindowStats(
 
 /** One pass over the ring, newest-first, stopping at the window's horizon.
  *
- * Jitter pairs only consecutive valid samples — a loss breaks adjacency, so
+ * Jitter pairs only consecutive valid samples. A loss breaks adjacency, so
  * the wobble number never spans a gap.
  *
  * GONE uses completion-gap attribution: each verdict owns the time span

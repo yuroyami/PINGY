@@ -59,7 +59,7 @@ import kotlin.math.roundToInt
 /**
  * Windowed instrument strip on ONE line, always. The whole strip is a single
  * annotated string with relative (em) span sizes, and auto-size shrinks the
- * base until it fits the panel's width — so a half-width celluloid cell just
+ * base until it fits the panel's width, so a half-width grid cell just
  * renders the same line smaller instead of wrapping. Every number describes
  * the SAME slice of time the canvas shows.
  */
@@ -95,10 +95,11 @@ internal fun StatsSheet(stats: WindowStats, fontFamily: FontFamily) {
             stats.avg?.let { calcPingColor(it.roundToInt()) } ?: StatsDimColor,
             stats.avg != null,
         )
-        // Mean absolute successive difference between consecutive replies. The
-        // old label was "±", which advertises a symmetric interval this never
-        // computed. Sub-millisecond values are now real rather than floored to
-        // zero, because the RTT is no longer rounded before the statistics run.
+        // Mean absolute successive difference between consecutive replies.
+        // Labelled JIT rather than "±", because a plus-minus sign promises a
+        // symmetric interval and this is not one. RTT stays unrounded until
+        // after the statistics run, so sub-millisecond values survive instead
+        // of flooring to zero.
         label("  " + s.statJitter + " ")
         value(stats.jitter?.let { formatRtt(it) } ?: "—", SettingsTextColor, false)
         label("  " + s.statLoss + " ")
@@ -189,7 +190,7 @@ private fun StatsHelp(fontFamily: FontFamily) {
 }
 
 /**
- * Settings deck: one slim row per dial — label, slider, live value — plus a
+ * Settings deck: one slim row per dial (label, slider, live value), plus a
  * persist switch. Bound directly to the panel's StateFlows; everything
  * applies on-the-fly.
  */

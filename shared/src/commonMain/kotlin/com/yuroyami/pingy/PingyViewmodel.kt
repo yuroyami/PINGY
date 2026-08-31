@@ -38,7 +38,7 @@ enum class PanelLayout {
     /** Classic single-column stack. */
     COLUMN,
 
-    /** Two panels per row, celluloid-style. */
+    /** Two panels per row, laid out like frames on a film strip. */
     GRID,
 
     /** One panel per page, swiped horizontally. */
@@ -49,8 +49,8 @@ enum class PanelLayout {
  * One status line. [id] keys the auto-dismiss timer.
  *
  * [actionLabel] and [action] make a notice actionable, which is what turns an
- * irreversible tap into a reversible one: removing a panel or resetting its
- * settings both used to happen instantly with nothing to undo.
+ * irreversible tap into a reversible one. Removing a panel and resetting its
+ * settings both go through here, so neither is a dead end.
  */
 data class Notice(
     val id: Long,
@@ -135,10 +135,10 @@ class PingyViewmodel : ViewModel() {
         viewModelScope.launch {
             when (val loaded = PingyStore.load()) {
                 is StoreLoad.NotInitialized -> {
-                    // First launch is network-inert. Previously this created and
-                    // immediately started a 1.1.1.1 panel, so simply opening the
-                    // app began an unattended stream to Cloudflare that no copy
-                    // in the product ever mentioned.
+                    // First launch is network-inert: no panel, no socket, no
+                    // packet. Seeding a default target here would mean opening
+                    // the app quietly starts an unattended stream to someone
+                    // else's resolver, which nothing on screen would admit to.
                     cockpitState.value = CockpitState.FirstRun
                 }
 
@@ -212,10 +212,9 @@ class PingyViewmodel : ViewModel() {
     /**
      * Stops, forgets and un-persists a panel, keeping enough to put it back.
      *
-     * Removal used to be instant and final. The engine is genuinely torn down,
-     * because holding a socket open for a panel the user removed would be
-     * worse, but the configuration is returned so the caller can offer an undo
-     * that recreates it.
+     * The engine is genuinely torn down, because holding a socket open for a
+     * panel the user just removed would be worse. The configuration comes back
+     * as the return value, so the caller can offer an undo that rebuilds it.
      */
     fun removePanel(panel: PingPanel): PanelSpec {
         val spec = panel.toSpec()

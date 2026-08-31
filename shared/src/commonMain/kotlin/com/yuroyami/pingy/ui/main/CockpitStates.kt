@@ -25,10 +25,10 @@ import com.yuroyami.pingy.theme.Paletting
 /**
  * The states the cockpit can be in when it is not showing panels.
  *
- * All of them used to render as the same blank screen: a first run, a cockpit
- * the user deliberately emptied, a store that could not be read, and the moment
- * before the store had been read at all were visually identical, so there was
- * nothing to act on and no way to tell a problem from an empty list.
+ * Four situations look identical if you only draw an empty screen: a first
+ * run, a cockpit the user emptied on purpose, a store that could not be read,
+ * and the moment before the store has been read at all. Each gets its own
+ * screen here, so a problem never passes for an empty list.
  */
 
 @Composable

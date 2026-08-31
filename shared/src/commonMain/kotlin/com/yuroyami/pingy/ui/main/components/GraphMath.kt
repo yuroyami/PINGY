@@ -28,7 +28,7 @@ internal fun List<Ping>.isOrderedByTime(): Boolean {
 /** Oldest-first ordering for the visible window (timestamps ascending). */
 internal val PingTimeOrder = Comparator<Ping> { a, b -> a.timestamp.compareTo(b.timestamp) }
 
-/** Fast start, gentle landing — the shape of every glide in this file. */
+/** Fast start, gentle landing: the shape of every glide in this file. */
 internal fun easeOutCubic(t: Double): Double {
     val u = 1.0 - t.coerceIn(0.0, 1.0)
     return 1.0 - u * u * u

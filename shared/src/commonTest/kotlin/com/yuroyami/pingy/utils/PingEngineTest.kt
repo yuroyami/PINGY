@@ -17,12 +17,12 @@ import kotlin.test.assertTrue
 /**
  * Engine behaviour against real sockets.
  *
- * These run on every target, which matters: the timeout-reaping path threw an
- * uncaught `ConcurrentModificationException` on Kotlin/Native only, because
- * `LinkedHashMap` is a typealias for the common `HashMap` there and its entry
- * references are invalidated the moment the map changes. Running the same test
- * on the iOS simulator is what makes that a regression test rather than a
- * hopeful comment.
+ * These run on every target, which matters: on Kotlin/Native the
+ * timeout-reaping path can throw an uncaught `ConcurrentModificationException`
+ * that the JVM never sees, because `LinkedHashMap` is a typealias for the
+ * common `HashMap` there and its entry references go stale the moment the map
+ * changes. Running the same test on the iOS simulator is what makes this a
+ * real guard rather than a hopeful comment.
  */
 class PingEngineTest {
 
@@ -94,16 +94,16 @@ class PingEngineTest {
     fun timeout_reaping_does_not_kill_the_engine() = runTest(timeout = 90.seconds) {
         if (!icmpTransportAvailable()) return@runTest
         // 192.0.2.1 is TEST-NET-1 (RFC 5737): routable syntax, never answers.
-        // Every probe must therefore reap as a timeout. On Kotlin/Native the old
-        // reaper read an invalidated map entry here and threw out of the
-        // coroutine, terminating the process on the very first timeout.
+        // Every probe must therefore reap as a timeout. A reaper that reads a
+        // stale map entry here throws out of the coroutine on Kotlin/Native and
+        // takes the whole process down on the very first timeout.
         val pings = collect("192.0.2.1", count = 2, timeoutMs = 25_000)
         assertTrue(pings.isNotEmpty(), "engine died before reporting anything")
         assertTrue(
             pings.all { it.kind == PingKind.TIMEOUT || it.kind == PingKind.LOCAL_FAULT },
             "unexpected replies from a black-hole address: $pings",
         )
-        // Surviving to report a second event is the actual regression check.
+        // Surviving to report a second event is the real check here.
         assertTrue(pings.size >= 2, "engine stopped after the first timeout")
     }
 

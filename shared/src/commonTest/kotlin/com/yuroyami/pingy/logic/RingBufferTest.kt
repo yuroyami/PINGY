@@ -55,9 +55,9 @@ class RingBufferTest {
 
     @Test
     fun walking_a_full_ring_never_reaches_the_writers_slot() {
-        // A full-length backwards walk used to land exactly on the slot the
-        // writer overwrites next, so the oldest entry could be a just-written
-        // newest one.
+        // A full-length backwards walk lands exactly on the slot the writer
+        // overwrites next, which would hand back a just-written newest entry
+        // dressed up as the oldest one. The walk has to stop one short.
         val cap = 16
         val ring = RingBuffer<Int>(cap)
         repeat(cap * 3) { ring.add(it) }

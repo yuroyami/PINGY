@@ -29,9 +29,9 @@ const val PING_TIMEOUT_MS: Int = 3000
  * Adaptive mode fires the next probe as soon as the previous reply lands. With
  * no floor that is `1000 / RTT` packets per second, so a sub-millisecond LAN
  * gateway would be hit with roughly a thousand packets a second, forever,
- * unattended. At 10 ms the ceiling is 100 pps per panel, and any target with an
- * RTT above 10 ms (that is, anything off the local network) behaves exactly as
- * before.
+ * unattended. At 10 ms the ceiling is 100 pps per panel, and any target with
+ * an RTT above 10 ms (that is, anything off the local network) never reaches
+ * the floor at all.
  */
 const val MIN_PROBE_GAP_MS: Long = 10
 

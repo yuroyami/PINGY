@@ -4,8 +4,7 @@ package com.yuroyami.pingy.utils
  * How hard the device is willing to work right now.
  *
  * Pingy is an unattended continuous sampler, which is exactly the kind of app
- * that should back off when the battery is low or the device is hot. Nothing
- * used to consult either signal.
+ * that should back off when the battery is low or the device is running hot.
  */
 enum class PowerState {
     /** Normal operation. */

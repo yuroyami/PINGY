@@ -60,8 +60,8 @@ fun parseTarget(raw: String): TargetParse {
         return TargetParse.Invalid(TargetRejection.ILLEGAL_CHARACTERS)
     }
 
-    // Strip any scheme, case-insensitively. The old code only matched four
-    // exact spellings, so "Https://" survived and became part of the host.
+    // Strip any scheme, case-insensitively. Matching a fixed list of exact
+    // spellings instead lets "Https://" through, glued onto the host name.
     val schemeEnd = trimmed.indexOf("://")
     var rest = if (schemeEnd in 1..10) trimmed.substring(schemeEnd + 3) else trimmed
 

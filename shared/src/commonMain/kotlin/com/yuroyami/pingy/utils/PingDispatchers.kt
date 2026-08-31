@@ -10,14 +10,14 @@ import kotlinx.coroutines.IO
  * One bounded lane for every probe engine in the process.
  *
  * Each engine blocks a thread inside `poll(2)`, which is why they cannot share
- * a single-threaded dispatcher. Previously each engine took its own
- * `Dispatchers.IO.limitedParallelism(1)` view, and nothing bounded the total:
- * the aggregate was however many panels existed, and those threads came out of
- * the shared IO pool that DataStore, the resolver and file writes also use.
+ * a single-threaded dispatcher. Giving every engine its own
+ * `Dispatchers.IO.limitedParallelism(1)` view would leave the total unbounded:
+ * one blocked thread per panel, all of them taken from the shared IO pool that
+ * DataStore, the resolver and file writes also draw on.
  *
- * A single view sized to [MAX_PANELS] keeps the per-engine blocking behaviour
- * while capping what probing can take from the pool, so a cockpit full of
- * panels can no longer starve everything else in the process.
+ * One view sized to [MAX_PANELS] keeps the per-engine blocking behaviour while
+ * capping what probing can take from that pool, so a cockpit full of panels
+ * cannot starve the rest of the process.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 object PingDispatchers {
