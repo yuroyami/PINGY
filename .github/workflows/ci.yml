@@ -1,9 +1,10 @@
-# Adapted from the July 18 tree recovered on 2026-08-31.
+# CI for Pingy: an Android build, a check that the legal texts really ship
+# inside the APK, and an iOS simulator build.
 #
-# Steps that depended on things the current tree does not have were dropped:
-# dependency lockfiles, gradle/verification-metadata.xml, branding provenance
-# hashes, localized InfoPlist strings, the native sanitizer suite, and every
-# test task (there are no test sources yet). Re-add each one as its gap closes.
+# Deliberately not covered yet: dependency lockfiles,
+# gradle/verification-metadata.xml, branding provenance hashes, localized
+# InfoPlist strings, the native sanitizer suite, and the Kotlin test tasks.
+# Add each one as its gap closes.
 name: CI
 
 on:
@@ -51,8 +52,8 @@ jobs:
             echo "$tracked_local_state" >&2
             exit 1
           fi
-          # CocoaPods was removed in favour of direct framework embedding.
-          # Fail loudly if any of it comes back.
+          # The Kotlin framework is embedded directly, so CocoaPods has no
+          # place here. Fail loudly if any of it comes back.
           tracked_generated="$(git ls-files 'iosApp/Pods/**' 'shared/shared.podspec' 'iosApp/Podfile*' || true)"
           if [ -n "$tracked_generated" ]; then
             echo "CocoaPods files must not come back; the framework is embedded directly:" >&2
@@ -76,10 +77,10 @@ jobs:
           :androidApp:assembleRelease
           :androidApp:bundleRelease
 
-      # The build copies these in from the repository root, so the meaningful
-      # check is on the artefact: are they actually in the APK, and are they the
-      # current text? Comparing two checked-in copies only proved they matched
-      # each other, and they drifted the moment the notices were regenerated.
+      # The build copies these in from the repository root, so the check that
+      # matters is on the artefact: are they actually in the APK, and are they
+      # the current text? Comparing two checked-in copies would only prove they
+      # match each other, and they drift as soon as the notices are regenerated.
       - name: Verify the legal texts shipped in the APK
         run: |
           set -euo pipefail
@@ -119,9 +120,8 @@ jobs:
     name: iOS simulator build and privacy manifest check
     # macos-15 ships Xcode 16.4, whose SDK lacks the UIUtilities framework that
     # Compose Multiplatform 1.11 auto-links, so the link step fails with
-    # "framework 'UIUtilities' not found". That is a Compose requirement and is
-    # unrelated to how the framework is embedded, so it still applies now that
-    # CocoaPods is gone.
+    # "framework 'UIUtilities' not found". That is a Compose requirement and
+    # has nothing to do with how the framework is embedded.
     runs-on: macos-26
     timeout-minutes: 60
     steps:

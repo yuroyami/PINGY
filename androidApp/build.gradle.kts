@@ -17,7 +17,7 @@ android {
     compileSdk = providers.gradleProperty("android.compileSdk").get().toInt()
 
     // applicationId, versionCode/Name, manifestPlaceholders[appName],
-    // compileOptions (java version), resourceConfigurations — handled by kiteSsot.
+    // compileOptions (java version), resourceConfigurations: all set by kiteSsot.
 
     signingConfigs {
         file("${rootDir}/keystore/pingykey.jks").takeIf { it.exists() }?.let { keystoreFile ->
@@ -103,11 +103,10 @@ dependencies {
 /**
  * Package the legal texts into the APK from the canonical files at the repo root.
  *
- * These used to be duplicated under src/main/assets and kept in step by hand,
- * which lasted exactly as long as the first regeneration: the notices were
- * rewritten at the root and the packaged copy silently stayed two dependency
- * sets behind. Copying at build time means there is one source of truth and the
- * two cannot drift.
+ * Copying at build time keeps a single source of truth. A second checked-in
+ * copy under src/main/assets would need updating by hand on every regeneration,
+ * and a packaged copy that is silently a few dependency sets behind is worse
+ * than no copy at all.
  */
 abstract class StageLegalAssets : DefaultTask() {
     @get:InputFiles

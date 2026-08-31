@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.22.1)
 project(pingy_icmp C)
 
-# Shared C source for unprivileged ICMP ping — same file the JVM build uses.
+# Shared C source for unprivileged ICMP ping. Same file the JVM build uses.
 # Path is relative to this CMakeLists.txt:
 #   androidApp/src/main/cpp/CMakeLists.txt  →  ../../../../shared/native/icmp_ping.c
 set(ICMP_SRC "${CMAKE_CURRENT_SOURCE_DIR}/../../../../shared/native/icmp_ping.c")

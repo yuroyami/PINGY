@@ -149,7 +149,7 @@ kotlin {
         }
 
         jvmMain.dependencies {
-            /* Desktop flavor of coroutines — Dispatchers.IO etc. */
+            /* Desktop flavor of coroutines: Dispatchers.IO etc. */
             implementation(libs.kotlin.coroutines.core)
         }
     }
@@ -162,7 +162,7 @@ kotlin {
 // library is written into `src/jvmMain/resources/native/<plat>-<arch>/` so
 // `jvmProcessResources` picks it up and packages it into the jar.
 //
-// Windows is skipped entirely — Winsock has no SOCK_DGRAM+IPPROTO_ICMP, so
+// Windows is skipped entirely: Winsock has no SOCK_DGRAM+IPPROTO_ICMP, so
 // NativeIcmpPing returns null there instead.
 run {
     val hostOs = org.gradle.internal.os.OperatingSystem.current()

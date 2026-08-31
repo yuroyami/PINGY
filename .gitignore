@@ -45,9 +45,9 @@ splpingsrccode/
 # Compiled native output belongs in build/, never in src/
 shared/src/jvmMain/resources/native/
 
-# CocoaPods is no longer used; the Kotlin framework is embedded directly by the
-# Gradle build phase in the Xcode project. These paths stay ignored so a stray
-# `pod install` cannot reintroduce them.
+# The Kotlin framework is embedded directly by a Gradle build phase in the
+# Xcode project, so CocoaPods plays no part. These paths stay ignored in case a
+# stray `pod install` puts them back.
 iosApp/Pods/
 iosApp/Podfile.lock
 iosApp/iosApp.xcworkspace/
