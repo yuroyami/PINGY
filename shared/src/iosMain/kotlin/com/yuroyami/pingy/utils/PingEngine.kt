@@ -9,34 +9,30 @@ import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
 
 /**
- * iOS [openIcmpSocket] actual: single cinterop call into
- * `open_icmp_socket_connected` — a BSD `socket(AF_INET, SOCK_DGRAM,
- * IPPROTO_ICMP)` followed by `connect()`, both in C. Returns the fd or -1.
+ * iOS actuals: cinterop calls into the same `shared/native/icmp_core.h` that
+ * the Android and JVM JNI wrapper includes, so the wire format, checksum and
+ * reply parser cannot drift between platforms.
  */
+
 actual fun openIcmpSocket(ipv4: String): Int = open_icmp_socket_connected(ipv4)
 
-/** iOS [icmpSendProbe] actual: fire-and-forget cinterop send. */
-actual fun icmpSendProbe(fd: Int, seq: Int, payloadSize: Int): Long =
-    icmp_send_probe(fd, seq, payloadSize)
+actual fun icmpSendProbe(fd: Int, session: Long, seq: Int, payloadSize: Int): Long =
+    icmp_send_probe(fd, session, seq, payloadSize)
 
-/** iOS [icmpAwaitReply] actual: blocks in poll(2) on the engine's own
- * single-lane dispatcher, which exists precisely for this call. */
-actual fun icmpAwaitReply(fd: Int, budgetMs: Int): Long =
-    icmp_await_reply(fd, budgetMs)
+actual fun icmpAwaitReply(fd: Int, session: Long, budgetMs: Int): Long =
+    icmp_await_reply(fd, session, budgetMs)
 
-/** iOS [closeIcmpSocket] actual — idempotent on negative fds. */
 actual fun closeIcmpSocket(fd: Int) {
     close_icmp_socket(fd)
 }
 
-/**
- * iOS [resolveHostToIpv4] actual: calls straight into the cinterop
- * `resolve_host`, which shortcuts IPv4 literals via `inet_pton` and
- * otherwise walks the system's `getaddrinfo`.
- */
+/** Darwin always exposes unprivileged ICMP to app processes. */
+actual fun icmpTransportAvailable(): Boolean = true
+
 actual fun resolveHostToIpv4(host: String): String? {
     val buf = ByteArray(64)
     val rc = buf.usePinned { resolve_host(host, it.addressOf(0), buf.size) }
     if (rc != 0) return null
-    return buf.decodeToString().trimEnd('\u0000').takeIf { it.isNotEmpty() }
+    val end = buf.indexOf(0).let { if (it < 0) buf.size else it }
+    return buf.decodeToString(0, end).takeIf { it.isNotEmpty() }
 }

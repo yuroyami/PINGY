@@ -3,84 +3,105 @@ package com.yuroyami.pingy.logic
 import kotlin.concurrent.Volatile
 
 /**
- * Fixed-capacity circular buffer used for ping history.
+ * Fixed-capacity circular buffer for ping history.
  *
- * Concurrency: single-writer / many-reader. The ping engine's coroutine is the
- * sole writer; the Compose render thread iterates via [forEachNewestFirst].
- * [writeIndex]/[readIndex]/[size] are [Volatile] so readers see a consistent
- * recent state — but [add] is NOT atomic, so a second concurrent writer would
- * race. That guarantee is enough for our one-engine-per-panel model.
+ * Concurrency: single writer, many readers. The engine's coroutine is the only
+ * writer; Compose reads from the frame and sampler loops.
  *
- * Readers walk backwards from the newest entry: that moves AWAY from the
- * writer's cursor (which overwrites the oldest slot), so a concurrent add can
- * never clobber an entry the reader is about to visit at the fresh end.
+ * [add] stores the element and *then* advances the volatile [writeIndex]. That
+ * ordering is the publication guarantee: any reader that reads the cursor and
+ * then reads the slot behind it is reading a fully constructed element.
  *
- * @param capacity Maximum number of elements the buffer can hold
- * @param T The type of elements stored in the buffer (must be non-nullable)
+ * What it does NOT give you is an atomic (cursor, size) pair. [forEachNewestFirst]
+ * therefore tolerates a torn read by stopping at the first empty slot, which
+ * costs at most one element at the tail. Callers needing a stable view across
+ * several passes should take a [snapshot].
+ *
+ * The internals are private on purpose. They used to be public, which let any
+ * caller break the single-writer invariant the whole design rests on.
  */
 class RingBuffer<T : Any>(val capacity: Int) {
 
-    /**
-     * Internal storage array for buffer elements.
-     * The unchecked cast is safe because we only write `T` values into the array
-     * and read them back as `T?`.
-     */
     @Suppress("UNCHECKED_CAST")
-    val buffer: Array<T?> = arrayOfNulls<Any?>(capacity) as Array<T?>
+    private val buffer: Array<T?> = arrayOfNulls<Any?>(capacity) as Array<T?>
 
-    @Volatile
-    var writeIndex = 0
+    @Volatile private var writeIndex = 0
+    @Volatile private var readIndex = 0
+    @Volatile private var count = 0
 
-    @Volatile
-    var readIndex = 0
-
-    @Volatile
-    var size = 0
+    /** Number of elements currently held. */
+    val size: Int get() = count
 
     fun add(element: T) {
-        buffer[writeIndex] = element
-        val newWriteIndex = (writeIndex + 1) % capacity
-
-        if (size == capacity) {
+        val w = writeIndex
+        buffer[w] = element
+        if (count == capacity) {
             readIndex = (readIndex + 1) % capacity
         } else {
-            size++
+            count++
         }
-
-        writeIndex = newWriteIndex
+        writeIndex = (w + 1) % capacity   // publishes the element above
     }
 
     /**
-     * Visit entries newest-to-oldest until [action] returns false. The element
-     * store happens before the volatile [writeIndex] advance, so every slot
-     * behind the observed cursor is fully published. Early exit is the point:
-     * the caller stops at its time horizon instead of scanning the whole ring.
+     * Visit entries newest first until [action] returns false.
+     *
+     * Bounded to `capacity - 1` steps so a full traversal can never reach the
+     * slot the writer is about to overwrite. Early exit is the point: callers
+     * stop at their time horizon instead of walking the whole ring.
      */
     inline fun forEachNewestFirst(action: (T) -> Boolean) {
-        val count = size
-        var idx = (writeIndex + capacity - 1) % capacity
-        for (i in 0 until count) {
-            val element = buffer[idx] ?: return
+        val n = newestFirstCount()
+        var idx = newestIndex()
+        for (i in 0 until n) {
+            val element = elementAt(idx) ?: return
             if (!action(element)) return
-            idx = (idx + capacity - 1) % capacity
+            idx = if (idx == 0) capacity - 1 else idx - 1
         }
     }
 
-    /** Newest entry. Derives everything from one volatile [writeIndex] read:
-     * the writer stores the element before advancing the cursor, so whatever
-     * cursor a reader observes, the slot behind it is fully published.
-     * (Reading `size` here instead would race: `size` is bumped before
-     * `writeIndex`, so a reader could compute the slot from a stale cursor.) */
-    fun last(): T? {
-        val w = writeIndex
-        if (w == 0 && size == 0) return null
-        return buffer[(w + capacity - 1) % capacity]
+    /** Immutable oldest-first copy. Use when several passes must agree. */
+    fun snapshot(): List<T> {
+        val out = ArrayList<T>(size)
+        val n = newestFirstCount()
+        var idx = newestIndex()
+        for (i in 0 until n) {
+            out.add(elementAt(idx) ?: break)
+            idx = if (idx == 0) capacity - 1 else idx - 1
+        }
+        out.reverse()
+        return out
     }
 
+    /** Newest entry, or null when empty. */
+    fun last(): T? {
+        if (count == 0) return null
+        return buffer[newestIndex()]
+    }
+
+    /** Oldest retained entry, or null when empty. */
     fun first(): T? {
-        if (size == 0) return null
+        if (count == 0) return null
         return buffer[readIndex]
     }
 
-    fun isEmpty(): Boolean = size == 0
+    fun isEmpty(): Boolean = count == 0
+
+    fun clear() {
+        count = 0
+        readIndex = 0
+        writeIndex = 0
+        buffer.fill(null)
+    }
+
+    // Internal seams for the inline walk above. Not part of the public contract.
+
+    @PublishedApi
+    internal fun newestIndex(): Int = (writeIndex + capacity - 1) % capacity
+
+    @PublishedApi
+    internal fun newestFirstCount(): Int = minOf(count, capacity - 1)
+
+    @PublishedApi
+    internal fun elementAt(index: Int): T? = buffer[index]
 }

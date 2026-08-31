@@ -3,9 +3,12 @@ package com.yuroyami.pingy
 import androidx.compose.runtime.mutableStateListOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.yuroyami.pingy.logic.MAX_PANELS
 import com.yuroyami.pingy.logic.PanelSpec
 import com.yuroyami.pingy.logic.PingPanel
 import com.yuroyami.pingy.logic.PingyStore
+import com.yuroyami.pingy.logic.StoreLoad
+import com.yuroyami.pingy.logic.canonicalTargetKey
 import com.yuroyami.pingy.ui.Screen
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
@@ -39,9 +42,26 @@ enum class PanelLayout {
     PAGER,
 }
 
-/** One transient status line. [id] keys the auto-dismiss timer so a fresh
- * notice restarts the clock instead of dying on the old one's schedule. */
+/** One transient status line. [id] keys the auto-dismiss timer. */
 data class Notice(val id: Long, val text: String)
+
+/**
+ * Where the cockpit is in its startup, so the UI can tell these apart instead
+ * of rendering all of them as an identical blank screen.
+ */
+sealed interface CockpitState {
+    /** Reading the store. */
+    data object Loading : CockpitState
+
+    /** First ever run. Nothing is monitored until the user asks. */
+    data object FirstRun : CockpitState
+
+    /** Store read fine. [panels] may be empty because the user emptied it. */
+    data object Ready : CockpitState
+
+    /** The store exists but could not be read. It is left untouched on disk. */
+    data class LoadFailed(val message: String) : CockpitState
+}
 
 @OptIn(FlowPreview::class)
 class PingyViewmodel : ViewModel() {
@@ -56,8 +76,10 @@ class PingyViewmodel : ViewModel() {
         notice.value = Notice(++noticeCounter, text)
     }
 
-    /** Operating [PingPanel]s in observable mutable state */
+    /** Operating [PingPanel]s in observable mutable state. */
     val panels = mutableStateListOf<PingPanel>()
+
+    val cockpitState = MutableStateFlow<CockpitState>(CockpitState.Loading)
 
     /** App-wide graph rendering style; panels may override it individually. */
     val graphStyle = MutableStateFlow(GraphStyle.MOUNTAIN_SLOPES)
@@ -65,33 +87,57 @@ class PingyViewmodel : ViewModel() {
     /** Cockpit arrangement, cycled from the header. */
     val panelLayout = MutableStateFlow(PanelLayout.COLUMN)
 
-    // replay = 1: the first markDirty fires during init, before the debounce
-    // collector below exists; replay hands that pending signal to the late
-    // collector instead of dropping it (a fresh session would otherwise never
-    // write the store until the user changed something).
+    // replay = 1 so the first markDirty, which happens during init before the
+    // debounce collector exists, is handed to the late collector instead of lost.
     private val saveSignal = MutableSharedFlow<Unit>(
         replay = 1,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
     private val watchers = mutableMapOf<PingPanel, Job>()
 
-    init {
-        viewModelScope.launch {
-            val state = PingyStore.load()
-            state.graphStyle
-                ?.let { name -> GraphStyle.entries.firstOrNull { it.name == name } }
-                ?.let { graphStyle.value = it }
-            state.panelLayout
-                ?.let { name -> PanelLayout.entries.firstOrNull { it.name == name } }
-                ?.let { panelLayout.value = it }
+    /** Set when the store could not be read, so saving cannot clobber the file. */
+    private var savingBlocked = false
 
-            if (state.panels.isEmpty()) {
-                addPanel("1.1.1.1")
-            } else {
-                state.panels.forEach { spec -> addPanel(spec.ip, spec) }
+    /** Panels that were live when monitoring was paused, to restore on resume. */
+    private val pausedPanels = mutableSetOf<PingPanel>()
+
+    init {
+        PingyLifecycle.viewmodel = this
+        viewModelScope.launch {
+            when (val loaded = PingyStore.load()) {
+                is StoreLoad.NotInitialized -> {
+                    // First launch is network-inert. Previously this created and
+                    // immediately started a 1.1.1.1 panel, so simply opening the
+                    // app began an unattended stream to Cloudflare that no copy
+                    // in the product ever mentioned.
+                    cockpitState.value = CockpitState.FirstRun
+                }
+
+                is StoreLoad.Failed -> {
+                    // Never overwrite a file we failed to read: the old behaviour
+                    // turned a transient read error into permanent data loss on
+                    // the next autosave.
+                    savingBlocked = true
+                    cockpitState.value = CockpitState.LoadFailed(loaded.message)
+                    notify("Could not read saved panels; nothing was changed")
+                }
+
+                is StoreLoad.Loaded -> {
+                    loaded.graphStyle
+                        ?.let { name -> GraphStyle.entries.firstOrNull { it.name == name } }
+                        ?.let { graphStyle.value = it }
+                    loaded.panelLayout
+                        ?.let { name -> PanelLayout.entries.firstOrNull { it.name == name } }
+                        ?.let { panelLayout.value = it }
+
+                    loaded.panels.forEach { spec -> addPanel(spec.ip, spec) }
+                    if (loaded.droppedRecords > 0) {
+                        notify("Skipped ${loaded.droppedRecords} unreadable saved panel(s)")
+                    }
+                    cockpitState.value = CockpitState.Ready
+                }
             }
 
-            // Persist follows every relevant change from here on.
             launch {
                 merge(graphStyle.map { }, panelLayout.map { }).drop(2).collect { markDirty() }
             }
@@ -101,13 +147,24 @@ class PingyViewmodel : ViewModel() {
         }
     }
 
-    /** Adds and starts a panel. Returns false when the target already exists. */
-    fun addPanel(ip: String, spec: PanelSpec? = null): Boolean {
-        if (panels.any { it.ip == ip }) return false
+    /**
+     * Adds and starts a panel.
+     *
+     * Duplicate detection uses [canonicalTargetKey], not the raw spelling. Two
+     * spellings of one address would otherwise open two sockets to the same
+     * peer, which is exactly the situation reply identity has to defend against.
+     */
+    fun addPanel(ip: String, spec: PanelSpec? = null): AddResult {
+        if (panels.size >= MAX_PANELS) return AddResult.AtCapacity
+        val key = canonicalTargetKey(ip)
+        if (panels.any { canonicalTargetKey(it.ip) == key }) return AddResult.Duplicate
+
         val panel = PingPanel(ip = ip)
         spec?.let(panel::applySpec)
         panel.startPinging()
         panels.add(panel)
+        if (cockpitState.value is CockpitState.FirstRun) cockpitState.value = CockpitState.Ready
+
         watchers[panel] = viewModelScope.launch {
             val flows = listOf(
                 panel.interval, panel.packetSize, panel.roof, panel.angleOfAttack,
@@ -117,19 +174,21 @@ class PingyViewmodel : ViewModel() {
             merge(*flows.toTypedArray()).drop(flows.size).collect { markDirty() }
         }
         markDirty()
-        return true
+        return AddResult.Added
     }
+
+    /** Why an add did or did not happen, so the UI can say something useful. */
+    enum class AddResult { Added, Duplicate, AtCapacity }
 
     /** Stops, forgets, and un-persists a panel. */
     fun removePanel(panel: PingPanel) {
         watchers.remove(panel)?.cancel()
-        panel.close()
         panels.remove(panel)
+        panel.close()
         markDirty()
     }
 
-    /** Sets the app-wide style and clears per-panel overrides, so the global
-     * toggle always visibly rules the whole cockpit. */
+    /** Sets the app-wide style and clears per-panel overrides. */
     fun setGlobalStyle(style: GraphStyle) {
         panels.forEach { it.styleOverride.value = null }
         graphStyle.value = style
@@ -140,11 +199,41 @@ class PingyViewmodel : ViewModel() {
     }
 
     private suspend fun persist() {
+        if (savingBlocked) return
         PingyStore.save(
             panels = panels.filter { it.persistAcrossSessions.value }.map { it.toSpec() },
             graphStyle = graphStyle.value.name,
             panelLayout = panelLayout.value.name,
         )
+    }
+
+    /**
+     * Stop every live engine and release its socket.
+     *
+     * Called when the app leaves the foreground. Suspending until the sockets
+     * are actually closed matters: returning early would leave descriptors open
+     * across a background transition the platform may never resume.
+     */
+    suspend fun pauseMonitoring() {
+        pausedPanels.clear()
+        panels.forEach { panel ->
+            if (panel.running.value) {
+                pausedPanels += panel
+                panel.stopPingingAndJoin()
+            }
+        }
+    }
+
+    /** Restart exactly the panels that [pauseMonitoring] stopped. */
+    fun resumeMonitoring() {
+        if (pausedPanels.isEmpty()) return
+        pausedPanels.forEach { it.startPinging() }
+        pausedPanels.clear()
+    }
+
+    /** Flush pending edits now, for example when the host is going away. */
+    fun flushNow() {
+        viewModelScope.launch { persist() }
     }
 
     override fun onCleared() {

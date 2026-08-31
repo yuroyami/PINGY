@@ -13,7 +13,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 
 /** Maximum number of pings retained per panel. Sized for zero-interval LAN
  * rates (roughly a thousand samples/sec) so the buffer still spans seconds
@@ -91,6 +90,12 @@ class PingPanel(
         }
     }
 
+    /** Most recent local failure, or null while probing is healthy. */
+    val fault = MutableStateFlow<LocalFault?>(null)
+
+    /** True once [startPinging] has run and the engine is live. */
+    val running = MutableStateFlow(false)
+
     fun startPinging() {
         if (engine != null) return
 
@@ -99,23 +104,32 @@ class PingPanel(
             packetSize = packetSize.value,
             intervalMs = interval.value,
         ).also { eng ->
-            eng.start { rttMs, sentAt ->
+            // Anchored at SEND time: sends are evenly scheduled, so the x axis
+            // stays even and a reaped loss lands where its probe actually flew.
+            eng.start { ping ->
                 try {
-                    // Anchored at SEND time: the engine schedules sends evenly,
-                    // so the graph's x axis stays even too, and a reaped loss
-                    // appears where its probe actually flew, not 3s late.
-                    pings.add(Ping(value = rttMs?.roundToInt(), timestamp = sentAt))
+                    pings.add(ping)
+                    fault.value = ping.fault
                 } catch (e: Exception) {
                     loggye("PingPanel[$ip]: result callback failed", e)
                 }
             }
         }
+        running.value = true
     }
 
-    /** Stops pinging and releases the engine resources. */
+    /** Stops pinging and releases the engine's socket. */
     fun stopPinging() {
         engine?.stop()
         engine = null
+        running.value = false
+    }
+
+    /** Stops and waits until the socket is actually released. */
+    suspend fun stopPingingAndJoin() {
+        engine?.stopAndJoin()
+        engine = null
+        running.value = false
     }
 
     /** Restore all user-tunable preferences to their factory defaults.
@@ -141,15 +155,21 @@ class PingPanel(
         style = styleOverride.value?.name,
     )
 
-    /** Applies a restored snapshot. Call before [startPinging]. */
+    /**
+     * Applies a restored snapshot. Call before [startPinging].
+     *
+     * Runs [PanelSpec.validated] again rather than trusting the caller: this is
+     * the last point before the values reach engine arithmetic.
+     */
     fun applySpec(spec: PanelSpec) {
-        interval.value = spec.intervalMs
-        packetSize.value = spec.packetSize
-        roof.value = spec.roof
-        angleOfAttack.value = spec.angleOfAttack
-        timeframeMs.value = spec.timeframeMs
-        canvasHeightFraction.value = spec.canvasHeightFraction
-        styleOverride.value = spec.style?.let { name -> GraphStyle.entries.firstOrNull { it.name == name } }
+        val safe = spec.validated() ?: return
+        interval.value = safe.intervalMs
+        packetSize.value = safe.packetSize
+        roof.value = safe.roof
+        angleOfAttack.value = safe.angleOfAttack
+        timeframeMs.value = safe.timeframeMs
+        canvasHeightFraction.value = safe.canvasHeightFraction
+        styleOverride.value = safe.style?.let { name -> GraphStyle.entries.firstOrNull { it.name == name } }
     }
 
     /** Call when removing this panel entirely. */

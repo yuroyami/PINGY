@@ -4,58 +4,50 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
 /**
- * JVM (desktop) counterpart to the Android [NativeIcmpPing] — same JNI
- * symbols, same C source (`shared/native/icmp_ping.c`), just compiled
- * per-platform at build time by the `buildJvmNative` Gradle task and
- * packaged as resources.
+ * JVM desktop counterpart to the Android bridge: same JNI symbols, same C
+ * source, compiled per host by the `buildJvmNative` Gradle task and packaged as
+ * a jar resource.
  *
- * At first use we detect the running OS/arch, extract the matching native
- * library from the jar to a temp file, and [System.load] it. Subsequent
- * calls go straight through JNI.
+ * On first use the matching library is extracted to a temp file and loaded.
+ * `Files.createTempFile` creates it atomically at owner-only permissions, so
+ * there is no symlink race, but the extracted bytes are still not verified
+ * against an expected hash. Ship a signed, bundled library rather than relying
+ * on this path for release builds.
  *
- * Supported hosts (matches what the C source accepts via
- * SOCK_DGRAM+IPPROTO_ICMP):
+ * Supported hosts, matching what the C accepts via SOCK_DGRAM + IPPROTO_ICMP:
  *   - macOS x86_64 / arm64
- *   - Linux x86_64 / arm64  (requires `net.ipv4.ping_group_range` to include
- *                            the invoking user's gid; most distros leave it
- *                            permissive)
+ *   - Linux x86_64 / arm64 (needs `net.ipv4.ping_group_range` to include the
+ *     invoking gid, which most distributions leave permissive)
  *
- * Windows is deliberately unsupported: Winsock doesn't expose
- * SOCK_DGRAM+IPPROTO_ICMP, so [nativeOpenSocket] returns `-1` there.
+ * Windows is unsupported: Winsock has no unprivileged ICMP datagram socket.
  */
 internal object NativeIcmpPing {
-    private val loaded: Boolean = runCatching { loadNative() }
-        .onFailure { loggye("NativeIcmpPing: failed to load native lib", it) }
+
+    /** False on Windows, on an unknown architecture, or if extraction fails. */
+    val loaded: Boolean = runCatching { loadNative() }
+        .onFailure { loggyw("NativeIcmpPing: no unprivileged ICMP on this host: ${it.message}") }
         .isSuccess
 
-    /** Returns the file descriptor on success, or `-1` on any failure
-     *  (including the lib not being loadable on this platform). */
     fun openSocket(ipv4: String): Int = if (loaded) nativeOpenSocket(ipv4) else -1
 
-    /** Send timestamp in monotonic usec, or -1 (socket failure / lib missing). */
-    fun sendProbe(fd: Int, seq: Int, payloadSize: Int): Long =
-        if (loaded) nativeSendProbe(fd, seq, payloadSize) else -1L
+    fun sendProbe(fd: Int, session: Long, seq: Int, payloadSize: Int): Long =
+        if (loaded) nativeSendProbe(fd, session, seq, payloadSize) else -1L
 
-    /** See [com.yuroyami.pingy.utils.icmpAwaitReply] for the packed contract. */
-    fun awaitReply(fd: Int, budgetMs: Int): Long =
-        if (loaded) nativeAwaitReply(fd, budgetMs) else -1L
+    fun awaitReply(fd: Int, session: Long, budgetMs: Int): Long =
+        if (loaded) nativeAwaitReply(fd, session, budgetMs) else -1L
 
-    /** Safe to call with `-1` or when the lib isn't loaded. */
     fun closeSocket(fd: Int) {
         if (loaded && fd >= 0) nativeCloseSocket(fd)
     }
 
-    @JvmStatic
-    external fun nativeOpenSocket(ipv4: String): Int
+    fun resolveHost(host: String): String? =
+        if (loaded) runCatching { nativeResolveHost(host) }.getOrNull() else null
 
-    @JvmStatic
-    external fun nativeSendProbe(fd: Int, seq: Int, payloadSize: Int): Long
-
-    @JvmStatic
-    external fun nativeAwaitReply(fd: Int, budgetMs: Int): Long
-
-    @JvmStatic
-    external fun nativeCloseSocket(fd: Int)
+    @JvmStatic external fun nativeOpenSocket(ipv4: String): Int
+    @JvmStatic external fun nativeSendProbe(fd: Int, session: Long, seq: Int, payloadSize: Int): Long
+    @JvmStatic external fun nativeAwaitReply(fd: Int, session: Long, budgetMs: Int): Long
+    @JvmStatic external fun nativeCloseSocket(fd: Int)
+    @JvmStatic external fun nativeResolveHost(host: String): String?
 
     private fun loadNative() {
         val os = System.getProperty("os.name").lowercase()
@@ -63,16 +55,16 @@ internal object NativeIcmpPing {
         val (dir, ext) = when {
             os.contains("mac") || os.contains("darwin") -> "darwin" to "dylib"
             os.contains("linux") -> "linux" to "so"
-            else -> error("Unsupported OS for unprivileged ICMP: $os")
+            else -> error("unsupported OS for unprivileged ICMP: $os")
         }
         val archDir = when {
             arch.contains("aarch64") || arch.contains("arm64") -> "arm64"
             arch.contains("x86_64") || arch.contains("amd64") -> "x86_64"
-            else -> error("Unsupported arch: $arch")
+            else -> error("unsupported architecture: $arch")
         }
         val resourcePath = "/native/$dir-$archDir/libpingy_icmp.$ext"
         val stream = NativeIcmpPing::class.java.getResourceAsStream(resourcePath)
-            ?: error("Native lib not found on classpath: $resourcePath")
+            ?: error("native library not on the classpath: $resourcePath")
         val tmp = Files.createTempFile("libpingy_icmp-", ".$ext")
         tmp.toFile().deleteOnExit()
         stream.use { Files.copy(it, tmp, StandardCopyOption.REPLACE_EXISTING) }
