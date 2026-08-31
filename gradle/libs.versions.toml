@@ -3,6 +3,7 @@
 kotlin = "2.4.10"
 agp = "9.1.1"
 kermit = "2.1.0"
+lyricist = "1.9.0"
 compose-multiplatform="1.11.0-beta02"
 compose-multiplatform-icons = "1.7.3"
 compose-material3 = "1.11.0-alpha06"
@@ -32,6 +33,7 @@ kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences-core", version.ref = "datastore" }
 logging-kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }
+lyricist = { module = "cafe.adriel.lyricist:lyricist", version.ref = "lyricist" }
 
 compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "compose-multiplatform" }
 compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "compose-multiplatform" }

@@ -3,6 +3,8 @@ package com.yuroyami.pingy
 import androidx.compose.runtime.mutableStateListOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.yuroyami.pingy.i18n.EnStrings
+import com.yuroyami.pingy.i18n.Strings
 import com.yuroyami.pingy.logic.MAX_PANELS
 import com.yuroyami.pingy.logic.PanelSpec
 import com.yuroyami.pingy.logic.PingPanel
@@ -19,6 +21,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
+import kotlin.concurrent.Volatile
 import kotlinx.coroutines.launch
 
 /** The two artistic renderings of a ping graph. One dataset, two geometries. */
@@ -76,6 +79,17 @@ class PingyViewmodel : ViewModel() {
         notice.value = Notice(++noticeCounter, text)
     }
 
+    /**
+     * Strings for messages raised outside composition.
+     *
+     * The view model can produce user-facing text before any UI exists (a
+     * failed store read happens during init), so it cannot read the
+     * CompositionLocal. The UI pushes the active catalogue in; English is the
+     * fallback until it does.
+     */
+    @Volatile
+    var strings: Strings = EnStrings
+
     /** Operating [PingPanel]s in observable mutable state. */
     val panels = mutableStateListOf<PingPanel>()
 
@@ -119,7 +133,7 @@ class PingyViewmodel : ViewModel() {
                     // the next autosave.
                     savingBlocked = true
                     cockpitState.value = CockpitState.LoadFailed(loaded.message)
-                    notify("Could not read saved panels; nothing was changed")
+                    notify(strings.storeUnreadable)
                 }
 
                 is StoreLoad.Loaded -> {
@@ -132,7 +146,7 @@ class PingyViewmodel : ViewModel() {
 
                     loaded.panels.forEach { spec -> addPanel(spec.ip, spec) }
                     if (loaded.droppedRecords > 0) {
-                        notify("Skipped ${loaded.droppedRecords} unreadable saved panel(s)")
+                        notify(strings.skippedRecords(loaded.droppedRecords))
                     }
                     cockpitState.value = CockpitState.Ready
                 }

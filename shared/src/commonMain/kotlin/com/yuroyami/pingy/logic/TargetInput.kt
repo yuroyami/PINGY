@@ -1,5 +1,7 @@
 package com.yuroyami.pingy.logic
 
+import com.yuroyami.pingy.i18n.Strings
+
 /**
  * Turning whatever the user typed into a target we are willing to resolve.
  *
@@ -10,15 +12,31 @@ package com.yuroyami.pingy.logic
  * report failure.
  */
 
-/** Why a typed target was refused, phrased for a person. */
-enum class TargetRejection(val message: String) {
-    EMPTY("Type an address first"),
-    CREDENTIALS("Remove the username and password from the address"),
-    HAS_PORT("Drop the port number; ping addresses a host, not a port"),
-    IPV6("IPv6 targets are not supported yet"),
-    TOO_LONG("That address is too long"),
-    ILLEGAL_CHARACTERS("That address contains characters a host name cannot have"),
-    NOT_A_HOST("That does not look like an IP address or domain name"),
+/**
+ * Why a typed target was refused.
+ *
+ * The reason is a value, not a sentence: the wording lives in the translation
+ * catalogue so this stays usable from non-UI code and from tests.
+ */
+enum class TargetRejection {
+    EMPTY,
+    CREDENTIALS,
+    HAS_PORT,
+    IPV6,
+    TOO_LONG,
+    ILLEGAL_CHARACTERS,
+    NOT_A_HOST;
+
+    /** The localized sentence to show for this rejection. */
+    fun message(s: Strings): String = when (this) {
+        EMPTY -> s.rejectEmpty
+        CREDENTIALS -> s.rejectCredentials
+        HAS_PORT -> s.rejectPort
+        IPV6 -> s.rejectIpv6
+        TOO_LONG -> s.rejectTooLong
+        ILLEGAL_CHARACTERS -> s.rejectIllegalCharacters
+        NOT_A_HOST -> s.rejectNotAHost
+    }
 }
 
 sealed interface TargetParse {

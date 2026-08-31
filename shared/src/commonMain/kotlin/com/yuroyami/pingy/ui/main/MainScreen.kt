@@ -92,6 +92,7 @@ import androidx.compose.ui.window.PopupProperties
 import com.yuroyami.pingy.GraphStyle
 import com.yuroyami.pingy.PanelLayout
 import com.yuroyami.pingy.PingyViewmodel
+import com.yuroyami.pingy.i18n.strings
 import com.yuroyami.pingy.logic.Constants
 import com.yuroyami.pingy.logic.TargetParse
 import com.yuroyami.pingy.logic.parseTarget
@@ -145,6 +146,7 @@ internal fun NeonWordmark(fontSize: TextUnit, fontFamily: FontFamily, modifier: 
 @Composable
 fun MainScreenUI() {
     val viewmodel = LocalViewmodel.current
+    val s = strings
 
     Box(
         Modifier
@@ -244,6 +246,7 @@ fun MainScreenUI() {
 @Composable
 private fun CockpitHeader() {
     val viewmodel = LocalViewmodel.current
+    val s = strings
     val inter = Font(Res.font.Inter_Regular)
     val interFont = remember(inter) { FontFamily(inter) }
 
@@ -271,9 +274,9 @@ private fun CockpitHeader() {
                 viewmodel.panelLayout.value = next
                 viewmodel.notify(
                     when (next) {
-                        PanelLayout.COLUMN -> "Layout: stack"
-                        PanelLayout.GRID -> "Layout: celluloid"
-                        PanelLayout.PAGER -> "Layout: pages"
+                        PanelLayout.COLUMN -> s.layoutStack
+                        PanelLayout.GRID -> s.layoutGrid
+                        PanelLayout.PAGER -> s.layoutPages
                     }
                 )
             }) {
@@ -283,7 +286,7 @@ private fun CockpitHeader() {
                         PanelLayout.GRID -> Icons.Filled.GridView
                         PanelLayout.PAGER -> Icons.Filled.ViewCarousel
                     },
-                    contentDescription = "Cycle panel layout",
+                    contentDescription = s.cyclePanelLayout,
                     tint = Color(0xFF8A95A3),
                 )
             }
@@ -296,7 +299,7 @@ private fun CockpitHeader() {
                 }
                 viewmodel.setGlobalStyle(next)
                 viewmodel.notify(
-                    if (next == GraphStyle.PINGLETTES) "All panels: bars" else "All panels: ridge"
+                    if (next == GraphStyle.PINGLETTES) s.allPanelsBars else s.allPanelsRidge
                 )
             }) {
                 // The icon previews the style a tap would switch every panel to.
@@ -304,9 +307,9 @@ private fun CockpitHeader() {
                     imageVector = if (style == GraphStyle.MOUNTAIN_SLOPES) Icons.Filled.BarChart
                                   else Icons.AutoMirrored.Filled.ShowChart,
                     contentDescription = if (style == GraphStyle.MOUNTAIN_SLOPES) {
-                        "Switch all panels to bars"
+                        s.switchAllToBars
                     } else {
-                        "Switch all panels to the continuous ridge"
+                        s.switchAllToRidge
                     },
                     tint = Color(0xFF8A95A3),
                 )
@@ -323,16 +326,16 @@ private fun CockpitHeader() {
         val addTarget: () -> Unit = {
             presetsOpen.value = false
             when (val parsed = parseTarget(txt.value)) {
-                is TargetParse.Invalid -> viewmodel.notify(parsed.reason.message)
+                is TargetParse.Invalid -> viewmodel.notify(parsed.reason.message(s))
                 is TargetParse.Valid -> when (viewmodel.addPanel(parsed.host)) {
                     PingyViewmodel.AddResult.Added -> {
-                        viewmodel.notify("${'$'}{parsed.host} added")
+                        viewmodel.notify(s.targetAdded(parsed.host))
                         txt.value = ""
                     }
                     PingyViewmodel.AddResult.Duplicate ->
-                        viewmodel.notify("${'$'}{parsed.host} is already being monitored")
+                        viewmodel.notify(s.targetAlreadyMonitored(parsed.host))
                     PingyViewmodel.AddResult.AtCapacity ->
-                        viewmodel.notify("Panel limit reached; remove one first")
+                        viewmodel.notify(s.panelLimitReached)
                 }
             }
         }
@@ -362,11 +365,11 @@ private fun CockpitHeader() {
                         TextField(
                             modifier = Modifier
                                 .weight(1f)
-                                .semantics { contentDescription = "Target IP address or domain name" },
+                                .semantics { contentDescription = s.targetFieldDescription },
                             singleLine = true,
                             value = txt.value,
                             onValueChange = { txt.value = it },
-                            label = { Text("IP or domain", fontSize = 12.sp) },
+                            label = { Text(s.targetFieldLabel, fontSize = 12.sp) },
                             keyboardOptions = KeyboardOptions(
                                 autoCorrectEnabled = false,
                                 keyboardType = KeyboardType.Uri,
@@ -379,7 +382,7 @@ private fun CockpitHeader() {
                                 fontFamily = interFont,
                             ),
                             placeholder = {
-                                Text("IP or domain", color = Color(0xFF5E6874), fontSize = 15.sp)
+                                Text(s.targetFieldLabel, color = Color(0xFF7C8794), fontSize = 15.sp)
                             },
                             colors = TextFieldDefaults.colors(
                                 focusedContainerColor = Color.Transparent,
@@ -397,7 +400,7 @@ private fun CockpitHeader() {
                         IconButton(onClick = { presetsOpen.value = !presetsOpen.value }) {
                             Icon(
                                 imageVector = Icons.Filled.ExpandMore,
-                                contentDescription = "Preset targets",
+                                contentDescription = s.presetTargets,
                                 tint = Color(0xFF7C8794),
                                 modifier = Modifier.rotate(chevronAngle),
                             )
@@ -492,7 +495,7 @@ private fun CockpitHeader() {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         Icons.Filled.Add,
-                        contentDescription = "Add target",
+                        contentDescription = s.addTarget,
                         tint = Color(0xFF07130B),
                     )
                 }

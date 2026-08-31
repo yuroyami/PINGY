@@ -1,5 +1,6 @@
 package com.yuroyami.pingy.logic
 
+import com.yuroyami.pingy.i18n.Strings
 import kotlin.math.roundToInt
 import kotlin.time.TimeSource
 
@@ -29,7 +30,16 @@ enum class LocalFault {
     SOCKET_OPEN_FAILED,
     SEND_FAILED,
     SOCKET_LOST,
-    UNSUPPORTED_PLATFORM,
+    UNSUPPORTED_PLATFORM;
+
+    /** The localized sentence to show for this fault. */
+    fun message(s: Strings): String = when (this) {
+        RESOLVE_FAILED -> s.faultResolveFailed
+        SOCKET_OPEN_FAILED -> s.faultSocketOpenFailed
+        SEND_FAILED -> s.faultSendFailed
+        SOCKET_LOST -> s.faultSocketLost
+        UNSUPPORTED_PLATFORM -> s.faultUnsupportedPlatform
+    }
 }
 
 /**
