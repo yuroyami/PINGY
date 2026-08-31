@@ -75,6 +75,25 @@ val RuStrings = Strings(
     a11yWorst = { ms -> ", худший ${ms}" },
     a11yExcludedFaults = { n -> "${n} попыток не покинули устройство и исключены" },
 
+    loading = "Загрузка",
+    undo = "Отменить",
+    panelRemoved = { host -> "${host} удалён" },
+    resetPanelSettings = "Сбросить настройки этой панели",
+    settingsWereReset = "Настройки сброшены",
+    retry = "Повторить",
+    close = "Закрыть",
+
+    currentlySelected = "выбрано сейчас",
+    pagePosition = { a, b -> "панель ${a} из ${b}" },
+    previousPanel = "Предыдущая панель",
+    nextPanel = "Следующая панель",
+
+    whatDoTheseMean = "Что это значит?",
+    helpAverage = "СРЕД — среднее время отклика ответов в видимом окне.",
+    helpJitter = "ДЖИТТЕР — среднее изменение от одного ответа к следующему. Меньше значит ровнее.",
+    helpLoss = "ПОТЕРИ считают отправленные зонды без ответа. Сбои, не покинувшие устройство, не учитываются.",
+    helpGone = "ПРОСТОЙ — доля наблюдаемого времени, покрытая потерянными зондами.",
+
     back = "Назад",
     aboutTagline = "Живые панели пинга для каждой важной цели.",
     aboutTech = "Kotlin Multiplatform и Compose. Непривилегированный ICMP, без root.",

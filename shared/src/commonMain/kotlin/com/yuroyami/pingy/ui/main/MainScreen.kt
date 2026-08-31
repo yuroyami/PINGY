@@ -40,6 +40,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.Add
@@ -66,6 +70,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -89,6 +100,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import com.yuroyami.pingy.CockpitState
 import com.yuroyami.pingy.GraphStyle
 import com.yuroyami.pingy.PanelLayout
 import com.yuroyami.pingy.PingyViewmodel
@@ -182,11 +194,29 @@ fun MainScreenUI() {
             topBar = { CockpitHeader() },
         ) { pv ->
             val layout by viewmodel.panelLayout.collectAsState()
-            // Consume the whole PaddingValues. Only the top was applied
-            // before, so the last panel sat under the home indicator.
+            val cockpit by viewmodel.cockpitState.collectAsState()
+
+            // Consume the whole PaddingValues. Only the top was applied before,
+            // so the last panel sat under the home indicator.
             val contentModifier = Modifier
                 .fillMaxSize()
                 .padding(pv)
+
+            val inter = Font(Res.font.Inter_Regular)
+            val stateFont = remember(inter) { FontFamily(inter) }
+
+            if (viewmodel.panels.isEmpty()) {
+                Box(contentModifier) {
+                    when (cockpit) {
+                        is CockpitState.Loading -> CockpitLoading(stateFont)
+                        is CockpitState.FirstRun -> CockpitFirstRun(stateFont)
+                        is CockpitState.LoadFailed -> CockpitLoadFailed(stateFont)
+                        is CockpitState.Ready -> CockpitEmpty(stateFont)
+                    }
+                }
+                return@Scaffold
+            }
+
             when (layout) {
                 PanelLayout.COLUMN -> LazyColumn(modifier = contentModifier) {
                     items(viewmodel.panels, key = { it.ip }) { panel ->
@@ -194,8 +224,10 @@ fun MainScreenUI() {
                     }
                 }
 
+                // Adaptive rather than a hard two columns: two cells cramp a
+                // narrow phone and waste a tablet or a wide desktop window.
                 PanelLayout.GRID -> LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
+                    columns = GridCells.Adaptive(minSize = 320.dp),
                     modifier = contentModifier,
                 ) {
                     items(viewmodel.panels.size, key = { viewmodel.panels[it].ip }) { index ->
@@ -219,20 +251,57 @@ fun MainScreenUI() {
                         }
                     }
                     if (viewmodel.panels.size > 1) {
+                        val scope = rememberCoroutineScope()
+                        val total = viewmodel.panels.size
+                        val current = pagerState.currentPage
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 6.dp)
+                                .semantics {
+                                    stateDescription = s.pagePosition(current + 1, total)
+                                },
                             horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            repeat(viewmodel.panels.size) { i ->
+                            // Explicit controls. Paging used to be swipe-only,
+                            // and a horizontal swipe on a panel is also the
+                            // graph's scrub gesture, so the two competed and
+                            // neither was reachable without a pointer.
+                            IconButton(
+                                onClick = {
+                                    scope.launch { pagerState.animateScrollToPage((current - 1).coerceAtLeast(0)) }
+                                },
+                                enabled = current > 0,
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                    contentDescription = s.previousPanel,
+                                    tint = if (current > 0) Paletting.SGN else Paletting.STRIP_BORDER,
+                                )
+                            }
+                            repeat(total) { i ->
                                 Box(
                                     Modifier
                                         .padding(horizontal = 3.dp)
-                                        .size(6.dp)
+                                        .size(8.dp)
                                         .background(
-                                            color = if (pagerState.currentPage == i) Paletting.SGN
+                                            color = if (current == i) Paletting.SGN
                                                     else Paletting.STRIP_BORDER,
                                             shape = CircleShape,
                                         )
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    scope.launch { pagerState.animateScrollToPage((current + 1).coerceAtMost(total - 1)) }
+                                },
+                                enabled = current < total - 1,
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = s.nextPanel,
+                                    tint = if (current < total - 1) Paletting.SGN else Paletting.STRIP_BORDER,
                                 )
                             }
                         }
@@ -298,9 +367,17 @@ private fun CockpitHeader() {
                     GraphStyle.MOUNTAIN_SLOPES -> GraphStyle.PINGLETTES
                 }
                 viewmodel.setGlobalStyle(next)
-                viewmodel.notify(
-                    if (next == GraphStyle.PINGLETTES) s.allPanelsBars else s.allPanelsRidge
-                )
+                val pinned = viewmodel.panelsWithOwnStyle()
+                val text = if (next == GraphStyle.PINGLETTES) s.allPanelsBars else s.allPanelsRidge
+                if (pinned > 0) {
+                    viewmodel.notify(
+                        text = text,
+                        actionLabel = s.resetPanelSettings,
+                        action = { viewmodel.clearStyleOverrides() },
+                    )
+                } else {
+                    viewmodel.notify(text)
+                }
             }) {
                 // The icon previews the style a tap would switch every panel to.
                 Icon(
@@ -381,9 +458,6 @@ private fun CockpitHeader() {
                                 fontSize = 19.sp,
                                 fontFamily = interFont,
                             ),
-                            placeholder = {
-                                Text(s.targetFieldLabel, color = Color(0xFF7C8794), fontSize = 15.sp)
-                            },
                             colors = TextFieldDefaults.colors(
                                 focusedContainerColor = Color.Transparent,
                                 unfocusedContainerColor = Color.Transparent,
@@ -438,7 +512,16 @@ private fun CockpitHeader() {
                                 color = Paletting.STRIP_BG,
                                 border = BorderStroke(1.dp, Paletting.STRIP_BORDER),
                             ) {
-                                Column(Modifier.padding(bottom = 8.dp)) {
+                                Column(
+                                    Modifier
+                                        .padding(bottom = 8.dp)
+                                        // Bounded and scrollable: at large text
+                                        // scales the list ran past the screen
+                                        // with no way to reach the last entry.
+                                        .heightIn(max = 320.dp)
+                                        .verticalScroll(rememberScrollState())
+                                        .selectableGroup(),
+                                ) {
                                     Box(
                                         Modifier
                                             .fillMaxWidth()
@@ -452,15 +535,26 @@ private fun CockpitHeader() {
                                             targetValue = if (presetsOpen.value) 1f else 0f,
                                             animationSpec = tween(160, delayMillis = 24 * index),
                                         )
+                                        val isCurrent = txt.value.trim() == ip
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .clickable {
-                                                    txt.value = ip
-                                                    presetsOpen.value = false
+                                                // A real selectable with state,
+                                                // so assistive technology can
+                                                // say which entry is current.
+                                                .selectable(
+                                                    selected = isCurrent,
+                                                    role = Role.RadioButton,
+                                                    onClick = {
+                                                        txt.value = ip
+                                                        presetsOpen.value = false
+                                                    },
+                                                )
+                                                .semantics {
+                                                    if (isCurrent) stateDescription = s.currentlySelected
                                                 }
-                                                .padding(horizontal = 20.dp, vertical = 9.dp),
+                                                .padding(horizontal = 20.dp, vertical = 14.dp),
                                         ) {
                                             Box(
                                                 Modifier
@@ -508,15 +602,21 @@ private fun CockpitHeader() {
         LaunchedEffect(noticeVal?.id) {
             val shown = noticeVal ?: return@LaunchedEffect
             // 2.2s was below the WCAG "enough time" guidance for a message a
-            // reader must notice, parse and act on.
-            delay(6_000)
-            if (viewmodel.notice.value?.id == shown.id) viewmodel.notice.value = null
+            // reader must notice, parse and act on. An actionable notice needs
+            // longer still, because acting on it is the point.
+            delay(if (shown.action != null) 10_000 else 6_000)
+            viewmodel.dismissNotice(shown.id)
         }
         Box(
             Modifier
                 .fillMaxWidth()
                 .padding(top = 3.dp, bottom = 3.dp)
-                .height(20.dp),
+                .heightIn(min = 24.dp)
+                // A status line nobody is told about is not a status line.
+                .semantics(mergeDescendants = true) {
+                    liveRegion = LiveRegionMode.Polite
+                    noticeVal?.let { contentDescription = it.text }
+                },
             contentAlignment = Alignment.Center,
         ) {
             AnimatedContent(
@@ -524,14 +624,35 @@ private fun CockpitHeader() {
                 transitionSpec = { fadeIn(tween(160)) togetherWith fadeOut(tween(160)) },
             ) { n ->
                 if (n != null) {
-                    Text(
-                        text = n.text,
-                        color = Color(0xFF9FE0B8),
-                        fontSize = 12.sp,
-                        letterSpacing = 0.3.sp,
-                        fontFamily = interFont,
-                        maxLines = 1,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = n.text,
+                            color = Color(0xFF9FE0B8),
+                            fontSize = 12.sp,
+                            letterSpacing = 0.3.sp,
+                            fontFamily = interFont,
+                            maxLines = 2,
+                        )
+                        val label = n.actionLabel
+                        val act = n.action
+                        if (label != null && act != null) {
+                            Text(
+                                text = label,
+                                color = Paletting.SGN,
+                                fontSize = 12.sp,
+                                fontFamily = interFont,
+                                modifier = Modifier
+                                    .padding(start = 14.dp)
+                                    .clickable(role = Role.Button) {
+                                        act()
+                                        viewmodel.dismissNotice(n.id)
+                                    }
+                                    // Keeps the tap target at the platform
+                                    // minimum without changing the visual size.
+                                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                            )
+                        }
+                    }
                 }
             }
         }

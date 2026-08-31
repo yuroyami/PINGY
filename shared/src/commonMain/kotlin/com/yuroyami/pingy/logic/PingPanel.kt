@@ -132,6 +132,12 @@ class PingPanel(
         running.value = false
     }
 
+    /** Snapshot of the tunable preferences, for undoing a reset. */
+    fun preferenceSnapshot(): PanelSpec = toSpec()
+
+    /** Put back a snapshot taken by [preferenceSnapshot]. */
+    fun restorePreferences(spec: PanelSpec) = applySpec(spec)
+
     /** Restore all user-tunable preferences to their factory defaults.
      * Does not affect the pinging state nor the recorded history. */
     fun resetPreferences() {

@@ -75,6 +75,25 @@ val UkStrings = Strings(
     a11yWorst = { ms -> ", найгірший ${ms}" },
     a11yExcludedFaults = { n -> "${n} спроб не залишили цей пристрій і виключені" },
 
+    loading = "Завантаження",
+    undo = "Скасувати",
+    panelRemoved = { host -> "${host} вилучено" },
+    resetPanelSettings = "Скинути налаштування цієї панелі",
+    settingsWereReset = "Налаштування скинуто",
+    retry = "Спробувати ще",
+    close = "Закрити",
+
+    currentlySelected = "вибрано зараз",
+    pagePosition = { a, b -> "панель ${a} з ${b}" },
+    previousPanel = "Попередня панель",
+    nextPanel = "Наступна панель",
+
+    whatDoTheseMean = "Що це означає?",
+    helpAverage = "СЕР — середній час відгуку відповідей у видимому вікні.",
+    helpJitter = "ДЖИТЕР — середня зміна від однієї відповіді до наступної. Менше означає рівніше.",
+    helpLoss = "ВТРАТИ рахують надіслані зонди без відповіді. Збої, що не залишили пристрій, не враховуються.",
+    helpGone = "ПРОСТІЙ — частка спостереженого часу, покрита втраченими зондами.",
+
     back = "Назад",
     aboutTagline = "Живі панелі пінгу для кожної важливої цілі.",
     aboutTech = "Kotlin Multiplatform і Compose. ICMP без привілеїв, без root.",

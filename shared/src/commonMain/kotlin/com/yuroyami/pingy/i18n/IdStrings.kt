@@ -75,6 +75,25 @@ val IdStrings = Strings(
     a11yWorst = { ms -> ", terburuk ${ms}" },
     a11yExcludedFaults = { n -> "${n} percobaan tidak keluar dari perangkat ini dan dikecualikan" },
 
+    loading = "Memuat",
+    undo = "Urungkan",
+    panelRemoved = { host -> "${host} dihapus" },
+    resetPanelSettings = "Setel ulang pengaturan panel ini",
+    settingsWereReset = "Pengaturan disetel ulang",
+    retry = "Coba lagi",
+    close = "Tutup",
+
+    currentlySelected = "sedang dipilih",
+    pagePosition = { a, b -> "panel ${a} dari ${b}" },
+    previousPanel = "Panel sebelumnya",
+    nextPanel = "Panel berikutnya",
+
+    whatDoTheseMean = "Apa artinya ini?",
+    helpAverage = "RATA adalah waktu pulang pergi rata-rata dari balasan dalam rentang yang terlihat.",
+    helpJitter = "JITTER adalah perubahan rata-rata dari satu balasan ke berikutnya. Makin kecil makin stabil.",
+    helpLoss = "HILANG menghitung probe yang dikirim tetapi tidak pernah dibalas. Kegagalan yang tidak keluar dari perangkat ini tidak dihitung.",
+    helpGone = "PUTUS adalah bagian waktu teramati yang tertutup oleh probe yang hilang.",
+
     back = "Kembali",
     aboutTagline = "Panel ping langsung untuk setiap target yang Anda pedulikan.",
     aboutTech = "Kotlin Multiplatform + Compose. ICMP tanpa hak khusus, tanpa root.",

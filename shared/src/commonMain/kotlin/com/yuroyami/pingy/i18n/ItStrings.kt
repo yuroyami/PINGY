@@ -75,6 +75,25 @@ val ItStrings = Strings(
     a11yWorst = { ms -> ", peggiore ${ms}" },
     a11yExcludedFaults = { n -> "${n} tentativi non hanno lasciato questo dispositivo e sono esclusi" },
 
+    loading = "Caricamento",
+    undo = "Annulla",
+    panelRemoved = { host -> "${host} rimosso" },
+    resetPanelSettings = "Reimposta le impostazioni di questo pannello",
+    settingsWereReset = "Impostazioni reimpostate",
+    retry = "Riprova",
+    close = "Chiudi",
+
+    currentlySelected = "attualmente selezionato",
+    pagePosition = { a, b -> "pannello ${a} di ${b}" },
+    previousPanel = "Pannello precedente",
+    nextPanel = "Pannello successivo",
+
+    whatDoTheseMean = "Che cosa significano?",
+    helpAverage = "MEDIA è il tempo medio di andata e ritorno delle risposte nella finestra visibile.",
+    helpJitter = "JITTER è la variazione media tra una risposta e la successiva. Più basso è più stabile.",
+    helpLoss = "PERDITA conta le sonde inviate e mai risposte. I guasti che non hanno lasciato questo dispositivo non contano.",
+    helpGone = "ASSENZA è la quota di tempo osservato coperta da sonde perse.",
+
     back = "Indietro",
     aboutTagline = "Pannelli di ping in tempo reale per ogni destinazione che ti interessa.",
     aboutTech = "Kotlin Multiplatform + Compose. ICMP senza privilegi, senza root.",

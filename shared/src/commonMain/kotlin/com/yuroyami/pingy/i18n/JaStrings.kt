@@ -75,6 +75,25 @@ val JaStrings = Strings(
     a11yWorst = { ms -> "、最悪 ${ms}" },
     a11yExcludedFaults = { n -> "${n} 件の試行はこの端末から送信されなかったため除外しました" },
 
+    loading = "読み込み中",
+    undo = "元に戻す",
+    panelRemoved = { host -> "${host} を削除しました" },
+    resetPanelSettings = "このパネルの設定をリセット",
+    settingsWereReset = "設定をリセットしました",
+    retry = "再試行",
+    close = "閉じる",
+
+    currentlySelected = "現在選択中",
+    pagePosition = { a, b -> "${b} 個中 ${a} 番目のパネル" },
+    previousPanel = "前のパネル",
+    nextPanel = "次のパネル",
+
+    whatDoTheseMean = "各項目の意味",
+    helpAverage = "平均は、表示範囲内の応答の往復時間の平均です。",
+    helpJitter = "ジッタは、応答ごとの変化量の平均です。小さいほど安定しています。",
+    helpLoss = "損失は、送信したが応答がなかったプローブの数です。端末から送信されなかった失敗は含みません。",
+    helpGone = "断絶は、観測した時間のうち損失プローブが占めた割合です。",
+
     back = "戻る",
     aboutTagline = "気になるターゲットすべてをリアルタイムに表示します。",
     aboutTech = "Kotlin Multiplatform と Compose。非特権 ICMP、root 不要。",

@@ -98,6 +98,28 @@ data class Strings(
     val a11yWorst: (Int) -> String,
     val a11yExcludedFaults: (Int) -> String,
 
+    // Status, recovery and destructive actions
+    val loading: String,
+    val undo: String,
+    val panelRemoved: (String) -> String,
+    val resetPanelSettings: String,
+    val settingsWereReset: String,
+    val retry: String,
+    val close: String,
+
+    // Menu and pager state, spoken to assistive technology
+    val currentlySelected: String,
+    val pagePosition: (Int, Int) -> String,
+    val previousPanel: String,
+    val nextPanel: String,
+
+    // Contextual help for the statistics, which are otherwise bare jargon
+    val whatDoTheseMean: String,
+    val helpAverage: String,
+    val helpJitter: String,
+    val helpLoss: String,
+    val helpGone: String,
+
     // About and legal
     val back: String,
     val aboutTagline: String,

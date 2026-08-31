@@ -75,6 +75,25 @@ val ArStrings = Strings(
     a11yWorst = { ms -> "، الأسوأ ${ms}" },
     a11yExcludedFaults = { n -> "${n} محاولة فحص لم تغادر هذا الجهاز وتم استبعادها" },
 
+    loading = "جارٍ التحميل",
+    undo = "تراجع",
+    panelRemoved = { host -> "تم حذف ${host}" },
+    resetPanelSettings = "إعادة ضبط إعدادات هذه اللوحة",
+    settingsWereReset = "أُعيد ضبط الإعدادات",
+    retry = "أعد المحاولة",
+    close = "إغلاق",
+
+    currentlySelected = "محدد حالياً",
+    pagePosition = { a, b -> "اللوحة ${a} من ${b}" },
+    previousPanel = "اللوحة السابقة",
+    nextPanel = "اللوحة التالية",
+
+    whatDoTheseMean = "ماذا تعني هذه؟",
+    helpAverage = "المتوسط هو معدل زمن الذهاب والإياب للردود في النافذة المعروضة.",
+    helpJitter = "التذبذب هو متوسط التغير بين رد وآخر. كلما قل كان أثبت.",
+    helpLoss = "الفقد يحصي الفحوص التي أُرسلت ولم يأتِ لها رد. الأعطال التي لم تغادر الجهاز لا تُحتسب.",
+    helpGone = "الانقطاع هو نسبة الزمن المرصود الذي غطته فحوص مفقودة.",
+
     back = "رجوع",
     aboutTagline = "لوحات فحص حية لكل هدف يهمك.",
     aboutTech = "Kotlin Multiplatform مع Compose. ICMP بدون صلاحيات جذر.",

@@ -75,6 +75,25 @@ val ZhHantStrings = Strings(
     a11yWorst = { ms -> "，最差 ${ms}" },
     a11yExcludedFaults = { n -> "有 ${n} 次嘗試未離開本機，已排除" },
 
+    loading = "載入中",
+    undo = "復原",
+    panelRemoved = { host -> "已移除 ${host}" },
+    resetPanelSettings = "重設此面板的設定",
+    settingsWereReset = "已重設設定",
+    retry = "重試",
+    close = "關閉",
+
+    currentlySelected = "目前已選取",
+    pagePosition = { a, b -> "第 ${a} 個面板，共 ${b} 個" },
+    previousPanel = "上一個面板",
+    nextPanel = "下一個面板",
+
+    whatDoTheseMean = "這些是什麼意思？",
+    helpAverage = "平均是可見時間範圍內各次回覆的平均來回時間。",
+    helpJitter = "抖動是相鄰兩次回覆之間的平均變化量。越小越穩定。",
+    helpLoss = "遺失統計已送出但未收到回覆的探測封包。未離開本機的失敗不計入。",
+    helpGone = "中斷是觀測時間中被遺失探測封包覆蓋的比例。",
+
     back = "返回",
     aboutTagline = "為你在意的每個目標提供即時 ping 面板。",
     aboutTech = "Kotlin Multiplatform 與 Compose。非特權 ICMP，無需 root。",

@@ -75,6 +75,25 @@ val HeStrings = Strings(
     a11yWorst = { ms -> ", הגרוע ביותר ${ms}" },
     a11yExcludedFaults = { n -> "${n} ניסיונות לא יצאו מהמכשיר הזה ואינם נכללים" },
 
+    loading = "טוען",
+    undo = "בטל",
+    panelRemoved = { host -> "${host} הוסר" },
+    resetPanelSettings = "אפס את הגדרות הלוח הזה",
+    settingsWereReset = "ההגדרות אופסו",
+    retry = "נסה שוב",
+    close = "סגור",
+
+    currentlySelected = "נבחר כעת",
+    pagePosition = { a, b -> "לוח ${a} מתוך ${b}" },
+    previousPanel = "הלוח הקודם",
+    nextPanel = "הלוח הבא",
+
+    whatDoTheseMean = "מה המשמעות של אלה?",
+    helpAverage = "ממוצע הוא זמן הלוך ושוב הממוצע של התגובות בחלון הנראה.",
+    helpJitter = "ריצוד הוא השינוי הממוצע מתגובה אחת לבאה. נמוך יותר יציב יותר.",
+    helpLoss = "אובדן סופר בדיקות שנשלחו ולא נענו. תקלות שלא יצאו מהמכשיר אינן נספרות.",
+    helpGone = "ניתוק הוא חלק הזמן הנצפה שכוסה על ידי בדיקות שאבדו.",
+
     back = "חזרה",
     aboutTagline = "לוחות ping חיים לכל יעד שחשוב לך.",
     aboutTech = "Kotlin Multiplatform ו-Compose. ICMP ללא הרשאות מיוחדות, בלי root.",

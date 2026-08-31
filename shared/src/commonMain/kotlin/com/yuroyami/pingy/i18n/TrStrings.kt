@@ -75,6 +75,25 @@ val TrStrings = Strings(
     a11yWorst = { ms -> ", en kötü ${ms}" },
     a11yExcludedFaults = { n -> "${n} deneme bu cihazdan çıkamadı ve hariç tutuldu" },
 
+    loading = "Yükleniyor",
+    undo = "Geri al",
+    panelRemoved = { host -> "${host} kaldırıldı" },
+    resetPanelSettings = "Bu panelin ayarlarını sıfırla",
+    settingsWereReset = "Ayarlar sıfırlandı",
+    retry = "Yeniden dene",
+    close = "Kapat",
+
+    currentlySelected = "şu an seçili",
+    pagePosition = { a, b -> "${b} panelden ${a}. panel" },
+    previousPanel = "Önceki panel",
+    nextPanel = "Sonraki panel",
+
+    whatDoTheseMean = "Bunlar ne anlama geliyor?",
+    helpAverage = "ORT, görünen aralıktaki yanıtların ortalama gidiş dönüş süresidir.",
+    helpJitter = "TİTREŞİM, bir yanıttan diğerine ortalama değişimdir. Düşük olması daha kararlıdır.",
+    helpLoss = "KAYIP, gönderilip yanıtlanmayan sondaları sayar. Bu cihazdan hiç çıkmayan hatalar sayılmaz.",
+    helpGone = "KESİNTİ, gözlenen sürenin kayıp sondalarla kaplanan oranıdır.",
+
     back = "Geri",
     aboutTagline = "Önemsediğiniz her hedef için canlı ping panelleri.",
     aboutTech = "Kotlin Multiplatform ve Compose. Ayrıcalıksız ICMP, root gerekmez.",

@@ -75,6 +75,25 @@ val FrStrings = Strings(
     a11yWorst = { ms -> ", pire ${ms}" },
     a11yExcludedFaults = { n -> "${n} tentatives n'ont pas quitté cet appareil et sont exclues" },
 
+    loading = "Chargement",
+    undo = "Annuler",
+    panelRemoved = { host -> "${host} supprimé" },
+    resetPanelSettings = "Réinitialiser les réglages de ce panneau",
+    settingsWereReset = "Réglages réinitialisés",
+    retry = "Réessayer",
+    close = "Fermer",
+
+    currentlySelected = "actuellement sélectionné",
+    pagePosition = { a, b -> "panneau ${a} sur ${b}" },
+    previousPanel = "Panneau précédent",
+    nextPanel = "Panneau suivant",
+
+    whatDoTheseMean = "Que signifient ces valeurs ?",
+    helpAverage = "MOY est le temps d'aller-retour moyen des réponses dans la fenêtre affichée.",
+    helpJitter = "GIGUE est l'écart moyen entre une réponse et la suivante. Plus bas, plus stable.",
+    helpLoss = "PERTE compte les sondes envoyées et restées sans réponse. Les échecs qui n'ont jamais quitté cet appareil ne comptent pas.",
+    helpGone = "COUPÉ est la part du temps observé couverte par des sondes perdues.",
+
     back = "Retour",
     aboutTagline = "Des panneaux de ping en direct pour chaque cible qui compte.",
     aboutTech = "Kotlin Multiplatform + Compose. ICMP non privilégié, sans root.",

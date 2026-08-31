@@ -51,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
@@ -131,6 +132,18 @@ private const val PEAK_DECAY_PER_SEC = 0.22f // peak-hold line falls this canvas
 internal val REORDER_SLACK_MS = PING_TIMEOUT_MS + 1_000L
 
 
+/**
+ * Ceiling on how far text drawn *inside* the canvas follows the user's font
+ * scale.
+ *
+ * Everything outside the instrument scales without limit. The canvas cannot:
+ * it has a fixed height and its labels sit at fixed anchors, so at 200% the
+ * readout plate grew until it covered the graph it was annotating. Capping the
+ * in-canvas scale keeps the instrument legible while the rest of the app
+ * honours the setting in full.
+ */
+private const val MAX_CANVAS_FONT_SCALE = 1.35f
+
 /** Redraw cadence when the platform asks for reduced motion. */
 private const val REDUCED_MOTION_TICK_MS = 250L
 
@@ -165,6 +178,10 @@ private const val GESTURE_SCRUB = 3
 fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
     val s = strings
     val textMeasurer = rememberTextMeasurer()
+
+    // Multiplier that holds in-canvas text at or below MAX_CANVAS_FONT_SCALE
+    // while leaving smaller scales untouched.
+    val canvasSp = (MAX_CANVAS_FONT_SCALE / LocalDensity.current.fontScale).coerceAtMost(1f)
     val windowInfo = LocalWindowInfo.current
     val windowHeightDp by remember(windowInfo) { derivedStateOf { windowInfo.containerDpSize.height } }
 
@@ -273,8 +290,8 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
 
     val inter = Font(Res.font.Inter_Regular)
     val interFont = remember(inter) { FontFamily(inter) }
-    val chipStyle = remember(interFont) {
-        TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = interFont)
+    val chipStyle = remember(interFont, canvasSp) {
+        TextStyle(color = Color.White, fontSize = (12 * canvasSp).sp, fontFamily = interFont)
     }
     val peakDash = remember { PathEffect.dashPathEffect(floatArrayOf(12f, 8f)) }
     // Ambient clock for the procedural backdrop (time grid + sweep).
@@ -308,6 +325,21 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
             windowMs = visibleWindowMs(timeframeMsVal, layoutVal),
             s = s,
         )
+        val faultVal by fault.collectAsState()
+        faultVal?.let { f ->
+            Text(
+                text = f.message(s),
+                color = Color(0xFFFF8A80),
+                fontSize = 11.sp,
+                fontFamily = interFont,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0x33FF5252))
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -351,8 +383,16 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                             when (verdict) {
                                 null -> {
                                     // Held still past the long-press timeout.
+                                    // Reversible: a hidden gesture that silently
+                                    // discards every slider the user set is not
+                                    // something to do without a way back.
+                                    val before = preferenceSnapshot()
                                     resetPreferences()
-                                    viewmodel.notify("$ip settings reset")
+                                    viewmodel.notify(
+                                        text = s.settingsWereReset,
+                                        actionLabel = s.undo,
+                                        action = { restorePreferences(before) },
+                                    )
                                 }
                                 GESTURE_TAP -> this@PingGraphView.expanded.update { !it }
                                 GESTURE_SCRUB -> try {
@@ -938,17 +978,25 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                     )
                 }
 
-                // Landmark labels
+                // Landmark labels, right-aligned.
+                //
+                // They used to sit at a raw x = 20 pixels on the left, directly
+                // under the readout plate. At large text scales the plate grew
+                // over them and the axis became unreadable. The right edge is
+                // always clear, and the x is measured rather than assumed.
                 for (y in landMarksVal) {
                     val h = calculatePingY(y.toInt(), canvasH, roofVal.toFloat(), angleOfAttackVal)
+                    val axisStyle = TextStyle(fontSize = (8 * canvasSp).sp, color = Color(200, 200, 220, 170))
+                    val measured = textMeasurer.measure(AnnotatedString(y.toInt().toString()), axisStyle)
                     drawText(
-                        textMeasurer = textMeasurer,
-                        text = "${y.toInt()}",
-                        topLeft = Offset(x = 20f, y = canvasH - h - 4f),
-                        style = TextStyle(
-                            fontSize = 7.sp,
-                            color = Color(200, 200, 220, 160)
-                        )
+                        textLayoutResult = measured,
+                        topLeft = Offset(
+                            x = canvasW - measured.size.width - 6.dp.toPx(),
+                            // Clamped: a landmark near the roof otherwise draws
+                            // half off the top of the canvas.
+                            y = (canvasH - h - measured.size.height / 2f)
+                                .coerceIn(0f, canvasH - measured.size.height),
+                        ),
                     )
                 }
 
@@ -965,13 +1013,13 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                             withStyle(
                                 SpanStyle(
                                     color = neonColor,
-                                    fontSize = 17.sp,
+                                    fontSize = (17 * canvasSp).sp,
                                     fontWeight = FontWeight.Bold,
                                     shadow = Shadow(color = neonColor, blurRadius = 14f),
                                 )
                             ) { append(neonText) }
                             withStyle(
-                                SpanStyle(color = StatsLabelColor, fontSize = 11.sp)
+                                SpanStyle(color = StatsLabelColor, fontSize = (11 * canvasSp).sp)
                             ) { append("   $ip") }
                         },
                         TextStyle(fontFamily = interFont),
@@ -1094,7 +1142,12 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                     modifier = Modifier.size(48.dp),
                     onClick = {
                         viewmodel.notify("$ip removed")
-                        viewmodel.removePanel(this@PingGraphView)
+                        val removed = viewmodel.removePanel(this@PingGraphView)
+                        viewmodel.notify(
+                            text = s.panelRemoved(ip),
+                            actionLabel = s.undo,
+                            action = { viewmodel.restorePanel(removed) },
+                        )
                     },
                 ) {
                     Icon(

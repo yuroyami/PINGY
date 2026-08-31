@@ -75,6 +75,25 @@ val NlStrings = Strings(
     a11yWorst = { ms -> ", slechtste ${ms}" },
     a11yExcludedFaults = { n -> "${n} pogingen hebben dit apparaat niet verlaten en tellen niet mee" },
 
+    loading = "Laden",
+    undo = "Ongedaan maken",
+    panelRemoved = { host -> "${host} verwijderd" },
+    resetPanelSettings = "Instellingen van dit paneel herstellen",
+    settingsWereReset = "Instellingen hersteld",
+    retry = "Opnieuw proberen",
+    close = "Sluiten",
+
+    currentlySelected = "nu geselecteerd",
+    pagePosition = { a, b -> "paneel ${a} van ${b}" },
+    previousPanel = "Vorig paneel",
+    nextPanel = "Volgend paneel",
+
+    whatDoTheseMean = "Wat betekenen deze?",
+    helpAverage = "GEM is de gemiddelde retourtijd van de antwoorden in het zichtbare venster.",
+    helpJitter = "JITTER is de gemiddelde verandering van het ene antwoord naar het volgende. Lager is stabieler.",
+    helpLoss = "VERLIES telt verstuurde probes die nooit zijn beantwoord. Fouten die dit apparaat nooit hebben verlaten tellen niet mee.",
+    helpGone = "UITVAL is het deel van de waargenomen tijd dat door verloren probes werd gedekt.",
+
     back = "Terug",
     aboutTagline = "Live ping-panelen voor elk doel dat je belangrijk vindt.",
     aboutTech = "Kotlin Multiplatform + Compose. ICMP zonder extra rechten, geen root.",

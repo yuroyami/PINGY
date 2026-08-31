@@ -1,5 +1,7 @@
 package com.yuroyami.pingy.ui.main.components
 
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,7 +21,13 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
@@ -58,6 +66,7 @@ import kotlin.math.roundToInt
 @Composable
 internal fun StatsSheet(stats: WindowStats, fontFamily: FontFamily) {
     val s = strings
+    var helpOpen by remember { mutableStateOf(false) }
     val line = buildAnnotatedString {
         fun label(text: String) {
             withStyle(
@@ -123,15 +132,18 @@ internal fun StatsSheet(stats: WindowStats, fontFamily: FontFamily) {
         }
         label("  RANGE ")
         value(
-            if (stats.min != null && stats.max != null) "${stats.min}–${stats.max}ms" else "—",
+            // Format, do not interpolate: these are Doubles now, and printing
+            // one raw gives "35.567–26866.845ms".
+            if (stats.min != null && stats.max != null) {
+                "${formatRtt(stats.min)}–${formatRtt(stats.max)}ms"
+            } else "—",
             SettingsTextColor,
             false,
         )
     }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 11.dp, vertical = 10.dp)) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 11.dp, vertical = 10.dp),
+        modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         BasicText(
@@ -141,6 +153,38 @@ internal fun StatsSheet(stats: WindowStats, fontFamily: FontFamily) {
             style = TextStyle(fontFamily = fontFamily, fontSize = 15.sp, color = SettingsTextColor),
             autoSize = TextAutoSize.StepBased(minFontSize = 6.sp, maxFontSize = 15.sp, stepSize = 0.25.sp),
         )
+    }
+
+    // UX-17: AVG, JIT, LOSS and GONE were four unexplained abbreviations. The
+    // explanation is one tap away rather than absent.
+    Text(
+        text = s.whatDoTheseMean,
+        color = StatsLabelColor,
+        fontSize = 11.sp,
+        fontFamily = fontFamily,
+        modifier = Modifier
+            .clickable(role = Role.Button) { helpOpen = !helpOpen }
+            .padding(vertical = 12.dp, horizontal = 4.dp),
+    )
+    if (helpOpen) StatsHelp(fontFamily)
+    }
+}
+
+/** Plain-language explanation of each figure in the strip. */
+@Composable
+private fun StatsHelp(fontFamily: FontFamily) {
+    val s = strings
+    Column(Modifier.padding(bottom = 8.dp)) {
+        listOf(s.helpAverage, s.helpJitter, s.helpLoss, s.helpGone).forEach { line ->
+            Text(
+                text = line,
+                color = SettingsTextColor,
+                fontSize = 11.sp,
+                lineHeight = 15.sp,
+                fontFamily = fontFamily,
+                modifier = Modifier.padding(bottom = 6.dp),
+            )
+        }
     }
 }
 
@@ -171,7 +215,7 @@ internal fun PingPanel.SettingsSheet(fontFamily: FontFamily) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = s.longPressToReset(ip),
+                text = ip,
                 color = StatsSubColor,
                 fontSize = 10.sp,
                 fontFamily = fontFamily,
@@ -185,6 +229,9 @@ internal fun PingPanel.SettingsSheet(fontFamily: FontFamily) {
                 fontFamily = fontFamily,
             )
             Switch(
+                modifier = Modifier
+                    .scale(0.62f)
+                    .semantics { contentDescription = s.remember },
                 checked = persistVal,
                 onCheckedChange = { checked ->
                     persistAcrossSessions.value = checked
@@ -193,7 +240,6 @@ internal fun PingPanel.SettingsSheet(fontFamily: FontFamily) {
                         else s.willNotReturnNextLaunch(ip)
                     )
                 },
-                modifier = Modifier.scale(0.62f),
                 colors = SwitchDefaults.colors(checkedTrackColor = Paletting.SGN2),
             )
         }
@@ -238,6 +284,27 @@ internal fun PingPanel.SettingsSheet(fontFamily: FontFamily) {
             steps = 18, // 100ms steps
             fontFamily = fontFamily,
         ) { roof.value = it.toInt() }
+        // UX-14: reset had no visible control at all. It existed only as a long
+        // press on the graph, which nothing announced and nothing hinted at.
+        Text(
+            text = s.resetPanelSettings,
+            color = Paletting.SGN,
+            fontSize = 12.sp,
+            fontFamily = fontFamily,
+            modifier = Modifier
+                .padding(top = 6.dp)
+                .clickable(role = Role.Button) {
+                    val before = preferenceSnapshot()
+                    resetPreferences()
+                    viewmodel.notify(
+                        text = s.settingsWereReset,
+                        actionLabel = s.undo,
+                        action = { restorePreferences(before) },
+                    )
+                }
+                .padding(vertical = 14.dp, horizontal = 4.dp),
+        )
+
         CompactSlider(
             label = s.settingHeight,
             valueText = "${(canvasHeightFractionVal * 100).roundToInt()}%",
@@ -261,7 +328,17 @@ internal fun CompactSlider(
     onValueChange: (Float) -> Unit,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().height(36.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            // 36dp is fine visually but too short to hit reliably; the extra
+            // height is padding, so the row still looks the same.
+            .heightIn(min = 48.dp)
+            // The label and the value sit in separate Text nodes, so a screen
+            // reader announced a bare "slider" with no name and no units.
+            // Merging them gives it both.
+            .semantics(mergeDescendants = true) {
+                contentDescription = "$label, $valueText"
+            },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(

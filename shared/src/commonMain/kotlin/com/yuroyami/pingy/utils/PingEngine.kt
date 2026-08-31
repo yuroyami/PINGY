@@ -287,7 +287,18 @@ class PingEngine(
                                     val sendUsec = entry[0] and USEC_MASK
                                     val sentAtMs = entry[1]
                                     val rttMs = ((recvUsec - sendUsec) and USEC_MASK) / 1000.0
-                                    onPing(Ping.reply(rttMs, markAt(sentAtMs)))
+                                    // A reply older than the timeout is not a
+                                    // measurement. The process can be suspended
+                                    // between send and receive, which on mobile
+                                    // is routine; without this guard the whole
+                                    // suspension is reported as round-trip
+                                    // time, and a 26-second "RTT" then poisons
+                                    // the average and the range.
+                                    if (rttMs > PING_TIMEOUT_MS) {
+                                        onPing(Ping.timeout(markAt(sentAtMs)))
+                                    } else {
+                                        onPing(Ping.reply(rttMs, markAt(sentAtMs)))
+                                    }
                                     // Adaptive mode pulls the next send forward only
                                     // once the pipeline is drained, otherwise every
                                     // watchdog probe ratchets the rate upward.

@@ -45,8 +45,19 @@ enum class PanelLayout {
     PAGER,
 }
 
-/** One transient status line. [id] keys the auto-dismiss timer. */
-data class Notice(val id: Long, val text: String)
+/**
+ * One status line. [id] keys the auto-dismiss timer.
+ *
+ * [actionLabel] and [action] make a notice actionable, which is what turns an
+ * irreversible tap into a reversible one: removing a panel or resetting its
+ * settings both used to happen instantly with nothing to undo.
+ */
+data class Notice(
+    val id: Long,
+    val text: String,
+    val actionLabel: String? = null,
+    val action: (() -> Unit)? = null,
+)
 
 /**
  * Where the cockpit is in its startup, so the UI can tell these apart instead
@@ -75,8 +86,12 @@ class PingyViewmodel : ViewModel() {
     val notice = MutableStateFlow<Notice?>(null)
     private var noticeCounter = 0L
 
-    fun notify(text: String) {
-        notice.value = Notice(++noticeCounter, text)
+    fun notify(text: String, actionLabel: String? = null, action: (() -> Unit)? = null) {
+        notice.value = Notice(++noticeCounter, text, actionLabel, action)
+    }
+
+    fun dismissNotice(id: Long) {
+        if (notice.value?.id == id) notice.value = null
     }
 
     /**
@@ -194,18 +209,46 @@ class PingyViewmodel : ViewModel() {
     /** Why an add did or did not happen, so the UI can say something useful. */
     enum class AddResult { Added, Duplicate, AtCapacity }
 
-    /** Stops, forgets, and un-persists a panel. */
-    fun removePanel(panel: PingPanel) {
+    /**
+     * Stops, forgets and un-persists a panel, keeping enough to put it back.
+     *
+     * Removal used to be instant and final. The engine is genuinely torn down,
+     * because holding a socket open for a panel the user removed would be
+     * worse, but the configuration is returned so the caller can offer an undo
+     * that recreates it.
+     */
+    fun removePanel(panel: PingPanel): PanelSpec {
+        val spec = panel.toSpec()
         watchers.remove(panel)?.cancel()
         panels.remove(panel)
         panel.close()
         markDirty()
+        return spec
     }
 
-    /** Sets the app-wide style and clears per-panel overrides. */
+    /** Recreate a panel from a snapshot, for undoing a removal. */
+    fun restorePanel(spec: PanelSpec) {
+        addPanel(spec.ip, spec)
+    }
+
+    /**
+     * Set the app-wide style.
+     *
+     * Per-panel overrides are preserved. Clearing them meant a single tap on
+     * the header silently destroyed every deliberate per-panel choice, with no
+     * warning and no way back. Panels that follow the app-wide setting change;
+     * panels the user has set explicitly keep what they were given.
+     */
     fun setGlobalStyle(style: GraphStyle) {
-        panels.forEach { it.styleOverride.value = null }
         graphStyle.value = style
+    }
+
+    /** How many panels are pinned to a style of their own. */
+    fun panelsWithOwnStyle(): Int = panels.count { it.styleOverride.value != null }
+
+    /** Drop every per-panel style so the whole cockpit follows the app setting. */
+    fun clearStyleOverrides() {
+        panels.forEach { it.styleOverride.value = null }
     }
 
     private fun markDirty() {

@@ -75,6 +75,25 @@ val EnStrings = Strings(
     a11yWorst = { ms -> ", worst ${ms}" },
     a11yExcludedFaults = { n -> "${n} probe attempts could not leave this device and are excluded" },
 
+    loading = "Loading",
+    undo = "Undo",
+    panelRemoved = { host -> "${host} removed" },
+    resetPanelSettings = "Reset this panel's settings",
+    settingsWereReset = "Settings reset",
+    retry = "Try again",
+    close = "Close",
+
+    currentlySelected = "currently selected",
+    pagePosition = { a, b -> "panel ${a} of ${b}" },
+    previousPanel = "Previous panel",
+    nextPanel = "Next panel",
+
+    whatDoTheseMean = "What do these mean?",
+    helpAverage = "AVG is the mean round-trip time of the replies in the visible window.",
+    helpJitter = "JIT is the average change between one reply and the next. Lower is steadier.",
+    helpLoss = "LOSS counts probes that were sent and never answered. Failures that never left this device are not counted.",
+    helpGone = "GONE is the share of the observed time that was covered by lost probes.",
+
     back = "Back",
     aboutTagline = "Live ping panels for every target you care about.",
     aboutTech = "Kotlin Multiplatform + Compose. Unprivileged ICMP, no root.",

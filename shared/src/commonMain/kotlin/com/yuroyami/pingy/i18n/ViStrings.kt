@@ -75,6 +75,25 @@ val ViStrings = Strings(
     a11yWorst = { ms -> ", tệ nhất ${ms}" },
     a11yExcludedFaults = { n -> "${n} lần thử không rời khỏi thiết bị này và bị loại trừ" },
 
+    loading = "Đang tải",
+    undo = "Hoàn tác",
+    panelRemoved = { host -> "Đã xóa ${host}" },
+    resetPanelSettings = "Đặt lại cài đặt của bảng này",
+    settingsWereReset = "Đã đặt lại cài đặt",
+    retry = "Thử lại",
+    close = "Đóng",
+
+    currentlySelected = "đang chọn",
+    pagePosition = { a, b -> "bảng ${a} trên ${b}" },
+    previousPanel = "Bảng trước",
+    nextPanel = "Bảng sau",
+
+    whatDoTheseMean = "Những giá trị này nghĩa là gì?",
+    helpAverage = "TB là thời gian khứ hồi trung bình của các phản hồi trong khoảng đang hiển thị.",
+    helpJitter = "JITTER là mức thay đổi trung bình giữa hai phản hồi liên tiếp. Càng nhỏ càng ổn định.",
+    helpLoss = "MẤT đếm các gói đã gửi mà không có phản hồi. Lỗi chưa rời khỏi thiết bị không được tính.",
+    helpGone = "GIÁN ĐOẠN là phần thời gian quan sát được bị các gói mất chiếm chỗ.",
+
     back = "Quay lại",
     aboutTagline = "Bảng ping trực tiếp cho mọi mục tiêu bạn quan tâm.",
     aboutTech = "Kotlin Multiplatform và Compose. ICMP không đặc quyền, không cần root.",

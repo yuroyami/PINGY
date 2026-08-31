@@ -75,6 +75,25 @@ val DeStrings = Strings(
     a11yWorst = { ms -> ", schlechtester ${ms}" },
     a11yExcludedFaults = { n -> "${n} Versuche haben dieses Gerät nicht verlassen und sind ausgenommen" },
 
+    loading = "Wird geladen",
+    undo = "Rückgängig",
+    panelRemoved = { host -> "${host} entfernt" },
+    resetPanelSettings = "Einstellungen dieses Panels zurücksetzen",
+    settingsWereReset = "Einstellungen zurückgesetzt",
+    retry = "Erneut versuchen",
+    close = "Schließen",
+
+    currentlySelected = "derzeit ausgewählt",
+    pagePosition = { a, b -> "Panel ${a} von ${b}" },
+    previousPanel = "Vorheriges Panel",
+    nextPanel = "Nächstes Panel",
+
+    whatDoTheseMean = "Was bedeuten diese Werte?",
+    helpAverage = "MITTEL ist die mittlere Umlaufzeit der Antworten im sichtbaren Fenster.",
+    helpJitter = "JITTER ist die durchschnittliche Änderung von einer Antwort zur nächsten. Kleiner ist gleichmäßiger.",
+    helpLoss = "VERLUST zählt gesendete Sonden ohne Antwort. Fehler, die das Gerät nie verlassen haben, zählen nicht.",
+    helpGone = "AUSFALL ist der Anteil der beobachteten Zeit, der von verlorenen Sonden abgedeckt wurde.",
+
     back = "Zurück",
     aboutTagline = "Live-Ping-Panels für jedes Ziel, das dir wichtig ist.",
     aboutTech = "Kotlin Multiplatform + Compose. ICMP ohne Sonderrechte, kein Root.",

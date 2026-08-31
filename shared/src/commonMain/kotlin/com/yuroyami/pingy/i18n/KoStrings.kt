@@ -75,6 +75,25 @@ val KoStrings = Strings(
     a11yWorst = { ms -> ", 최악 ${ms}" },
     a11yExcludedFaults = { n -> "${n}번의 시도가 이 기기를 떠나지 못해 제외되었습니다" },
 
+    loading = "불러오는 중",
+    undo = "실행 취소",
+    panelRemoved = { host -> "${host} 삭제됨" },
+    resetPanelSettings = "이 패널의 설정 초기화",
+    settingsWereReset = "설정을 초기화했습니다",
+    retry = "다시 시도",
+    close = "닫기",
+
+    currentlySelected = "현재 선택됨",
+    pagePosition = { a, b -> "${b}개 중 ${a}번째 패널" },
+    previousPanel = "이전 패널",
+    nextPanel = "다음 패널",
+
+    whatDoTheseMean = "각 항목의 의미",
+    helpAverage = "평균은 보이는 구간에서 응답의 평균 왕복 시간입니다.",
+    helpJitter = "지터는 한 응답과 다음 응답 사이의 평균 변화량입니다. 작을수록 안정적입니다.",
+    helpLoss = "손실은 보냈지만 응답이 없던 프로브 수입니다. 기기를 떠나지 못한 실패는 세지 않습니다.",
+    helpGone = "중단은 관측된 시간 중 손실 프로브가 차지한 비율입니다.",
+
     back = "뒤로",
     aboutTagline = "신경 쓰는 모든 대상을 실시간 핑 패널로.",
     aboutTech = "Kotlin Multiplatform과 Compose. 비특권 ICMP, root 불필요.",

@@ -75,6 +75,25 @@ val PlStrings = Strings(
     a11yWorst = { ms -> ", najgorszy ${ms}" },
     a11yExcludedFaults = { n -> "${n} prób nie opuściło tego urządzenia i zostało wykluczonych" },
 
+    loading = "Wczytywanie",
+    undo = "Cofnij",
+    panelRemoved = { host -> "Usunięto ${host}" },
+    resetPanelSettings = "Przywróć ustawienia tego panelu",
+    settingsWereReset = "Ustawienia przywrócone",
+    retry = "Spróbuj ponownie",
+    close = "Zamknij",
+
+    currentlySelected = "obecnie wybrane",
+    pagePosition = { a, b -> "panel ${a} z ${b}" },
+    previousPanel = "Poprzedni panel",
+    nextPanel = "Następny panel",
+
+    whatDoTheseMean = "Co one oznaczają?",
+    helpAverage = "ŚR to średni czas w obie strony odpowiedzi w widocznym oknie.",
+    helpJitter = "JITTER to średnia zmiana między kolejnymi odpowiedziami. Mniej znaczy stabilniej.",
+    helpLoss = "STRATY liczą sondy wysłane i nigdy nieodebrane. Awarie, które nie opuściły tego urządzenia, nie liczą się.",
+    helpGone = "PRZERWA to część obserwowanego czasu pokryta utraconymi sondami.",
+
     back = "Wstecz",
     aboutTagline = "Panele pingu na żywo dla każdego celu, który ma znaczenie.",
     aboutTech = "Kotlin Multiplatform i Compose. ICMP bez uprawnień, bez roota.",

@@ -75,6 +75,25 @@ val HiStrings = Strings(
     a11yWorst = { ms -> ", सबसे ख़राब ${ms}" },
     a11yExcludedFaults = { n -> "${n} प्रयास इस डिवाइस से बाहर नहीं गए और छोड़ दिए गए" },
 
+    loading = "लोड हो रहा है",
+    undo = "पूर्ववत करें",
+    panelRemoved = { host -> "${host} हटाया गया" },
+    resetPanelSettings = "इस पैनल की सेटिंग रीसेट करें",
+    settingsWereReset = "सेटिंग रीसेट हो गई",
+    retry = "फिर कोशिश करें",
+    close = "बंद करें",
+
+    currentlySelected = "अभी चुना हुआ",
+    pagePosition = { a, b -> "${b} में से ${a} पैनल" },
+    previousPanel = "पिछला पैनल",
+    nextPanel = "अगला पैनल",
+
+    whatDoTheseMean = "इनका क्या मतलब है?",
+    helpAverage = "औसत दिख रही अवधि में उत्तरों का औसत आना-जाना समय है।",
+    helpJitter = "जिटर एक उत्तर से अगले तक औसत बदलाव है। कम होना अधिक स्थिर है।",
+    helpLoss = "हानि उन प्रोब को गिनती है जो भेजे गए पर उत्तर नहीं मिला। जो इस डिवाइस से निकले ही नहीं, वे नहीं गिने जाते।",
+    helpGone = "बंद देखे गए समय का वह हिस्सा है जो खोए प्रोब से ढका था।",
+
     back = "वापस",
     aboutTagline = "हर उस लक्ष्य के लिए लाइव पिंग पैनल जो आपके लिए मायने रखता है।",
     aboutTech = "Kotlin Multiplatform और Compose। बिना विशेषाधिकार वाला ICMP, root नहीं चाहिए।",

@@ -75,6 +75,25 @@ val FaStrings = Strings(
     a11yWorst = { ms -> "، بدترین ${ms}" },
     a11yExcludedFaults = { n -> "${n} تلاش از این دستگاه خارج نشد و کنار گذاشته شد" },
 
+    loading = "در حال بارگذاری",
+    undo = "واگرد",
+    panelRemoved = { host -> "${host} حذف شد" },
+    resetPanelSettings = "بازنشانی تنظیمات این پنل",
+    settingsWereReset = "تنظیمات بازنشانی شد",
+    retry = "تلاش دوباره",
+    close = "بستن",
+
+    currentlySelected = "اکنون انتخاب‌شده",
+    pagePosition = { a, b -> "پنل ${a} از ${b}" },
+    previousPanel = "پنل پیشین",
+    nextPanel = "پنل بعدی",
+
+    whatDoTheseMean = "این‌ها یعنی چه؟",
+    helpAverage = "میانگین، میانگین زمان رفت و برگشت پاسخ‌ها در بازهٔ نمایش است.",
+    helpJitter = "لرزش، میانگین تغییر از یک پاسخ به پاسخ بعدی است. کمتر یعنی پایدارتر.",
+    helpLoss = "افت، کاوشگرهای فرستاده‌شده بدون پاسخ را می‌شمارد. خطاهایی که از دستگاه بیرون نرفته‌اند شمرده نمی‌شوند.",
+    helpGone = "قطعی، سهمی از زمان مشاهده‌شده است که کاوشگرهای گم‌شده آن را پوشانده‌اند.",
+
     back = "بازگشت",
     aboutTagline = "پنل‌های زندهٔ پینگ برای هر هدفی که برایتان مهم است.",
     aboutTech = "Kotlin Multiplatform و Compose. ICMP بدون دسترسی ویژه، بدون root.",
