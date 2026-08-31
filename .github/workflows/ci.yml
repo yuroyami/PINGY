@@ -60,16 +60,13 @@ jobs:
             exit 1
           fi
 
-      - name: Verify legal files are present and packaged
+      - name: Verify the canonical legal files exist
         run: |
           set -euo pipefail
-          for f in LICENSE NOTICE THIRD_PARTY_NOTICES.md SECURITY.md; do
+          for f in LICENSE NOTICE THIRD_PARTY_NOTICES.md SECURITY.md PRIVACY_POLICY.md; do
             test -s "$f" || { echo "missing $f" >&2; exit 1; }
           done
-          # the in-app copies must match the canonical ones
-          cmp LICENSE androidApp/src/main/assets/legal/LICENSE
-          cmp NOTICE androidApp/src/main/assets/legal/NOTICE
-          cmp THIRD_PARTY_NOTICES.md androidApp/src/main/assets/legal/THIRD_PARTY_NOTICES.md
+          test -d licenses
 
       - name: Lint and build release artifacts
         run: >-
@@ -78,6 +75,25 @@ jobs:
           :androidApp:assembleDebug
           :androidApp:assembleRelease
           :androidApp:bundleRelease
+
+      # The build copies these in from the repository root, so the meaningful
+      # check is on the artefact: are they actually in the APK, and are they the
+      # current text? Comparing two checked-in copies only proved they matched
+      # each other, and they drifted the moment the notices were regenerated.
+      - name: Verify the legal texts shipped in the APK
+        run: |
+          set -euo pipefail
+          apk="$(find androidApp/build/outputs/apk/release -name '*.apk' | head -1)"
+          test -n "$apk"
+          rm -rf /tmp/apkcheck && mkdir -p /tmp/apkcheck
+          unzip -oq "$apk" 'assets/legal/*' -d /tmp/apkcheck
+          for f in LICENSE NOTICE THIRD_PARTY_NOTICES.md PRIVACY_POLICY.md; do
+            cmp "$f" "/tmp/apkcheck/assets/legal/$f" \
+              || { echo "packaged $f does not match the canonical file" >&2; exit 1; }
+          done
+          count="$(ls /tmp/apkcheck/assets/legal/licenses | wc -l | tr -d ' ')"
+          test "$count" -gt 0 || { echo "no dependency licences packaged" >&2; exit 1; }
+          echo "legal texts packaged and current ($count dependency licences)"
 
       - name: Guard against a zero-test green build
         run: |

@@ -1,4 +1,6 @@
+import com.android.build.api.variant.AndroidComponentsExtension
 import java.util.Properties
+import javax.inject.Inject
 
 plugins {
     alias(libs.plugins.android.application)
@@ -96,4 +98,61 @@ android {
 dependencies {
     coreLibraryDesugaring(libs.desugaring)
     implementation(projects.shared)
+}
+
+/**
+ * Package the legal texts into the APK from the canonical files at the repo root.
+ *
+ * These used to be duplicated under src/main/assets and kept in step by hand,
+ * which lasted exactly as long as the first regeneration: the notices were
+ * rewritten at the root and the packaged copy silently stayed two dependency
+ * sets behind. Copying at build time means there is one source of truth and the
+ * two cannot drift.
+ */
+abstract class StageLegalAssets : DefaultTask() {
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val documents: ConfigurableFileCollection
+
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val licenseDir: DirectoryProperty
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @get:Inject
+    abstract val fs: FileSystemOperations
+
+    @TaskAction
+    fun stage() {
+        fs.sync {
+            into(outputDir.dir("legal"))
+            from(documents)
+            // Keep the dependency licences in their own folder so an in-app
+            // viewer can address them by a predictable path.
+            from(licenseDir) { into("licenses") }
+        }
+    }
+}
+
+val stageLegalAssets = tasks.register<StageLegalAssets>("stageLegalAssets") {
+    group = "build"
+    description = "Copy the canonical legal texts into the packaged assets"
+    documents.from(
+        rootProject.layout.projectDirectory.file("LICENSE"),
+        rootProject.layout.projectDirectory.file("NOTICE"),
+        rootProject.layout.projectDirectory.file("THIRD_PARTY_NOTICES.md"),
+        rootProject.layout.projectDirectory.file("PRIVACY_POLICY.md"),
+    )
+    licenseDir.set(rootProject.layout.projectDirectory.dir("licenses"))
+}
+
+// AGP refuses a Provider on the SourceSet API and points at the Variant API for
+// generated directories, which is what this is.
+androidComponents.onVariants { variant ->
+    variant.sources.assets?.addGeneratedSourceDirectory(
+        stageLegalAssets,
+        StageLegalAssets::outputDir,
+    )
 }
