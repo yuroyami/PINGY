@@ -4,7 +4,7 @@
 
 <h1 align="center">Pingy</h1>
 
-<p align="center">Live network latency, visualized.</p>
+<p align="center">Ping graphs that redraw as fast as the replies come back.</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Android-8.0+-a4c639?logo=android&logoColor=white" alt="Android 8.0+">
@@ -24,17 +24,27 @@
 
 ---
 
-Type a host — `1.1.1.1`, `google.com`, your router, a game server. Pingy sends real ICMP packets and paints each reply as a bar in a rolling graph. The in-flight bar shifts color as the probe ages, snaps to its final shade when the reply lands, and vanishes the moment a packet times out.
+Type a host. `1.1.1.1`, `google.com`, your router, a game server. Pingy sends real
+ICMP packets and paints each reply as a bar in a rolling graph. A bar that is still
+waiting shifts color as the probe gets older, locks to its final shade when the reply
+lands, and disappears the moment the probe times out.
 
 ## Features
 
-- **Multi-host monitoring** — one panel per host, as many as you want side by side.
-- **Live sliders** — packet size (16–480 bytes), time window (1–30 s), graph roof, graph height, zoom curve. Every change hits the very next probe, no restart.
-- **Adaptive cadence** — the next probe fires as soon as the previous reply returns (or times out at 3 s), with a 10 ms floor so a sub-millisecond LAN target cannot be hammered at a thousand packets a second. Fast links yield more samples per second, not the same handful.
-- **Rolling stats** — sent, lost, lowest, highest, packet-loss percentage, always on screen. Failures that never left your device (DNS, no route, no socket) are reported separately and never counted as packet loss.
-- **Domain or IP** — DNS is paid once per panel, never per probe.
-- **Quick presets** — Cloudflare, Google, Quad9, OpenDNS, your LAN gateway.
-- **No telemetry** — no analytics, no crash reporter, no ads, no account.
+- **Many hosts at once**: one panel per host, as many as you want side by side.
+- **Live sliders**: packet size (16 to 480 bytes), time window (1 to 30 s), graph
+  ceiling, graph height, zoom curve. Every change applies to the very next probe.
+  Nothing restarts.
+- **Adaptive cadence**: the next probe leaves as soon as the previous reply arrives,
+  or when it times out at 3 s. A 10 ms floor stops a sub-millisecond LAN target from
+  being hit a thousand times a second. Faster links give you more samples per second.
+- **Rolling stats**: average, jitter, loss, dead-time share, and the low-to-high
+  range, all on screen at once. Attempts that never left your device (no DNS
+  answer, no route, no socket) are reported on their own and never counted as
+  packet loss.
+- **Domain or IP**: a name is resolved once per panel, not once per probe.
+- **Quick presets**: Cloudflare, Google, Quad9, OpenDNS, your LAN gateway.
+- **No telemetry**: no analytics, no crash reporter, no ads, no account.
 
 ## Platform Support
 
@@ -42,28 +52,31 @@ Type a host — `1.1.1.1`, `google.com`, your router, a game server. Pingy sends
 |:---|:---|
 | **Android** | 8.0 (API 26) and above |
 | **iOS** | 16.0 and above |
-| **Desktop (JVM)** | macOS and Linux. A Compose Desktop app builds and runs; `packageDistributionForCurrentOS` produces a DMG or DEB. Windows is not supported: Winsock exposes no unprivileged ICMP socket, so no MSI target is configured. |
+| **Desktop (JVM)** | macOS and Linux. A Compose Desktop app builds and runs; `packageDistributionForCurrentOS` produces a DMG or DEB. Windows is out: Winsock has no unprivileged ICMP socket, so there is no MSI target. |
 
 ## Privacy
 
 No telemetry, no analytics, no crash reporter, no ads, no account, no backend.
 
-Pingy emits ICMP probes to the hosts you add, plus a DNS lookup when you enter a
-name rather than a numeric address. It monitors nothing until you ask it to, and
-nothing leaves your device beyond those probes. Targets you mark as remembered
-are stored locally in app-private storage. Full details in
+Pingy sends ICMP probes to the hosts you add, plus a DNS lookup when you type a name
+instead of a numeric address. It monitors nothing until you ask it to, and nothing
+leaves your device beyond those probes. Targets you mark as remembered are stored
+locally in app-private storage. Full details in
 [PRIVACY_POLICY.md](PRIVACY_POLICY.md).
 
-Android permissions are limited to `INTERNET` and `ACCESS_NETWORK_STATE`. No credentials or keystore files are ever committed — `local.properties`, `*.jks`, and the `keystore/` directory are all `.gitignore`d.
+Android permissions are limited to `INTERNET` and `ACCESS_NETWORK_STATE`. No
+credentials or keystore files are ever committed: `local.properties`, `*.jks`, and
+the `keystore/` directory are all `.gitignore`d.
 
 ## Building
 
 **Requirements**
 
 - Android Studio 2025.3.1+ (Kotlin 2.4, Gradle 9.4)
-- JDK 21 (auto-provisioned by the Gradle toolchain)
-- Xcode 16.3+ for iOS (Compose Multiplatform 1.11 needs an SDK that provides `UIUtilities`; Xcode 16.4 does not)
-- CMake 3.22.1+ (NDK-managed on Android)
+- JDK 21 (the Gradle toolchain fetches it for you)
+- Xcode 16.3+ for iOS (Compose Multiplatform 1.11 needs an SDK that provides
+  `UIUtilities`; Xcode 16.4 does not)
+- CMake 3.22.1+ (the NDK manages it on Android)
 
 **Android**
 
@@ -71,7 +84,9 @@ Android permissions are limited to `INTERNET` and `ACCESS_NETWORK_STATE`. No cre
 ./gradlew :androidApp:assembleDebug
 ```
 
-Release signing reads from `local.properties` (which is `.gitignore`d) — `keystore.keyAlias`, `keystore.keyPassword`, `keystore.storePassword`. Unsigned debug builds don't need a keystore.
+Release signing reads three keys from `local.properties`, which is `.gitignore`d:
+`keystore.keyAlias`, `keystore.keyPassword`, `keystore.storePassword`. Unsigned
+debug builds need no keystore at all.
 
 **iOS**
 
@@ -79,8 +94,8 @@ Release signing reads from `local.properties` (which is `.gitignore`d) — `keys
 open iosApp/iosApp.xcodeproj
 ```
 
-No CocoaPods step. The Kotlin framework is built and embedded by a Gradle build
-phase in the Xcode project, so opening the project and pressing Run is enough.
+No CocoaPods step. A Gradle build phase inside the Xcode project builds and embeds
+the Kotlin framework, so opening the project and pressing Run is enough.
 
 ## Tests
 
@@ -89,7 +104,8 @@ phase in the Xcode project, so opening the project and pressing Run is enough.
 ```
 
 The engine suite runs against real loopback sockets on both the JVM and
-Kotlin/Native, because several past defects only appeared on one of them.
+Kotlin/Native, because a socket bug that shows up on one runtime can be
+completely invisible on the other.
 
 ## Feedback
 

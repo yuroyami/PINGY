@@ -10,15 +10,17 @@ Security fixes are applied to the latest released version and the current
 Please do not open a public issue for a vulnerability that could put users at
 risk. Email `younesaouameur@gmail.com` with:
 
-- the affected version, platform, and device or simulator;
-- reproduction steps and the expected versus observed result;
-- impact and any proof-of-concept material; and
-- a safe way to contact you.
+- the affected version, platform, and device or simulator
+- steps to reproduce it, plus what you expected and what you got instead
+- the impact, and any proof-of-concept material
+- a safe way to reach you
 
-Do not access data or systems you do not own, disrupt networks, or retain data
-obtained during testing. We will acknowledge a complete report when it is read,
-keep you informed while it is assessed, and coordinate disclosure after a fix
-is available. No bounty is promised.
+While testing, do not touch data or systems you do not own, do not disrupt
+networks, and do not keep any data you come across.
+
+You get a reply once the report has been read. After that you are kept in the
+loop while it is assessed, and disclosure is coordinated with you once a fix
+exists. There is no bounty.
 
 For ordinary bugs and feature requests, use
 <https://github.com/yuroyami/PINGY/issues>.

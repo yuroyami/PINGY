@@ -3,7 +3,8 @@
 _Last updated: August 31, 2026_
 
 Pingy is a network latency monitor built by **yuroyami**. This policy describes
-what the app actually does, based on its source code. "We" means the developer.
+what the app actually does, read straight from its source code. "We" means the
+developer.
 
 ## The short version
 
@@ -11,8 +12,8 @@ There is no Pingy account, no Pingy server, and no analytics, advertising,
 tracking or crash-reporting service in the app. We never receive your targets,
 your measurements, your settings or your usage.
 
-That is not the same as saying the app generates no network traffic. It is a
-network tool. What follows is the complete list.
+The app does still put packets on the network, because that is the entire job of
+a ping tool. Below is the complete list of what it sends.
 
 ## Network traffic the app generates
 
@@ -30,26 +31,26 @@ lookup happens through the operating system and is visible to whoever runs your
 resolver, exactly as it would be for any other app. Numeric addresses skip this
 entirely.
 
-Anyone who can observe your network can see these packets: the host you are
-pinging, your network provider, your VPN provider if you use one, and any
-operator of the network you are on. That is inherent to sending network probes
-and is true of any ping tool.
+Anyone who can watch your network can see these packets: the host you are
+pinging, your network provider, your VPN provider if you use one, and whoever
+runs the network you are on. Any ping tool works this way. There is no way to
+send a probe and hide it from the network carrying it.
 
 ## Data stored on your device
 
 Pingy keeps a small preferences file in its own private storage:
 
-- the targets you asked it to remember;
-- per-target display settings such as interval, packet size and graph scale;
-- the app-wide graph style and panel layout.
+- the targets you asked it to remember
+- per-target display settings such as interval, packet size and graph scale
+- the app-wide graph style and panel layout
 
 Measurements themselves are held in memory only and are lost when the app
 closes. Nothing is uploaded. On Android this file lives in app-private storage
 with backup disabled. On iOS it lives in Application Support. On desktop it
 lives in `~/.pingy`, restricted to your user account.
 
-Deleting the app removes this file. Removing a target, or turning off "Remember"
-for it, removes it from the file at the next save.
+Deleting the app removes this file. Removing a target, or switching "Remember"
+off for it, drops it from the file at the next save.
 
 ## Diagnostic logs
 
@@ -81,9 +82,9 @@ No permission is used for anything other than the features described here.
 
 ## Children
 
-Pingy is a technical utility with no social features, no user accounts and no
-content submission. It is not directed at children and collects nothing from
-anyone.
+Pingy is a technical utility. There are no social features, no user accounts,
+and no way to post anything. It is not aimed at children, and it collects nothing
+from anyone.
 
 ## Changes
 
@@ -97,4 +98,4 @@ Email: `younesaouameur@gmail.com`
 
 ---
 
-_Pingy sends the probes you ask for, and nothing else._
+_The only thing Pingy sends is the probes you asked for._
