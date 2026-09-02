@@ -4,6 +4,7 @@ package com.yuroyami.pingy.utils
 
 import com.yuroyami.pingy.logic.LocalFault
 import com.yuroyami.pingy.logic.Ping
+import com.yuroyami.pingy.logic.PingEvent
 import kotlin.jvm.JvmName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -154,13 +155,18 @@ class PingEngine(
     private var loop: Job? = null
 
     /**
-     * Start probing. [onPing] receives one typed outcome per event, stamped
-     * with the moment the probe was sent.
+     * Start probing. [onEvent] hears every probe twice: once as
+     * [PingEvent.Sent] the moment it leaves, once as [PingEvent.Resolved] when
+     * its reply lands or its deadline passes. Both carry the send moment, so
+     * the listener can fill the slot it claimed instead of appending.
+     *
+     * Every timestamp comes from one millisecond grid, so events are in send
+     * order and a [PingEvent.Fault] never lands between two sends out of turn.
      *
      * Returns false when the engine has already been started or stopped, so a
      * double start is a visible no-op rather than a second competing loop.
      */
-    fun start(onPing: (Ping) -> Unit): Boolean {
+    fun start(onEvent: (PingEvent) -> Unit): Boolean {
         if (state != State.IDLE) return false
         state = State.RUNNING
 
@@ -181,19 +187,23 @@ class PingEngine(
             var powerFloorMs = MIN_PROBE_GAP_MS
             var powerCheckedAtMs = Long.MIN_VALUE
 
+            fun resolve(seq: Int, ping: Ping) = onEvent(PingEvent.Resolved(seq, ping))
+            fun fault(kind: LocalFault) =
+                onEvent(PingEvent.Fault(Ping.localFault(kind, markAt(nowMs()))))
+
             fun flushOutstandingAsLost() {
-                outstanding.values.forEach { onPing(Ping.timeout(markAt(it[1]))) }
+                outstanding.forEach { (seq, entry) -> resolve(seq, Ping.timeout(markAt(entry[1]))) }
                 outstanding.clear()
             }
 
-            suspend fun dropSocket(fault: LocalFault) {
+            suspend fun dropSocket(kind: LocalFault) {
                 // In-flight probes died with the socket. Each keeps its own send
                 // moment so the losses spread out truthfully.
                 flushOutstandingAsLost()
                 if (fd >= 0) closeIcmpSocket(fd)
                 fd = -1
                 cachedTarget = null
-                onPing(Ping.localFault(fault, TimeSource.Monotonic.markNow()))
+                fault(kind)
                 delay(SOCK_ERR_BACKOFF_MS)
             }
 
@@ -202,7 +212,7 @@ class PingEngine(
                     // A permanent condition, not a transient one. Report once and
                     // idle instead of manufacturing a loss every 200 ms forever.
                     while (isActive) {
-                        onPing(Ping.localFault(LocalFault.UNSUPPORTED_PLATFORM, TimeSource.Monotonic.markNow()))
+                        fault(LocalFault.UNSUPPORTED_PLATFORM)
                         delay(UNSUPPORTED_RETRY_MS)
                     }
                     return@launch
@@ -214,14 +224,14 @@ class PingEngine(
                             ?: runCatching { resolveHostToIpv4(host) }.getOrNull()?.also { cachedTarget = it }
                         if (target == null) {
                             if (!isActive) break
-                            onPing(Ping.localFault(LocalFault.RESOLVE_FAILED, TimeSource.Monotonic.markNow()))
+                            fault(LocalFault.RESOLVE_FAILED)
                             delay(RESOLVE_RETRY_MS)
                             continue
                         }
                         fd = runCatching { openIcmpSocket(target) }.getOrDefault(-1)
                         if (fd < 0) {
                             if (!isActive) break
-                            onPing(Ping.localFault(LocalFault.SOCKET_OPEN_FAILED, TimeSource.Monotonic.markNow()))
+                            fault(LocalFault.SOCKET_OPEN_FAILED)
                             cachedTarget = null
                             delay(SOCK_ERR_BACKOFF_MS)
                             continue
@@ -251,7 +261,9 @@ class PingEngine(
                             }
                             // Stamp the send moment AFTER the syscall returns, so
                             // the x position reflects when the packet actually left.
-                            outstanding[seq] = longArrayOf(sendUsec, nowMs())
+                            val sentMs = nowMs()
+                            outstanding[seq] = longArrayOf(sendUsec, sentMs)
+                            onEvent(PingEvent.Sent(seq, Ping.pending(markAt(sentMs))))
                         }
                         val iv = _intervalMs
                         val gap = if (iv > 0L) iv else ADAPTIVE_WATCHDOG_MS
@@ -295,9 +307,9 @@ class PingEngine(
                                     // time, and a 26-second "RTT" then poisons
                                     // the average and the range.
                                     if (rttMs > PING_TIMEOUT_MS) {
-                                        onPing(Ping.timeout(markAt(sentAtMs)))
+                                        resolve(seq, Ping.timeout(markAt(sentAtMs)))
                                     } else {
-                                        onPing(Ping.reply(rttMs, markAt(sentAtMs)))
+                                        resolve(seq, Ping.reply(rttMs, markAt(sentAtMs)))
                                     }
                                     // Adaptive mode pulls the next send forward only
                                     // once the pipeline is drained, otherwise every
@@ -316,10 +328,11 @@ class PingEngine(
                     val iterator = outstanding.entries.iterator()
                     while (iterator.hasNext()) {
                         val entry = iterator.next()
-                        val sentAtMs = entry.value[1]   // read before remove()
+                        val seq = entry.key            // read both before remove()
+                        val sentAtMs = entry.value[1]
                         if (now - sentAtMs >= PING_TIMEOUT_MS) {
                             iterator.remove()
-                            onPing(Ping.timeout(markAt(sentAtMs)))
+                            resolve(seq, Ping.timeout(markAt(sentAtMs)))
                         } else break
                     }
                 }

@@ -2,6 +2,7 @@ package com.yuroyami.pingy.utils
 
 import com.yuroyami.pingy.logic.LocalFault
 import com.yuroyami.pingy.logic.Ping
+import com.yuroyami.pingy.logic.PingEvent
 import com.yuroyami.pingy.logic.PingKind
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -33,22 +34,54 @@ class PingEngineTest {
      * expires instantly in virtual time while the engine has not yet touched the
      * network. The waiting therefore happens on a real dispatcher.
      */
-    private suspend fun collect(
+    private suspend fun collectEvents(
         host: String,
         count: Int,
         timeoutMs: Long,
-    ): List<Ping> = withContext(Dispatchers.Default) {
-        val channel = Channel<Ping>(Channel.UNLIMITED)
+        wanted: (PingEvent) -> Boolean = { it !is PingEvent.Sent },
+    ): List<PingEvent> = withContext(Dispatchers.Default) {
+        val channel = Channel<PingEvent>(Channel.UNLIMITED)
         val engine = PingEngine(host = host, packetSize = 32, intervalMs = 0L)
         val started = engine.start { channel.trySend(it) }
         assertTrue(started, "engine refused to start")
 
-        val out = mutableListOf<Ping>()
+        val out = mutableListOf<PingEvent>()
         withTimeoutOrNull(timeoutMs) {
-            while (out.size < count) out.add(channel.receive())
+            while (out.count(wanted) < count) out.add(channel.receive())
         }
         engine.stopAndJoin()
         out
+    }
+
+    /** Verdicts and faults only, the shape the older tests were written against. */
+    private suspend fun collect(host: String, count: Int, timeoutMs: Long): List<Ping> =
+        collectEvents(host, count, timeoutMs).filter { it !is PingEvent.Sent }.map { it.ping }
+
+    @Test
+    fun every_probe_is_announced_at_send_time_before_its_verdict() = runTest(timeout = 90.seconds) {
+        if (!icmpTransportAvailable()) return@runTest
+        val events = collectEvents("127.0.0.1", count = 3, timeoutMs = 15_000)
+        val verdicts = events.filterIsInstance<PingEvent.Resolved>()
+        assertTrue(verdicts.isNotEmpty(), "expected verdicts, got $events")
+        for (verdict in verdicts) {
+            val sentIndex = events.indexOfFirst { it is PingEvent.Sent && it.seq == verdict.seq }
+            assertTrue(sentIndex >= 0, "verdict for seq ${verdict.seq} had no send announcement")
+            assertTrue(sentIndex < events.indexOf(verdict), "send must precede its verdict")
+            val sent = events[sentIndex] as PingEvent.Sent
+            assertEquals(PingKind.PENDING, sent.ping.kind)
+            // Same probe, same slot: the verdict carries the send moment.
+            assertEquals(sent.ping.timestamp, verdict.ping.timestamp)
+        }
+    }
+
+    @Test
+    fun a_black_hole_probe_resolves_to_a_timeout_under_its_own_seq() = runTest(timeout = 90.seconds) {
+        if (!icmpTransportAvailable()) return@runTest
+        val events = collectEvents("192.0.2.1", count = 1, timeoutMs = 25_000) { it is PingEvent.Resolved }
+        val verdict = events.filterIsInstance<PingEvent.Resolved>().firstOrNull()
+            ?: return@runTest  // a local fault (no route) is a legitimate outcome here
+        assertEquals(PingKind.TIMEOUT, verdict.ping.kind)
+        assertTrue(events.any { it is PingEvent.Sent && it.seq == verdict.seq })
     }
 
     @Test

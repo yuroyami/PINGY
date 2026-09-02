@@ -50,6 +50,18 @@ class PingSemanticsTest {
     }
 
     @Test
+    fun a_pending_probe_was_sent_but_is_neither_loss_nor_fault() {
+        // The probe is in the air. It left the device, so it belongs to the
+        // sent side of things, but it has no verdict yet, so it is not loss.
+        val p = Ping.pending(now)
+        assertTrue(p.isPending)
+        assertTrue(p.wasSent)
+        assertFalse(p.isLoss)
+        assertFalse(p.isLocalFault)
+        assertEquals(null, p.value)
+    }
+
+    @Test
     fun display_rounding_happens_at_the_edge_not_at_capture() {
         // Rounding at capture floored every LAN reading to 0 and collapsed
         // jitter with it.

@@ -2,6 +2,7 @@ package com.yuroyami.pingy.logic
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -74,5 +75,44 @@ class RingBufferTest {
         assertTrue(ring.isEmpty())
         assertNull(ring.last())
         assertEquals(0, ring.size)
+    }
+}
+
+class RingBufferSlotTest {
+
+    @Test
+    fun add_returns_the_slot_it_wrote() {
+        val ring = RingBuffer<Int>(4)
+        assertEquals(0, ring.add(10))
+        assertEquals(1, ring.add(11))
+        assertEquals(2, ring.add(12))
+        assertEquals(3, ring.add(13))
+        // Wraps back onto the oldest slot once full.
+        assertEquals(0, ring.add(14))
+    }
+
+    @Test
+    fun replace_swaps_an_entry_in_place() {
+        val ring = RingBuffer<Int>(8)
+        ring.add(1)
+        val slot = ring.add(2)
+        ring.add(3)
+        assertTrue(ring.replace(slot, expected = 2, replacement = 20))
+        assertEquals(listOf(1, 20, 3), ring.snapshot())
+        val seen = buildList { ring.forEachNewestFirst { add(it); true } }
+        assertEquals(listOf(3, 20, 1), seen)
+    }
+
+    @Test
+    fun replace_refuses_a_recycled_slot() {
+        // The slot was handed out for 1, then the ring wrapped and 5 landed on
+        // it. A late verdict for 1 must not clobber 5.
+        val ring = RingBuffer<Int>(4)
+        val slot = ring.add(1)
+        listOf(2, 3, 4, 5).forEach(ring::add)
+        assertFalse(ring.replace(slot, expected = 1, replacement = 100))
+        // 5 wrapped onto that slot and is the newest entry; it must survive.
+        assertEquals(5, ring.last())
+        assertFalse(100 in ring.snapshot())
     }
 }

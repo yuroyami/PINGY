@@ -88,8 +88,8 @@ import com.yuroyami.pingy.i18n.Strings
 import com.yuroyami.pingy.ui.reduceMotion
 import com.yuroyami.pingy.i18n.strings
 import com.yuroyami.pingy.logic.Ping
+import com.yuroyami.pingy.logic.PingKind
 import com.yuroyami.pingy.logic.PingPanel
-import com.yuroyami.pingy.logic.RingBuffer
 import com.yuroyami.pingy.theme.Paletting
 import com.yuroyami.pingy.theme.pingColor
 import com.yuroyami.pingy.ui.adam.LocalViewmodel
@@ -125,12 +125,6 @@ private const val BIRTH_BRIGHTEN = 0.35f
 private val CHAMELEON_FADE_START_MS = PING_TIMEOUT_MS * 2f / 3f
 private const val SCRUB_GLIDE_MS = 350f // frozen time glides back to now instead of teleporting
 private const val PEAK_DECAY_PER_SEC = 0.22f // peak-hold line falls this canvas-fraction per second
-
-/** Buffer entries are appended in COMPLETION order while their timestamps
- * are SEND moments, so a reaped loss can sit up to a timeout out of place.
- * Any age jump beyond this is the ring writer clobbering under us. */
-internal val REORDER_SLACK_MS = PING_TIMEOUT_MS + 1_000L
-
 
 /**
  * Ceiling on how far text drawn *inside* the canvas follows the user's font
@@ -197,7 +191,6 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
     val roofVal by roof.collectAsState()
     val angleOfAttackVal by angleOfAttack.collectAsState()
     val landMarksVal by landMarks.collectAsState()
-    val intervalVal by interval.collectAsState()
     val timeframeMsVal by timeframeMs.collectAsState()
     val canvasHeightFractionVal by canvasHeightFraction.collectAsState()
 
@@ -247,13 +240,19 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
 
     // Neon readout, sampled at ~7 Hz. At interval 0 a per-ping readout would
     // strobe hundreds of times a second; a throttled sample stays readable
-    // while still feeling live.
+    // while still feeling live. It shows the newest VERDICT in send order:
+    // probes still in the air are skipped, so a late loss cannot flip the
+    // number a fresher reply already earned.
     var readoutValue by remember { mutableStateOf<Int?>(null) }
     var readoutLost by remember { mutableStateOf(false) }
     LaunchedEffect(this@PingGraphView, isRunning) {
         if (!isRunning) return@LaunchedEffect
         while (true) {
-            pings.last()?.let { last ->
+            var latest: Ping? = null
+            pings.forEachNewestFirst { p ->
+                if (p.isPending) true else { latest = p; false }
+            }
+            latest?.let { last ->
                 val v = last.value
                 readoutLost = v == null || v < 0
                 if (v != null && v >= 0) readoutValue = v
@@ -513,92 +512,36 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 val pxPerMs = canvasW / thresholdMs.toFloat()
                 val minBarPx = 2.5.dp.toPx()
 
-                // Collect the visible window newest-first. Walking backwards
-                // from the freshest entry stops at the horizon instead of
-                // scanning the whole ring, and moves AWAY from the writer's
-                // cursor (which clobbers the oldest slot). Timestamps are
-                // SEND moments while the buffer appends in COMPLETION order,
-                // so ages may wobble by up to a timeout: only a jump past
-                // REORDER_SLACK_MS means the writer caught us, and the walk
-                // continues one slack past the window so a late-reaped loss
-                // near the edge is not mistaken for the horizon.
-                //
-                // The window is then sorted oldest-first and folded: entries
-                // denser than one pixel column collapse into each other, a
-                // loss always surviving the fold, otherwise the worst RTT.
-                // The entry just OLDER than the window rides along as the
-                // left anchor of the slope/bar bridging into view; without
-                // it that whole span would vanish the frame its anchor left.
-                visibleBuf.clear()
-                var evictedAnchor: Ping? = null
-                var anchorAge = Long.MAX_VALUE
-                run {
-                    var prevAge = Long.MIN_VALUE
-                    pings.forEachNewestFirst { p ->
-                        val age = (frameNow - p.timestamp).inWholeMilliseconds - freezeOffsetMs
-                        when {
-                            age + REORDER_SLACK_MS < prevAge -> false
-                            age > thresholdMs + REORDER_SLACK_MS -> false
-                            else -> {
-                                if (age > thresholdMs) {
-                                    if (age < anchorAge) {
-                                        anchorAge = age
-                                        evictedAnchor = p
-                                    }
-                                } else if (age >= 0) {
-                                    visibleBuf.add(p)
-                                }
-                                if (age > prevAge) prevAge = age
-                                true
-                            }
-                        }
-                    }
+                // The ring is in send order and every probe already owns a
+                // slot from the moment it leaves, so the window is one walk,
+                // no sort, and nothing already drawn ever shifts. Entries
+                // denser than one pixel column fold into each other, the
+                // worst news surviving.
+                gatherVisible(pings, frameNow, freezeOffsetMs, thresholdMs, visibleBuf)
+                foldColumns(visibleBuf) { p ->
+                    (canvasW - ((frameNow - p.timestamp).inWholeMilliseconds - freezeOffsetMs) * pxPerMs).toInt()
                 }
-                evictedAnchor?.let { visibleBuf.add(it) }
-                // Already-ordered is the overwhelmingly common case: entries
-                // are appended in completion order but the reorder is bounded
-                // by one timeout. Checking is O(n) and skips an O(n log n) sort
-                // plus its allocations on almost every frame.
-                if (!visibleBuf.isOrderedByTime()) visibleBuf.sortWith(PingTimeOrder)
 
-                // Fold pass: collapse same-column neighbours in place. The
-                // anchor (index 0, off-canvas column) never matches an
-                // in-window column, so it survives untouched.
-                var newestValidAge = Long.MIN_VALUE
-                if (visibleBuf.size > 1) {
-                    var write = 1
-                    var keptCol = ((canvasW - ((frameNow - visibleBuf[0].timestamp).inWholeMilliseconds - freezeOffsetMs) * pxPerMs)).toInt()
-                    for (read in 1 until visibleBuf.size) {
-                        val p = visibleBuf[read]
-                        val col = ((canvasW - ((frameNow - p.timestamp).inWholeMilliseconds - freezeOffsetMs) * pxPerMs)).toInt()
-                        val kept = visibleBuf[write - 1]
-                        if (col == keptCol) {
-                            // Read once into locals: Ping.value has a custom
-                            // getter, so it cannot be smart cast.
-                            val keptV = kept.value
-                            val pV = p.value
-                            when {
-                                // A loss survives the fold ahead of any reply, so
-                                // a dropped packet can never be hidden by a
-                                // neighbouring success sharing its pixel column.
-                                keptV == null -> Unit
-                                pV == null -> visibleBuf[write - 1] = p
-                                pV > keptV -> visibleBuf[write - 1] = p
-                            }
-                        } else {
-                            visibleBuf[write] = p
-                            write++
-                            keptCol = col
-                        }
-                    }
-                    while (visibleBuf.size > write) visibleBuf.removeAt(visibleBuf.lastIndex)
+                fun ageOf(p: Ping): Long = (frameNow - p.timestamp).inWholeMilliseconds - freezeOffsetMs
+
+                // What a slot shows. A reply shows its RTT. A probe still in
+                // the air is the chameleon: it shows how long it has been
+                // waiting, ripening through the RTT scale in real time, and
+                // over its final stretch before the deadline it dissolves so
+                // the panel texture shows through. When the timeout verdict
+                // lands there is nothing left to remove. A loss or a fault
+                // shows nothing: the gap is the signal.
+                fun levelOf(p: Ping, age: Long): Int? = when (p.kind) {
+                    PingKind.REPLY -> p.value
+                    PingKind.PENDING -> age.coerceIn(0L, PING_TIMEOUT_MS.toLong()).toInt()
+                    PingKind.TIMEOUT, PingKind.LOCAL_FAULT -> null
                 }
-                for (i in visibleBuf.indices.reversed()) {
-                    val v = visibleBuf[i].value
-                    if (v != null && v >= 0) {
-                        newestValidAge = (frameNow - visibleBuf[i].timestamp).inWholeMilliseconds - freezeOffsetMs
-                        break
-                    }
+                fun presenceOf(p: Ping, age: Long): Float {
+                    if (p.kind != PingKind.PENDING) return 1f
+                    val ms = age.coerceAtMost(PING_TIMEOUT_MS.toLong()).toFloat()
+                    if (ms <= CHAMELEON_FADE_START_MS) return 1f
+                    return (1f - (ms - CHAMELEON_FADE_START_MS) / (PING_TIMEOUT_MS - CHAMELEON_FADE_START_MS))
+                        .coerceIn(0f, 1f)
                 }
 
                 // Scrub bookkeeping: the cursor maps to an age, and the slot loop
@@ -607,6 +550,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 var pickDiff = Long.MAX_VALUE
                 var pickFound = false
                 var pickLost = false
+                var pickPending = false
                 var pickValue = 0
                 var pickAgeMs = 0L
                 var pickLeft = 0f
@@ -614,349 +558,223 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 var pickHeight = 0f
 
                 var maxTopFraction = 0f
-                var lastValidColor: Color? = null
+                // The live-edge aura follows the newest slot that shows anything.
+                var auraColor: Color? = null
+                var auraPresence = 1f
 
                 if (visibleBuf.isNotEmpty() && graphStyleVal == GraphStyle.MOUNTAIN_SLOPES) {
                     // MOUNTAIN-SLOPES: one continuous ridge instead of bars.
-                    // Between consecutive valid points the crest runs as a
+                    // Between consecutive showing slots the crest runs as a
                     // straight diagonal (steep when the value jumped), and the
                     // fill below blends each point's color into the next, so
                     // every ping keeps its chameleon identity without owning a
-                    // rectangle. Lost pings break the range: the massif ends,
-                    // the honest gap shows, the next massif begins. Rendered as
-                    // one 1px column per device pixel; no allocations.
+                    // rectangle. A loss breaks the range: the massif ends, the
+                    // honest gap shows, the next massif begins. A slot with no
+                    // showing neighbour, the newest included, runs level across
+                    // its own span. Rendered as one 1px column per device
+                    // pixel; no allocations.
                     val n = visibleBuf.size
                     val crestPx = 2.dp.toPx()
-                    var mountainChameleon: Color? = null
-                    var mountainPresence = 1f
-                    var newestAge = 0L
-                    var newestIsValid = false
-                    var newestY = 0f
-                    var newestColor = Color.White
 
-                    var index = 0
-                    while (index < n) {
-                        val ping = visibleBuf[index]
-                        val ageA = (frameNow - ping.timestamp).inWholeMilliseconds - freezeOffsetMs
-                        val xA = canvasW - ageA * pxPerMs
-                        val vA = ping.value
-                        val lostA = vA == null || vA < 0
-                        var yA = 0f
-                        var cA = Color.White
-                        if (!lostA) {
-                            yA = calculatePingY(vA, canvasH, roofVal.toFloat(), angleOfAttackVal)
-                                .coerceAtLeast(minBarPx)
-                            cA = calcPingColor(vA)
-                            if (activeScrub == null && ageA < BIRTH_MS) {
-                                val life = ageA / BIRTH_MS
-                                yA = (yA * (1f + BIRTH_OVERSHOOT * sin(PI * life).toFloat())).coerceAtMost(canvasH)
-                                cA = lerp(cA, Color.White, BIRTH_BRIGHTEN * (1f - life))
+                    fun ridge(xFrom: Float, xTo: Float, yFrom: Float, yTo: Float, cFrom: Color, cTo: Color, alpha: Float) {
+                        if (alpha <= 0f || xTo <= xFrom + 0.5f || xTo <= 0f) return
+                        // Integer-aligned unit columns: fractional x positions
+                        // leave an antialiased seam on every column, which reads
+                        // as shimmering vertical curtain stripes across the range.
+                        var xi = kotlin.math.ceil(xFrom.coerceAtLeast(0f)).toInt()
+                        val xEnd = kotlin.math.ceil(xTo.coerceAtMost(canvasW)).toInt()
+                        while (xi < xEnd) {
+                            val t = (((xi + 0.5f) - xFrom) / (xTo - xFrom)).coerceIn(0f, 1f)
+                            val h = yFrom + (yTo - yFrom) * t
+                            if (h >= 1f) {
+                                val col = lerp(cFrom, cTo, t)
+                                drawRect(
+                                    color = col,
+                                    alpha = alpha,
+                                    topLeft = Offset(xi.toFloat(), canvasH - h),
+                                    size = Size(1f, h)
+                                )
+                                drawRect(
+                                    color = lerp(col, Color.White, 0.5f),
+                                    alpha = alpha,
+                                    topLeft = Offset(xi.toFloat(), canvasH - h),
+                                    size = Size(1f, h.coerceAtMost(crestPx))
+                                )
                             }
-                            lastValidColor = cA
-                            if (yA / canvasH > maxTopFraction) maxTopFraction = yA / canvasH
+                            xi++
                         }
-                        if (cursorAgeMs != null) {
-                            val diff = abs(ageA - cursorAgeMs)
-                            if (diff < pickDiff) {
-                                pickDiff = diff; pickFound = true; pickLost = lostA
-                                pickAgeMs = ageA; pickLeft = xA - 2f; pickWidth = 4f
-                                pickHeight = if (lostA) canvasH else yA
-                                if (!lostA) pickValue = vA
-                            }
-                        }
-                        // Only good replies advance the wedge anchor: with
-                        // pipelined probing, lost verdicts stream in during an
-                        // outage and would otherwise reset the ripening wall
-                        // every watchdog tick.
-                        if (!lostA) {
-                            newestAge = ageA
-                            newestIsValid = true
-                            newestY = yA
-                            newestColor = cA
-                        }
-
-                        // Fill the columns of the slope from this point to the next.
-                        if (index + 1 < n && !lostA) {
-                            val next = visibleBuf[index + 1]
-                            val vB = next.value
-                            if (vB != null && vB >= 0) {
-                                val ageB = (frameNow - next.timestamp).inWholeMilliseconds - freezeOffsetMs
-                                val xB = canvasW - ageB * pxPerMs
-                                var yB = calculatePingY(vB, canvasH, roofVal.toFloat(), angleOfAttackVal)
-                                    .coerceAtLeast(minBarPx)
-                                var cB = calcPingColor(vB)
-                                if (activeScrub == null && ageB < BIRTH_MS) {
-                                    val life = ageB / BIRTH_MS
-                                    yB = (yB * (1f + BIRTH_OVERSHOOT * sin(PI * life).toFloat())).coerceAtMost(canvasH)
-                                    cB = lerp(cB, Color.White, BIRTH_BRIGHTEN * (1f - life))
-                                }
-                                if (xB > xA + 0.5f && xB > 0f) {
-                                    // Integer-aligned unit columns: fractional
-                                    // x positions leave an antialiased seam on
-                                    // every column, which reads as shimmering
-                                    // vertical curtain stripes across the range.
-                                    var xi = kotlin.math.ceil(xA.coerceAtLeast(0f)).toInt()
-                                    val xEnd = kotlin.math.ceil(xB.coerceAtMost(canvasW)).toInt()
-                                    while (xi < xEnd) {
-                                        val t = (((xi + 0.5f) - xA) / (xB - xA)).coerceIn(0f, 1f)
-                                        val ridge = yA + (yB - yA) * t
-                                        if (ridge >= 1f) {
-                                            val col = lerp(cA, cB, t)
-                                            drawRect(
-                                                color = col,
-                                                topLeft = Offset(xi.toFloat(), canvasH - ridge),
-                                                size = Size(1f, ridge)
-                                            )
-                                            drawRect(
-                                                color = lerp(col, Color.White, 0.5f),
-                                                topLeft = Offset(xi.toFloat(), canvasH - ridge),
-                                                size = Size(1f, ridge.coerceAtMost(crestPx))
-                                            )
-                                        }
-                                        xi++
-                                    }
-                                }
-                            }
-                        }
-                        index++
                     }
 
-                    // The leading slope: a wedge climbing from the newest
-                    // GOOD point toward the "now" edge, ripening with the
-                    // silence since that reply and dissolving over its final
-                    // stretch exactly like the pinglette wall does.
-                    if (activeScrub == null) {
-                        val inFlightMs = (newestAge - intervalVal).coerceAtLeast(0L)
-                        if (inFlightMs > 0L) {
-                            val colorMs = inFlightMs.coerceAtMost(PING_TIMEOUT_MS.toLong()).toInt()
-                            if (colorMs > CHAMELEON_FADE_START_MS) {
-                                mountainPresence = 1f - (
-                                    (colorMs - CHAMELEON_FADE_START_MS) /
-                                        (PING_TIMEOUT_MS - CHAMELEON_FADE_START_MS)
-                                    ).coerceIn(0f, 1f)
-                            }
-                            val yNow = calculatePingY(colorMs, canvasH, roofVal.toFloat(), angleOfAttackVal)
-                            val cNow = calcPingColor(colorMs)
-                            val xStart = (canvasW - newestAge * pxPerMs).coerceAtLeast(0f)
-                            val yStart = if (newestIsValid) newestY else 0f
-                            val cStart = if (newestIsValid) newestColor else cNow
-                            val span = canvasW - xStart
-                            if (span >= 1f && mountainPresence > 0f) {
-                                var xi = kotlin.math.ceil(xStart).toInt()
-                                val xEnd = kotlin.math.ceil(canvasW).toInt()
-                                while (xi < xEnd) {
-                                    val t = (((xi + 0.5f) - xStart) / span).coerceIn(0f, 1f)
-                                    val ridge = yStart + (yNow - yStart) * t
-                                    if (ridge >= 1f) {
-                                        drawRect(
-                                            color = lerp(cStart, cNow, t),
-                                            alpha = mountainPresence,
-                                            topLeft = Offset(xi.toFloat(), canvasH - ridge),
-                                            size = Size(1f, ridge)
-                                        )
-                                    }
-                                    xi++
+                    var prevShows = false
+                    var prevX = 0f
+                    var prevY = 0f
+                    var prevC = Color.White
+                    var prevPresence = 1f
+
+                    for (index in 0 until n) {
+                        val ping = visibleBuf[index]
+                        val age = ageOf(ping)
+                        val x = canvasW - age * pxPerMs
+                        val level = levelOf(ping, age)
+
+                        if (level == null) {
+                            if (cursorAgeMs != null) {
+                                val diff = abs(age - cursorAgeMs)
+                                if (diff < pickDiff) {
+                                    pickDiff = diff; pickFound = true; pickLost = true; pickPending = false
+                                    pickAgeMs = age; pickLeft = x - 2f; pickWidth = 4f; pickHeight = canvasH
                                 }
                             }
-                            mountainChameleon = cNow
-                            if (yNow / canvasH > maxTopFraction) maxTopFraction = yNow / canvasH
+                            prevShows = false
+                            continue
                         }
 
-                        (mountainChameleon ?: lastValidColor)?.let { target ->
-                            val chase = 1f - exp(-dtSec * 10f)
-                            val smoothed = auraSmooth.color?.let { lerp(it, target, chase) } ?: target
-                            auraSmooth.color = smoothed
-                            val auraAlpha = 0.13f * (if (mountainChameleon != null) mountainPresence else 1f)
-                            val auraW = 28.dp.toPx()
-                            drawRect(
-                                brush = Brush.horizontalGradient(
-                                    0f to Color.Transparent,
-                                    1f to smoothed.copy(alpha = auraAlpha),
-                                    startX = canvasW - auraW,
-                                    endX = canvasW,
-                                ),
-                                topLeft = Offset(canvasW - auraW, 0f),
-                                size = Size(auraW, canvasH)
-                            )
+                        val presence = presenceOf(ping, age)
+                        var y = calculatePingY(level, canvasH, roofVal.toFloat(), angleOfAttackVal)
+                            .coerceAtLeast(minBarPx)
+                        var c = calcPingColor(level)
+                        if (ping.kind == PingKind.REPLY && activeScrub == null && age < BIRTH_MS) {
+                            val life = age / BIRTH_MS
+                            y = (y * (1f + BIRTH_OVERSHOOT * sin(PI * life).toFloat())).coerceAtMost(canvasH)
+                            c = lerp(c, Color.White, BIRTH_BRIGHTEN * (1f - life))
                         }
+
+                        if (prevShows) ridge(prevX, x, prevY, y, prevC, c, minOf(prevPresence, presence))
+                        // No showing neighbour to slope into: paint this slot
+                        // level across its own span, so a lone reply between
+                        // two losses still leaves its mark.
+                        if (fillsOwnSlot(visibleBuf, index) { p -> levelOf(p, ageOf(p)) != null }) {
+                            val xEnd = canvasW - slotEndAgeMs(visibleBuf, index) { ageOf(it) } * pxPerMs
+                            ridge(x, xEnd, y, y, c, c, presence)
+                        }
+
+                        if (presence > 0f && y / canvasH > maxTopFraction) maxTopFraction = y / canvasH
+                        if (cursorAgeMs != null) {
+                            val diff = abs(age - cursorAgeMs)
+                            if (diff < pickDiff) {
+                                pickDiff = diff; pickFound = true; pickLost = false
+                                pickPending = ping.kind == PingKind.PENDING
+                                pickAgeMs = age; pickLeft = x - 2f; pickWidth = 4f
+                                pickHeight = y; pickValue = level
+                            }
+                        }
+                        auraColor = c
+                        auraPresence = presence
+
+                        prevShows = true
+                        prevX = x
+                        prevY = y
+                        prevC = c
+                        prevPresence = presence
                     }
                 }
 
                 if (visibleBuf.isNotEmpty() && graphStyleVal == GraphStyle.PINGLETTES) {
-                    // Slot-based drawing. Each valid bar tiles against its
-                    // predecessor when that predecessor was also valid. The
-                    // width in time is (this_ping.ts - prev_ping.ts), which
-                    // keeps a long-RTT bar visibly wider because it ate more
-                    // real time before the next probe could land.
-                    //
-                    // Void (null-valued) pings DRAW NOTHING but a short-lived
-                    // fizzle burst. A timeout has no duration to represent, and
-                    // the slot before the next valid bar is rendered as literal
-                    // background: the gap itself carries the "lost packet"
-                    // signal at a glance.
-                    var prevAgeMs = 0L
-                    // First iteration has no predecessor, treat as invalid
-                    // so widthMs falls back to the ping's own RTT.
-                    var prevWasInvalid = true
-
-                    for (i in visibleBuf.indices) {
+                    // Slot-based drawing. Every probe owns the stretch from its
+                    // send to the next send; the newest owns up to the "now"
+                    // edge. A reply fills its slot at its RTT colour, a probe in
+                    // the air fills it as the ripening chameleon, and a loss
+                    // leaves its slot as literal background: the gap itself
+                    // carries the "lost packet" signal at a glance. Because the
+                    // slot was claimed at send time, a verdict never changes
+                    // any width already on screen.
+                    val n = visibleBuf.size
+                    for (i in 0 until n) {
                         val ping = visibleBuf[i]
-                        val ageMs = (frameNow - ping.timestamp).inWholeMilliseconds - freezeOffsetMs
-                        val previousAgeMs = prevAgeMs
-                        val predecessorWasInvalid = prevWasInvalid
-                        prevAgeMs = ageMs
+                        val age = ageOf(ping)
+                        val level = levelOf(ping, age)
+                        val rightAge = slotEndAgeMs(visibleBuf, i) { ageOf(it) }
+                        // No coerceAtLeast(0f) on the left edge: letting it go
+                        // negative keeps the bar's full width intact as it
+                        // exits the canvas. Compose clips off-canvas drawing.
+                        val leftEdgePx = canvasW - age * pxPerMs
+                        val rightEdgePx = canvasW - rightAge * pxPerMs
 
-                        val value = ping.value
-                        val isLost = value == null || value < 0
-                        prevWasInvalid = isLost
-
-                        val rightEdgePx = canvasW - ageMs * pxPerMs
-
-                        if (isLost) {
-                            // No death drawing: the chameleon already faded the
-                            // wall into the background during its final stretch,
-                            // so the gap it leaves reads as the end of that
-                            // fade, not as a missing bar.
+                        if (level == null) {
                             if (cursorAgeMs != null) {
-                                val diff = abs(ageMs - cursorAgeMs)
+                                val diff = abs(age - cursorAgeMs)
                                 if (diff < pickDiff) {
-                                    pickDiff = diff; pickFound = true; pickLost = true
-                                    pickAgeMs = ageMs; pickLeft = rightEdgePx - 2f
+                                    pickDiff = diff; pickFound = true; pickLost = true; pickPending = false
+                                    pickAgeMs = age; pickLeft = leftEdgePx - 2f
                                     pickWidth = 4f; pickHeight = canvasH
                                 }
                             }
                             continue
                         }
-
                         if (rightEdgePx <= 0f) continue
 
-                        val widthMs: Long = if (!predecessorWasInvalid) {
-                            (previousAgeMs - ageMs).coerceAtLeast(1L)
-                        } else {
-                            // No valid predecessor → don't reach back over
-                            // a gap, just paint this bar at its own duration.
-                            value.toLong().coerceAtLeast(1L)
-                        }
-                        val widthPx = (widthMs.toFloat() * pxPerMs).coerceAtLeast(1f)
-                        // No coerceAtLeast(0f) on the left edge: letting it
-                        // go negative keeps the bar's full width intact as
-                        // it exits the canvas. Compose clips off-canvas
-                        // drawing for free.
-                        val leftEdgePx = rightEdgePx - widthPx
-
-                        var y = calculatePingY(value, canvasH, roofVal.toFloat(), angleOfAttackVal)
+                        val presence = presenceOf(ping, age)
+                        val widthPx = (rightEdgePx - leftEdgePx).coerceAtLeast(1f)
+                        var y = calculatePingY(level, canvasH, roofVal.toFloat(), angleOfAttackVal)
                             .coerceAtLeast(minBarPx)
-                        var color = calcPingColor(value)
+                        var color = calcPingColor(level)
 
-                        // Birth ritual, resumed after the chameleon: for its
-                        // first BIRTH_MS the bar overshoots its true height and
-                        // carries extra brightness, both easing back to truth.
-                        // Skipped while frozen: a scrubbed past shouldn't wiggle.
-                        if (activeScrub == null && ageMs < BIRTH_MS) {
-                            val life = ageMs / BIRTH_MS
+                        // Birth ritual: for its first BIRTH_MS a fresh reply
+                        // overshoots its true height and carries extra
+                        // brightness, both easing back to truth. Skipped while
+                        // frozen: a scrubbed past shouldn't wiggle.
+                        if (ping.kind == PingKind.REPLY && activeScrub == null && age < BIRTH_MS) {
+                            val life = age / BIRTH_MS
                             y = (y * (1f + BIRTH_OVERSHOOT * sin(PI * life).toFloat())).coerceAtMost(canvasH)
                             color = lerp(color, Color.White, BIRTH_BRIGHTEN * (1f - life))
                         }
-                        lastValidColor = color
 
-                        drawRect(
-                            color = color,
-                            topLeft = Offset(leftEdgePx, canvasH - y),
-                            size = Size(widthPx, y)
-                        )
-                        // Tip highlight sells the "filled up to its level" read,
-                        // but hairline bars at zero-interval rates can't show a
-                        // tip, so they skip it.
-                        if (widthPx >= 3f) {
+                        if (presence > 0f) {
                             drawRect(
-                                color = lerp(color, Color.White, 0.45f),
+                                color = color,
+                                alpha = presence,
                                 topLeft = Offset(leftEdgePx, canvasH - y),
-                                size = Size(widthPx, y.coerceAtMost(3f))
+                                size = Size(widthPx, y)
                             )
+                            // Tip highlight sells the "filled up to its level"
+                            // read. Hairline bars at zero-interval rates can't
+                            // show a tip, and a probe still in the air has no
+                            // level to have reached yet.
+                            if (ping.kind == PingKind.REPLY && widthPx >= 3f) {
+                                drawRect(
+                                    color = lerp(color, Color.White, 0.45f),
+                                    topLeft = Offset(leftEdgePx, canvasH - y),
+                                    size = Size(widthPx, y.coerceAtMost(3f))
+                                )
+                            }
+                            if (y / canvasH > maxTopFraction) maxTopFraction = y / canvasH
                         }
 
-                        if (y / canvasH > maxTopFraction) maxTopFraction = y / canvasH
-
                         if (cursorAgeMs != null) {
-                            val diff = abs(ageMs - cursorAgeMs)
+                            val diff = abs(age - cursorAgeMs)
                             if (diff < pickDiff) {
                                 pickDiff = diff; pickFound = true; pickLost = false
-                                pickValue = value; pickAgeMs = ageMs
+                                pickPending = ping.kind == PingKind.PENDING
+                                pickValue = level; pickAgeMs = age
                                 pickLeft = leftEdgePx; pickWidth = widthPx; pickHeight = y
                             }
                         }
+                        auraColor = color
+                        auraPresence = presence
                     }
+                }
 
-                    // Chameleon: the in-flight slot between the newest buffer
-                    // entry and the present moment. Colorizes in real time with
-                    // elapsed in-flight duration so the user watches the probe
-                    // "ripen" on the way to its resolved RTT. Suppressed while
-                    // scrubbing: frozen time has no present moment.
-                    if (activeScrub == null) {
-                        var chameleonColor: Color? = null
-                        var chameleonPresence = 1f
-                        // Silence-of-success drives the wall: with pipelined
-                        // probing, lost verdicts keep arriving DURING an
-                        // outage, so "age of the newest verdict" would reset
-                        // the wall every watchdog tick. Time since the last
-                        // GOOD reply is what actually ripens toward the void.
-                        val newestAge = if (newestValidAge == Long.MIN_VALUE) 0L
-                                        else newestValidAge.coerceAtLeast(0L)
-                        val inFlightMs = (newestAge - intervalVal).coerceAtLeast(0L)
-                        if (inFlightMs > 0L) {
-                            val widthPx = inFlightMs.toFloat() * pxPerMs
-                            val leftEdgePx = (canvasW - widthPx).coerceAtLeast(0f)
-                            val drawW = canvasW - leftEdgePx
-                            if (drawW >= 1f) {
-                                val colorMs = inFlightMs.coerceAtMost(PING_TIMEOUT_MS.toLong()).toInt()
-                                val y = calculatePingY(
-                                    colorMs,
-                                    canvasH,
-                                    roofVal.toFloat(),
-                                    angleOfAttackVal
-                                )
-                                // Past the fade threshold the wall dissolves in
-                                // place. Transparency, not a color shift, is
-                                // the only way to become a textured background.
-                                if (colorMs > CHAMELEON_FADE_START_MS) {
-                                    chameleonPresence = 1f - (
-                                        (colorMs - CHAMELEON_FADE_START_MS) /
-                                            (PING_TIMEOUT_MS - CHAMELEON_FADE_START_MS)
-                                        ).coerceIn(0f, 1f)
-                                }
-                                chameleonColor = calcPingColor(colorMs)
-                                drawRect(
-                                    color = chameleonColor,
-                                    alpha = chameleonPresence,
-                                    topLeft = Offset(leftEdgePx, canvasH - y),
-                                    size = Size(drawW, y)
-                                )
-                                if (y / canvasH > maxTopFraction) maxTopFraction = y / canvasH
-                            }
-                        }
-
-                        // Live-edge aura: a soft breath of the newest color
-                        // hugging the right border. It chases its target color
-                        // exponentially, so a teal→green flip breathes instead
-                        // of snapping.
-                        (chameleonColor ?: lastValidColor)?.let { target ->
-                            val chase = 1f - exp(-dtSec * 10f)
-                            val smoothed = auraSmooth.color?.let { lerp(it, target, chase) } ?: target
-                            auraSmooth.color = smoothed
-                            // The aura breathes out with a dissolving wall.
-                            val auraAlpha = 0.13f * (if (chameleonColor != null) chameleonPresence else 1f)
-                            val auraW = 28.dp.toPx()
-                            drawRect(
-                                brush = Brush.horizontalGradient(
-                                    0f to Color.Transparent,
-                                    1f to smoothed.copy(alpha = auraAlpha),
-                                    startX = canvasW - auraW,
-                                    endX = canvasW,
-                                ),
-                                topLeft = Offset(canvasW - auraW, 0f),
-                                size = Size(auraW, canvasH)
-                            )
-                        }
+                // Live-edge aura: a soft breath of the newest colour hugging
+                // the right border. It chases its target exponentially, so a
+                // teal-to-green flip breathes instead of snapping, and it
+                // breathes out with a dissolving chameleon. Suppressed while
+                // scrubbing: frozen time has no live edge.
+                if (activeScrub == null) {
+                    auraColor?.let { target ->
+                        val chase = 1f - exp(-dtSec * 10f)
+                        val smoothed = auraSmooth.color?.let { lerp(it, target, chase) } ?: target
+                        auraSmooth.color = smoothed
+                        val auraW = 28.dp.toPx()
+                        drawRect(
+                            brush = Brush.horizontalGradient(
+                                0f to Color.Transparent,
+                                1f to smoothed.copy(alpha = 0.13f * auraPresence),
+                                startX = canvasW - auraW,
+                                endX = canvasW,
+                            ),
+                            topLeft = Offset(canvasW - auraW, 0f),
+                            size = Size(auraW, canvasH)
+                        )
                     }
                 }
 
@@ -1059,10 +877,10 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                         end = Offset(cursorX, canvasH),
                         strokeWidth = 1.5f,
                     )
-                    val chipText = if (pickLost) {
-                        "timeout · ${formatShortAge(pickAgeMs)}"
-                    } else {
-                        "$pickValue ms · ${formatShortAge(pickAgeMs)}"
+                    val chipText = when {
+                        pickLost -> "timeout · ${formatShortAge(pickAgeMs)}"
+                        pickPending -> "in flight · ${formatShortAge(pickAgeMs)}"
+                        else -> "$pickValue ms · ${formatShortAge(pickAgeMs)}"
                     }
                     val chip = textMeasurer.measure(AnnotatedString(chipText), chipStyle)
                     val padX = 8.dp.toPx()

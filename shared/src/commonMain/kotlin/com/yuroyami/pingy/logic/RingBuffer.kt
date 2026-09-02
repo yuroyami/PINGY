@@ -32,7 +32,8 @@ class RingBuffer<T : Any>(val capacity: Int) {
     /** Number of elements currently held. */
     val size: Int get() = count
 
-    fun add(element: T) {
+    /** Append and return the slot written, for a later [replace]. */
+    fun add(element: T): Int {
         val w = writeIndex
         buffer[w] = element
         if (count == capacity) {
@@ -41,6 +42,24 @@ class RingBuffer<T : Any>(val capacity: Int) {
             count++
         }
         writeIndex = (w + 1) % capacity   // publishes the element above
+        return w
+    }
+
+    /**
+     * Swap the element at [slot] for [replacement], but only while the slot
+     * still holds [expected]. Returns false when the ring has since wrapped
+     * and recycled the slot, so a late verdict can never clobber a newer entry.
+     *
+     * Same single-writer rule as [add]. The re-store of [writeIndex] is the
+     * publication: readers acquire on it, so a walk begun after this call sees
+     * the replacement.
+     */
+    fun replace(slot: Int, expected: T, replacement: T): Boolean {
+        if (slot !in 0 until capacity || buffer[slot] !== expected) return false
+        val w = writeIndex
+        buffer[slot] = replacement
+        writeIndex = w
+        return true
     }
 
     /**

@@ -2,8 +2,11 @@ package com.yuroyami.pingy.ui.main.components
 
 import com.yuroyami.pingy.PanelLayout
 import com.yuroyami.pingy.logic.Ping
+import com.yuroyami.pingy.logic.PingKind
+import com.yuroyami.pingy.logic.RingBuffer
 import com.yuroyami.pingy.utils.PING_TIMEOUT_MS
 import kotlin.math.pow
+import kotlin.time.TimeSource
 
 /**
  * Pure geometry and ordering for the graph.
@@ -13,20 +16,98 @@ import kotlin.math.pow
  */
 
 /**
- * True when the list is already oldest-first, so the sort can be skipped.
+ * Fill [out] with the drawable window, oldest first.
  *
- * Uses the same comparator ordering as [PingTimeOrder] so the check and the
- * fallback sort can never disagree.
+ * The ring is in send order, so a newest-first walk sees ages that only grow.
+ * The walk stops one entry past the horizon: that entry rides along as the
+ * left anchor of the bar or slope bridging into view, so a span does not
+ * vanish the frame its left end leaves the canvas. An age that DROPS means the
+ * writer wrapped the ring underneath the walk, and the walk ends there.
+ *
+ * Entries younger than the frozen moment (negative age while scrubbing) are
+ * skipped rather than drawn.
  */
-internal fun List<Ping>.isOrderedByTime(): Boolean {
-    for (i in 1 until size) {
-        if (PingTimeOrder.compare(this[i - 1], this[i]) > 0) return false
+internal fun gatherVisible(
+    pings: RingBuffer<Ping>,
+    frameNow: TimeSource.Monotonic.ValueTimeMark,
+    freezeOffsetMs: Long,
+    thresholdMs: Long,
+    out: ArrayList<Ping>,
+) {
+    out.clear()
+    var prevAge = Long.MIN_VALUE
+    pings.forEachNewestFirst { p ->
+        val age = (frameNow - p.timestamp).inWholeMilliseconds - freezeOffsetMs
+        when {
+            age < prevAge -> false
+            age > thresholdMs -> { out.add(p); false }
+            else -> {
+                if (age >= 0) out.add(p)
+                prevAge = age
+                true
+            }
+        }
     }
-    return true
+    out.reverse()
 }
 
-/** Oldest-first ordering for the visible window (timestamps ascending). */
-internal val PingTimeOrder = Comparator<Ping> { a, b -> a.timestamp.compareTo(b.timestamp) }
+/**
+ * Collapse neighbours that share a pixel column, in place. Index 0 is the
+ * off-canvas anchor and never folds. The worst news survives the fold: a loss
+ * or fault over anything, a probe still in the air over a reply, and between
+ * two replies the slower one.
+ */
+internal inline fun foldColumns(buf: ArrayList<Ping>, columnOf: (Ping) -> Int) {
+    if (buf.size <= 1) return
+    var write = 1
+    var keptCol = columnOf(buf[0])
+    for (read in 1 until buf.size) {
+        val p = buf[read]
+        val col = columnOf(p)
+        if (col == keptCol) {
+            val kept = buf[write - 1]
+            if (outranksInFold(p, kept)) buf[write - 1] = p
+        } else {
+            buf[write] = p
+            write++
+            keptCol = col
+        }
+    }
+    while (buf.size > write) buf.removeAt(buf.lastIndex)
+}
+
+@PublishedApi
+internal fun outranksInFold(candidate: Ping, kept: Ping): Boolean {
+    val c = foldRank(candidate)
+    val k = foldRank(kept)
+    if (c != k) return c > k
+    return c == FOLD_REPLY && (candidate.rttMs ?: 0.0) > (kept.rttMs ?: 0.0)
+}
+
+private const val FOLD_REPLY = 1
+
+private fun foldRank(p: Ping): Int = when (p.kind) {
+    PingKind.REPLY -> FOLD_REPLY
+    PingKind.PENDING -> 2
+    PingKind.TIMEOUT, PingKind.LOCAL_FAULT -> 3
+}
+
+/**
+ * In the ridge style a showing slot normally appears as the slope to its
+ * showing neighbour. When that neighbour shows nothing (a loss, a fault), or
+ * when this is the newest slot, the slot must paint itself level across its
+ * own span instead, or a lone reply between two losses would leave no trace.
+ */
+internal inline fun fillsOwnSlot(visible: List<Ping>, index: Int, shows: (Ping) -> Boolean): Boolean =
+    index + 1 >= visible.size || !shows(visible[index + 1])
+
+/**
+ * The age at which a probe's slot ends: the next probe's send, or now for the
+ * newest. A bar spans exactly its own slot, so what the neighbouring probe
+ * later turns out to be cannot change a width already on screen.
+ */
+internal inline fun slotEndAgeMs(visible: List<Ping>, index: Int, ageOf: (Ping) -> Long): Long =
+    if (index + 1 < visible.size) ageOf(visible[index + 1]) else 0L
 
 /** Fast start, gentle landing: the shape of every glide in this file. */
 internal fun easeOutCubic(t: Double): Double {
@@ -61,8 +142,8 @@ internal fun exponentialize(x: Float, f: Float, zoomFactor: Float): Double {
  *
  * Grid cells are half as wide, so they show half the window to keep pixels per
  * millisecond constant. That is fine right up until the result drops below
- * [PING_TIMEOUT_MS], at which point a timeout can never be rendered at all, and
- * the graph quietly disagrees with the loss counter beside it.
+ * [PING_TIMEOUT_MS], at which point no probe can be watched all the way to its
+ * deadline, and the graph quietly disagrees with the loss counter beside it.
  */
 internal fun visibleWindowMs(timeframeMs: Long, layout: PanelLayout): Long {
     val scaled = if (layout == PanelLayout.GRID) timeframeMs / 2 else timeframeMs

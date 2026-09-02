@@ -10,6 +10,9 @@ import kotlin.time.TimeSource
  * into the first is what made the old loss percentage untrustworthy.
  */
 enum class PingKind {
+    /** A probe was sent and no verdict has arrived yet. Resolved in place. */
+    PENDING,
+
     /** A probe was sent and its reply came back. [Ping.rttMs] is set. */
     REPLY,
 
@@ -43,9 +46,13 @@ enum class LocalFault {
 }
 
 /**
- * One probe outcome. [timestamp] is the moment the probe was *sent*, which is
- * the honest x position for a pipelined sampler: sends are evenly scheduled
- * while completions arrive in bursts.
+ * One probe. [timestamp] is the moment the probe was *sent*, which is the
+ * honest x position for a pipelined sampler: sends are evenly scheduled while
+ * completions arrive in bursts.
+ *
+ * A probe enters the history as [PingKind.PENDING] the moment it leaves, and
+ * its verdict later replaces that entry in the same slot. The history is
+ * therefore always in send order, and nothing already drawn ever moves.
  *
  * [rttMs] keeps sub-millisecond precision. Rounding at capture time floored
  * every LAN measurement and collapsed jitter to zero; rounding now happens
@@ -66,10 +73,16 @@ data class Ping(
     /** True when this device could not probe at all. Excluded from statistics. */
     val isLocalFault: Boolean get() = kind == PingKind.LOCAL_FAULT
 
+    /** True while the probe is in the air. Excluded from statistics until resolved. */
+    val isPending: Boolean get() = kind == PingKind.PENDING
+
     /** Whether a probe actually left the device, so it belongs in denominators. */
     val wasSent: Boolean get() = kind != PingKind.LOCAL_FAULT
 
     companion object {
+        fun pending(sentAt: TimeSource.Monotonic.ValueTimeMark) =
+            Ping(null, PingKind.PENDING, sentAt)
+
         fun reply(rttMs: Double, sentAt: TimeSource.Monotonic.ValueTimeMark) =
             Ping(rttMs, PingKind.REPLY, sentAt)
 
@@ -79,4 +92,22 @@ data class Ping(
         fun localFault(fault: LocalFault, at: TimeSource.Monotonic.ValueTimeMark) =
             Ping(null, PingKind.LOCAL_FAULT, at, fault)
     }
+}
+
+/**
+ * What the engine tells its listener. One [Sent] per probe, later exactly one
+ * [Resolved] carrying the same [seq]; [Fault] stands alone because no probe
+ * left the device.
+ */
+sealed interface PingEvent {
+    val ping: Ping
+
+    /** A probe left. [ping] is [PingKind.PENDING], stamped with the send moment. */
+    data class Sent(val seq: Int, override val ping: Ping) : PingEvent
+
+    /** The probe announced under [seq] got its verdict: a reply or a timeout. */
+    data class Resolved(val seq: Int, override val ping: Ping) : PingEvent
+
+    /** A local failure. Appended as its own entry, never tied to a probe. */
+    data class Fault(override val ping: Ping) : PingEvent
 }

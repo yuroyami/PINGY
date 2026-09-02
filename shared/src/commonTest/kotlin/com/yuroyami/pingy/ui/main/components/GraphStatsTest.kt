@@ -107,6 +107,29 @@ class GraphStatsTest {
     }
 
     @Test
+    fun pending_probes_have_no_verdict_yet_so_they_are_neither_sent_nor_lost() {
+        val ring = ringOf(900L to reply(10.0), 600L to Ping.pending(now), 300L to reply(20.0))
+        val stats = computeWindowStats(ring, 5_000)
+        assertEquals(2, stats.count)
+        assertEquals(0, stats.lost)
+    }
+
+    @Test
+    fun each_verdict_owns_its_own_slot_forward_to_the_next_send() {
+        // reply 900 -> 600 ok (300), timeout 600 -> 300 gone (300),
+        // pending 300 -> 100 unknown (excluded), reply 100 -> now ok (100).
+        // Known time 700 ms, gone 300 ms.
+        val ring = ringOf(
+            900L to reply(10.0),
+            600L to null,
+            300L to Ping.pending(now),
+            100L to reply(20.0),
+        )
+        val gone = assertNotNull(computeWindowStats(ring, 5_000).gonePct)
+        assertEquals(300f / 700f * 100f, gone, 1.5f)
+    }
+
+    @Test
     fun the_drawn_window_never_falls_below_the_timeout() {
         // A loss lands at its send moment, one timeout in the past. A window
         // narrower than that could never render one.

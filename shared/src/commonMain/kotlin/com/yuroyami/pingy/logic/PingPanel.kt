@@ -29,10 +29,12 @@ private const val MAX_PINGS = 6000
 class PingPanel(
     val ip: String,
 ) {
-    /** The whole collection of pings for this panel in a ring buffer.
-     * Not wrapped in a Flow: the buffer is a single long-lived instance that
-     * mutates in place. The draw pass and the throttled samplers read it
-     * directly every frame/tick. */
+    /** The whole collection of pings for this panel in a ring buffer, always
+     * in send order. Not wrapped in a Flow: the buffer is a single long-lived
+     * instance that mutates in place. The draw pass and the throttled samplers
+     * read it directly every frame/tick. Probes left in the air when the
+     * engine stops simply stay pending; the graph fades them like any other
+     * unanswered probe and the statistics ignore them. */
     val pings = RingBuffer<Ping>(MAX_PINGS)
 
     /** Pinging Parameters */
@@ -104,14 +106,21 @@ class PingPanel(
             packetSize = packetSize.value,
             intervalMs = interval.value,
         ).also { eng ->
-            // Anchored at SEND time: sends are evenly scheduled, so the x axis
-            // stays even and a reaped loss lands where its probe actually flew.
-            eng.start { ping ->
+            // One slot per probe, claimed at send time and filled by the
+            // verdict, so the history stays in send order and nothing drawn
+            // ever shifts. A fresh recorder per engine: its sequence numbers
+            // start over.
+            val recorder = PingRecorder(pings)
+            eng.start { event ->
                 try {
-                    pings.add(ping)
-                    fault.value = ping.fault
+                    recorder.accept(event)
+                    when (event) {
+                        is PingEvent.Fault -> fault.value = event.ping.fault
+                        is PingEvent.Sent -> fault.value = null   // a probe left, so the socket works
+                        is PingEvent.Resolved -> Unit
+                    }
                 } catch (e: Exception) {
-                    loggye("PingPanel[$ip]: result callback failed", e)
+                    loggye("PingPanel[$ip]: engine callback failed", e)
                 }
             }
         }
