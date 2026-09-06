@@ -1,18 +1,24 @@
 package com.yuroyami.pingy.logic
 
 import com.yuroyami.pingy.GraphStyle
+import com.yuroyami.pingy.utils.EngineFactory
 import com.yuroyami.pingy.utils.PingEngine
+import com.yuroyami.pingy.utils.ProbeEngine
 import com.yuroyami.pingy.utils.loggye
 import kotlin.concurrent.Volatile
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** Maximum number of pings retained per panel. Sized for zero-interval LAN
  * rates (roughly a thousand samples/sec) so the buffer still spans seconds
@@ -28,6 +34,10 @@ private const val MAX_PINGS = 6000
 @OptIn(FlowPreview::class)
 class PingPanel(
     val ip: String,
+    dispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val engineFactory: EngineFactory = { host, packetSize, intervalMs ->
+        PingEngine(host, packetSize, intervalMs)
+    },
 ) {
     /** The whole collection of pings for this panel in a ring buffer, always
      * in send order. Not wrapped in a Flow: the buffer is a single long-lived
@@ -67,13 +77,22 @@ class PingPanel(
     /** Whether this panel is saved and restored on the next launch. */
     val persistAcrossSessions = MutableStateFlow(true)
 
-    /** The platform-specific ping engine tied to this panel's lifecycle.
-     * Volatile: written on Main, read from the preference observers below. */
+    /** The engine, owned entirely by [reconcile] and only touched under [lifecycle]. */
     @Volatile
-    private var engine: PingEngine? = null
+    private var engine: ProbeEngine? = null
 
-    /** Panel-owned coroutine scope for observing preference changes. */
-    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    /** What the owner last asked for. Reality is driven toward it, in order. */
+    @Volatile
+    private var desiredRunning = false
+
+    @Volatile
+    private var closed = false
+
+    /** Serializes every start and stop, so a resume cannot land inside a stop. */
+    private val lifecycle = Mutex()
+
+    /** Panel-owned coroutine scope for preference observers and lifecycle work. */
+    private val scope = CoroutineScope(dispatcher + SupervisorJob())
 
     init {
         // Whenever the interval StateFlow changes (after initial emit), push the new
@@ -95,22 +114,67 @@ class PingPanel(
     /** Most recent local failure, or null while probing is healthy. */
     val fault = MutableStateFlow<LocalFault?>(null)
 
-    /** True once [startPinging] has run and the engine is live. */
-    val running = MutableStateFlow(false)
+    /** True while an engine is live. Only [reconcile] writes it. */
+    val running: StateFlow<Boolean>
+        field = MutableStateFlow(false)
+
+    /**
+     * Whether monitoring is wanted, regardless of whether it has taken effect
+     * yet. A pause has to record intent, not the transient [running] flag, or
+     * a panel the user paused by hand comes back on the next resume.
+     */
+    val wantsToRun: Boolean get() = desiredRunning
 
     fun startPinging() {
-        if (engine != null) return
+        desiredRunning = true
+        scope.launch { reconcile() }
+    }
 
-        engine = PingEngine(
-            host = ip,
-            packetSize = packetSize.value,
-            intervalMs = interval.value,
-        ).also { eng ->
-            // One slot per probe, claimed at send time and filled by the
-            // verdict, so the history stays in send order and nothing drawn
-            // ever shifts. A fresh recorder per engine: its sequence numbers
-            // start over.
-            val recorder = PingRecorder(pings)
+    /** Stops pinging and releases the engine's socket. */
+    fun stopPinging() {
+        desiredRunning = false
+        scope.launch { reconcile() }
+    }
+
+    /** Stops and waits until the socket is actually released. */
+    suspend fun stopPingingAndJoin() {
+        desiredRunning = false
+        reconcile()
+    }
+
+    /**
+     * Make reality match [desiredRunning].
+     *
+     * Serialized, and it re-reads the intent after every transition. That is
+     * what makes a resume arriving during a slow stop win: the stop finishes,
+     * the loop sees the newer intent and starts a fresh engine. It also keeps
+     * exactly one engine writing into [pings] at a time.
+     */
+    private suspend fun reconcile() = lifecycle.withLock {
+        while (true) {
+            val want = desiredRunning && !closed
+            val current = engine
+            when {
+                want && current == null -> {
+                    engine = spawn()
+                    running.value = true
+                }
+                !want && current != null -> {
+                    current.stopAndJoin()
+                    engine = null
+                    running.value = false
+                }
+                else -> return@withLock
+            }
+        }
+    }
+
+    private fun spawn(): ProbeEngine {
+        // One slot per probe, claimed at send time and filled by the verdict,
+        // so the history stays in send order and nothing drawn ever shifts. A
+        // fresh recorder per engine: its sequence numbers start over.
+        val recorder = PingRecorder(pings)
+        return engineFactory(ip, packetSize.value, interval.value).also { eng ->
             eng.start { event ->
                 try {
                     recorder.accept(event)
@@ -124,21 +188,6 @@ class PingPanel(
                 }
             }
         }
-        running.value = true
-    }
-
-    /** Stops pinging and releases the engine's socket. */
-    fun stopPinging() {
-        engine?.stop()
-        engine = null
-        running.value = false
-    }
-
-    /** Stops and waits until the socket is actually released. */
-    suspend fun stopPingingAndJoin() {
-        engine?.stopAndJoin()
-        engine = null
-        running.value = false
     }
 
     /** Snapshot of the tunable preferences, for undoing a reset. */
@@ -189,7 +238,11 @@ class PingPanel(
 
     /** Call when removing this panel entirely. */
     fun close() {
-        stopPinging()
+        closed = true
+        desiredRunning = false
+        engine?.stop()
+        engine = null
+        running.value = false
         scope.cancel()
     }
 

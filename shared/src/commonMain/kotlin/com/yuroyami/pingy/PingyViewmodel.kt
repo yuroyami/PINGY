@@ -291,8 +291,10 @@ class PingyViewmodel : ViewModel() {
      */
     suspend fun pauseMonitoring() {
         pausedPanels.clear()
-        panels.forEach { panel ->
-            if (panel.running.value) {
+        panels.toList().forEach { panel ->
+            // Intent, not the transient running flag: a panel mid-start is
+            // still one we have to stop and put back afterwards.
+            if (panel.wantsToRun) {
                 pausedPanels += panel
                 panel.stopPingingAndJoin()
             }

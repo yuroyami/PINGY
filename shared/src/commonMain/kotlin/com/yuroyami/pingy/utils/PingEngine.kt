@@ -141,7 +141,7 @@ class PingEngine(
     packetSize: Int,
     intervalMs: Long,
     private val transport: IcmpTransport = PlatformTransport,
-) {
+) : ProbeEngine {
     private enum class State { IDLE, RUNNING, STOPPED }
 
     @Volatile private var state: State = State.IDLE
@@ -170,7 +170,7 @@ class PingEngine(
      * Returns false when the engine has already been started or stopped, so a
      * double start is a visible no-op rather than a second competing loop.
      */
-    fun start(onEvent: (PingEvent) -> Unit): Boolean {
+    override fun start(onEvent: (PingEvent) -> Unit): Boolean {
         if (state != State.IDLE) return false
         state = State.RUNNING
 
@@ -375,24 +375,24 @@ class PingEngine(
      * resolver delays the exit by however long it takes to answer. Nothing is
      * opened or sent in the meantime. Use [stopAndJoin] to observe the exit.
      */
-    fun stop() {
+    override fun stop() {
         if (state == State.STOPPED) return
         state = State.STOPPED
         scope.cancel()
     }
 
     /** [stop], then suspend until the loop has actually released its socket. */
-    suspend fun stopAndJoin() {
+    override suspend fun stopAndJoin() {
         val job = loop
         stop()
         runCatching { job?.join() }
     }
 
-    fun updateInterval(intervalMs: Long) {
+    override fun updateInterval(intervalMs: Long) {
         _intervalMs = sanitizeIntervalMs(intervalMs)
     }
 
-    fun updatePacketSize(packetSize: Int) {
+    override fun updatePacketSize(packetSize: Int) {
         _packetSize = sanitizePayloadSize(packetSize)
     }
 }
