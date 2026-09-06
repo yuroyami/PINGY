@@ -59,6 +59,19 @@ internal fun calcPingColor(ping: Int): Color = pingColor(ping)
 
 // Readout surface and text colours, shared by the graph and its sheets.
 internal val FizzleColor = Color(0xFFFF5252)
+
+/** Neutral a probe still in the air is washed toward, so it reads as provisional. */
+internal val PendingColor = Color(0xFF8A95A3)
+
+/** How far a pending bar is pulled off the RTT scale toward that neutral. */
+internal const val PENDING_DESATURATION = 0.45f
+
+/** Pending bars are drawn softer than a settled measurement. */
+internal const val PENDING_ALPHA = 0.75f
+
+/** A waiting probe's colour: the ripening hue, visibly off the measured scale. */
+internal fun pendingColor(level: Int): Color =
+    lerp(calcPingColor(level), PendingColor, PENDING_DESATURATION)
 internal val PeakLineColor = Color(0xFFE2E8EF)
 // Control deck: dark instrument surfaces with dim chrome around glowing values.
 // Settings sit on a slightly lifted shade so the mode flip registers without

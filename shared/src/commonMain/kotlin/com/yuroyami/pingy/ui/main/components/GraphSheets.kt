@@ -178,7 +178,7 @@ internal fun StatsSheet(stats: WindowStats, fontFamily: FontFamily) {
 private fun StatsHelp(fontFamily: FontFamily) {
     val s = strings
     Column(Modifier.padding(bottom = 8.dp)) {
-        listOf(s.helpAverage, s.helpJitter, s.helpLoss, s.helpGone).forEach { line ->
+        listOf(s.helpAverage, s.helpJitter, s.helpLoss, s.helpGone, s.helpPending).forEach { line ->
             Text(
                 text = line,
                 color = SettingsTextColor,

@@ -641,6 +641,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                     }
 
                     var prevShows = false
+                    var prevWasPending = false
                     var prevX = 0f
                     var prevY = 0f
                     var prevC = Color.White
@@ -648,6 +649,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
 
                     for (index in 0 until n) {
                         val ping = visibleBuf[index]
+                        val isPending = ping.kind == PingKind.PENDING
                         val age = ageOf(ping)
                         val x = canvasW - age * pxPerMs
                         val level = levelOf(ping, age)
@@ -662,24 +664,33 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                                 }
                             }
                             prevShows = false
+                            prevWasPending = false
                             continue
                         }
 
-                        val presence = presenceOf(ping, age)
+                        val presence = presenceOf(ping, age) * if (isPending) PENDING_ALPHA else 1f
                         var y = calculatePingY(level, canvasH, roofVal.toFloat(), angleOfAttackVal)
                             .coerceAtLeast(minBarPx)
-                        var c = calcPingColor(level)
+                        var c = if (isPending) pendingColor(level) else calcPingColor(level)
                         if (ping.kind == PingKind.REPLY && activeScrub == null && age < BIRTH_MS) {
                             val life = age / BIRTH_MS
                             y = (y * (1f + BIRTH_OVERSHOOT * sin(PI * life).toFloat())).coerceAtMost(canvasH)
                             c = lerp(c, Color.White, BIRTH_BRIGHTEN * (1f - life))
                         }
 
-                        if (prevShows) ridge(prevX, x, prevY, y, prevC, c, minOf(prevPresence, presence))
-                        // No showing neighbour to slope into: paint this slot
-                        // level across its own span, so a lone reply between
-                        // two losses still leaves its mark.
-                        if (fillsOwnSlot(visibleBuf, index) { p -> levelOf(p, ageOf(p)) != null }) {
+                        // Never slope into or out of a probe still in the air:
+                        // a diagonal between a measurement and a wait reads as
+                        // measured latency climbing, which it is not.
+                        if (prevShows && !isPending && !prevWasPending) {
+                            ridge(prevX, x, prevY, y, prevC, c, minOf(prevPresence, presence))
+                        }
+                        // Nothing measured to slope into: paint this slot level
+                        // across its own span, so a lone reply between two
+                        // losses still leaves its mark.
+                        val nextIsMeasured = fillsOwnSlot(visibleBuf, index) { p ->
+                            levelOf(p, ageOf(p)) != null && p.kind != PingKind.PENDING
+                        }
+                        if (isPending || nextIsMeasured) {
                             val xEnd = canvasW - slotEndAgeMs(visibleBuf, index) { ageOf(it) } * pxPerMs
                             ridge(x, xEnd, y, y, c, c, presence)
                         }
@@ -699,6 +710,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                         auraPresence = presence
 
                         prevShows = true
+                        prevWasPending = isPending
                         prevX = x
                         prevY = y
                         prevC = c
@@ -741,11 +753,12 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                         }
                         if (rightEdgePx <= 0f) continue
 
-                        val presence = presenceOf(ping, age)
+                        val isPending = ping.kind == PingKind.PENDING
+                        val presence = presenceOf(ping, age) * if (isPending) PENDING_ALPHA else 1f
                         val widthPx = (rightEdgePx - leftEdgePx).coerceAtLeast(1f)
                         var y = calculatePingY(level, canvasH, roofVal.toFloat(), angleOfAttackVal)
                             .coerceAtLeast(minBarPx)
-                        var color = calcPingColor(level)
+                        var color = if (isPending) pendingColor(level) else calcPingColor(level)
 
                         // Birth ritual: for its first BIRTH_MS a fresh reply
                         // overshoots its true height and carries extra
