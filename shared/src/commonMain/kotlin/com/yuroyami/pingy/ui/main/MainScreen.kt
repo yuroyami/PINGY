@@ -375,6 +375,11 @@ private fun CockpitHeader() {
     val inter = Font(Res.font.Inter_Regular)
     val interFont = remember(inter) { FontFamily(inter) }
 
+    // Edits made before the store has been read race the restore, which then
+    // overwrites them or drops the entry as a duplicate without saying so.
+    val cockpit by viewmodel.cockpitState.collectAsState()
+    val ready = cockpit !is CockpitState.Loading
+
     Column(
         Modifier
             .fillMaxWidth()
@@ -393,7 +398,7 @@ private fun CockpitHeader() {
             Spacer(Modifier.weight(1f))
 
             val layout by viewmodel.panelLayout.collectAsState()
-            IconButton(onClick = {
+            IconButton(enabled = ready, onClick = {
                 val entries = PanelLayout.entries
                 val next = entries[(layout.ordinal + 1) % entries.size]
                 viewmodel.panelLayout.value = next
@@ -417,7 +422,7 @@ private fun CockpitHeader() {
             }
 
             val style by viewmodel.graphStyle.collectAsState()
-            IconButton(onClick = {
+            IconButton(enabled = ready, onClick = {
                 val next = when (style) {
                     GraphStyle.PINGLETTES -> GraphStyle.MOUNTAIN_SLOPES
                     GraphStyle.MOUNTAIN_SLOPES -> GraphStyle.PINGLETTES
@@ -637,9 +642,10 @@ private fun CockpitHeader() {
             }
             Surface(
                 onClick = addTarget,
+                enabled = ready,
                 modifier = Modifier.padding(start = 10.dp).size(52.dp),
                 shape = CircleShape,
-                color = Paletting.SGN,
+                color = if (ready) Paletting.SGN else Paletting.STRIP_BORDER,
                 shadowElevation = 10.dp,
             ) {
                 Box(contentAlignment = Alignment.Center) {

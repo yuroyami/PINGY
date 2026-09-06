@@ -69,6 +69,24 @@ internal class SlowStore(private val writeMs: Long) : StoreApi {
     override suspend fun quarantine(): String? = null
 }
 
+/** A store that will not answer until the test lets it. */
+internal class GatedStore(private val panels: List<PanelSpec>) : StoreApi {
+    val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+
+    override suspend fun load(): StoreLoad {
+        gate.await()
+        return StoreLoad.Loaded(panels, null, null, 0)
+    }
+
+    override suspend fun save(
+        panels: List<PanelSpec>,
+        graphStyle: String,
+        panelLayout: String,
+    ): Boolean = true
+
+    override suspend fun quarantine(): String? = null
+}
+
 /**
  * What happens when the disk refuses.
  *

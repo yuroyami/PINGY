@@ -157,6 +157,16 @@ class PingyViewmodel(
     /** Panels that were live when monitoring was paused, to restore on resume. */
     private val pausedPanels = mutableSetOf<PingPanel>()
 
+    /**
+     * Whether the app is in the foreground.
+     *
+     * Kept independently of whether any panel exists yet. A cold start that is
+     * backgrounded before the store finishes reading used to restore its panels
+     * and start probing anyway, because the pause found nothing to record.
+     */
+    @Volatile
+    private var foreground = true
+
     init {
         PingyLifecycle.viewmodel = this
         viewModelScope.launch {
@@ -201,9 +211,14 @@ class PingyViewmodel(
                     ?.let { name -> PanelLayout.entries.firstOrNull { it.name == name } }
                     ?.let { panelLayout.value = it }
 
-                loaded.panels.forEach { spec -> addPanel(spec.ip, spec) }
-                if (loaded.droppedRecords > 0) {
-                    notify(strings.skippedRecords(loaded.droppedRecords))
+                // A duplicate or an over-capacity record is skipped just as
+                // silently as an unreadable one, so count them the same way.
+                var skipped = loaded.droppedRecords
+                loaded.panels.forEach { spec ->
+                    if (addPanel(spec.ip, spec) != AddResult.Added) skipped++
+                }
+                if (skipped > 0) {
+                    notify(strings.skippedRecords(skipped))
                 }
                 cockpitState.value = CockpitState.Ready
             }
@@ -243,7 +258,7 @@ class PingyViewmodel(
 
         val panel = PingPanel(ip = ip, engineFactory = engineFactory)
         spec?.let(panel::applySpec)
-        panel.startPinging()
+        if (foreground) panel.startPinging() else pausedPanels += panel
         panels.add(at.coerceIn(0, panels.size), panel)
         if (cockpitState.value is CockpitState.FirstRun) cockpitState.value = CockpitState.Ready
 
@@ -351,6 +366,7 @@ class PingyViewmodel(
      * across a background transition the platform may never resume.
      */
     suspend fun pauseMonitoring() {
+        foreground = false
         pausedPanels.clear()
         panels.toList().forEach { panel ->
             // Intent, not the transient running flag: a panel mid-start is
@@ -364,6 +380,7 @@ class PingyViewmodel(
 
     /** Restart exactly the panels that [pauseMonitoring] stopped. */
     fun resumeMonitoring() {
+        foreground = true
         if (pausedPanels.isEmpty()) return
         pausedPanels.forEach { it.startPinging() }
         pausedPanels.clear()
