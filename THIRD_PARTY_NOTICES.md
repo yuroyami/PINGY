@@ -130,5 +130,16 @@ POSIX socket API. No third-party C code is copied in.
 
 ## Fonts and artwork
 
-The Inter typeface is used under the SIL Open Font License 1.1. Application
-icons and the wordmark are original work by the Pingy author.
+**Inter**, version 3.019 (git `0a5106e0b`). Copyright 2020 The Inter Project
+Authors. SIL Open Font License 1.1, full text in `licenses/OFL-1.1.txt`.
+
+The bundled file is the **Medium** weight despite its `Inter-Regular.otf`
+filename; the name table inside it reads `Inter-Medium:2021:0a5106e0b`. The
+design was tuned on that weight, so the file keeps its name.
+
+```text
+shared/src/commonMain/composeResources/font/Inter-Regular.otf
+SHA-256 99dab2bdcb613c4c8264000a94351d1227f74dc95a86d1249493aeee0c0179c4
+```
+
+Application icons and the wordmark are original work by the Pingy author.
