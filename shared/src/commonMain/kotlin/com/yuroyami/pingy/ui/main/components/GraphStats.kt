@@ -165,6 +165,8 @@ internal fun computeWindowStats(
             interrupted++
             continue
         }
+        // Monitoring was off from here to the next send. Unknown territory.
+        if (p.isUnobserved) continue
 
         // Each probe owns the stretch from its own send to the next send, and
         // the oldest one is clipped to the horizon rather than dropped, so the

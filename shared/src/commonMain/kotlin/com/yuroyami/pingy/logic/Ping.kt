@@ -32,6 +32,12 @@ enum class PingKind {
      * loss, because nothing was ever measured.
      */
     LOCAL_FAULT,
+
+    /**
+     * A marker written when monitoring stops. The stretch from here to the
+     * next send was never watched, so it is neither healthy nor lost.
+     */
+    UNOBSERVED,
 }
 
 /** What went wrong locally, so the UI can explain it instead of drawing a gap. */
@@ -88,8 +94,12 @@ data class Ping(
     /** True when we lost the ability to observe a probe that really left. */
     val isInterrupted: Boolean get() = kind == PingKind.INTERRUPTED
 
+    /** True for the gap marker written when monitoring stopped. */
+    val isUnobserved: Boolean get() = kind == PingKind.UNOBSERVED
+
     /** Whether a probe actually left the device, so it belongs in denominators. */
-    val wasSent: Boolean get() = kind != PingKind.LOCAL_FAULT
+    val wasSent: Boolean
+        get() = kind != PingKind.LOCAL_FAULT && kind != PingKind.UNOBSERVED
 
     companion object {
         fun pending(sentAt: TimeSource.Monotonic.ValueTimeMark) =
@@ -103,6 +113,10 @@ data class Ping(
 
         fun interrupted(sentAt: TimeSource.Monotonic.ValueTimeMark) =
             Ping(null, PingKind.INTERRUPTED, sentAt)
+
+        /** Marks the moment monitoring stopped. Nothing after it was watched. */
+        fun unobserved(at: TimeSource.Monotonic.ValueTimeMark) =
+            Ping(null, PingKind.UNOBSERVED, at)
 
         fun localFault(fault: LocalFault, at: TimeSource.Monotonic.ValueTimeMark, code: Int = 0) =
             Ping(null, PingKind.LOCAL_FAULT, at, fault, code)

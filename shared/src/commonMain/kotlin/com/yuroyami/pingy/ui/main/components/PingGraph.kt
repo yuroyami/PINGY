@@ -531,7 +531,8 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 fun levelOf(p: Ping, age: Long): Int? = when (p.kind) {
                     PingKind.REPLY -> p.value
                     PingKind.PENDING -> age.coerceIn(0L, PING_TIMEOUT_MS.toLong()).toInt()
-                    PingKind.TIMEOUT, PingKind.LOCAL_FAULT, PingKind.INTERRUPTED -> null
+                    PingKind.TIMEOUT, PingKind.LOCAL_FAULT,
+                    PingKind.INTERRUPTED, PingKind.UNOBSERVED -> null
                 }
                 fun presenceOf(p: Ping, age: Long): Float {
                     if (p.kind != PingKind.PENDING) return 1f
@@ -889,6 +890,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                         PingKind.TIMEOUT -> "${s.inspectTimeout} · $age"
                         PingKind.INTERRUPTED -> "${s.inspectInterrupted} · $age"
                         PingKind.LOCAL_FAULT -> "${pickFault?.message(s) ?: s.inspectInterrupted} · $age"
+                        PingKind.UNOBSERVED -> "${s.inspectUnobserved} · $age"
                     }
                     val chip = textMeasurer.measure(AnnotatedString(chipText), chipStyle)
                     val padX = 8.dp.toPx()

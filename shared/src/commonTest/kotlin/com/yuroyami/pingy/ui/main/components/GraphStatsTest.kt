@@ -96,6 +96,33 @@ class GraphStatsTest {
     }
 
     @Test
+    fun a_pause_is_neither_healthy_time_nor_outage() {
+        // Reply, then the app was backgrounded for 24 seconds, then a reply.
+        val ring = ringOf(
+            25_000L to reply(1.0),
+            24_000L to Ping.unobserved(now),
+            20L to reply(1.0),
+        )
+        val stats = computeWindowStats(ring, 30_000, now)
+        assertEquals(1_020L, stats.coveredMs, "the pause must not count as time we watched")
+        assertEquals(0f, assertNotNull(stats.gonePct))
+        assertEquals(2, stats.count)
+    }
+
+    @Test
+    fun a_pause_that_began_after_a_loss_does_not_inherit_it() {
+        val ring = ringOf(
+            25_000L to null,
+            24_000L to Ping.unobserved(now),
+            20L to reply(1.0),
+        )
+        val stats = computeWindowStats(ring, 30_000, now)
+        // The timeout owns one second, not the 24 it was paused for.
+        assertEquals(1_020L, stats.coveredMs)
+        assertEquals(1_000f / 1_020f * 100f, assertNotNull(stats.gonePct), 1f)
+    }
+
+    @Test
     fun interrupted_probes_enter_neither_loss_nor_outage() {
         val ring = ringOf(
             900L to reply(10.0),

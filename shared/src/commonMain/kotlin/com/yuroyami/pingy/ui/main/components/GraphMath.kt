@@ -90,7 +90,7 @@ private fun foldRank(p: Ping): Int = when (p.kind) {
     PingKind.REPLY -> FOLD_REPLY
     // Unknown outcomes outrank a reply but never a real loss: the gap that
     // survives a fold should be one we can actually stand behind.
-    PingKind.PENDING, PingKind.INTERRUPTED -> 2
+    PingKind.PENDING, PingKind.INTERRUPTED, PingKind.UNOBSERVED -> 2
     PingKind.TIMEOUT, PingKind.LOCAL_FAULT -> 3
 }
 

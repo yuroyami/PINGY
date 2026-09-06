@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.time.TimeSource
 
 /** Maximum number of pings retained per panel. Sized for zero-interval LAN
  * rates (roughly a thousand samples/sec) so the buffer still spans seconds
@@ -174,6 +175,10 @@ class PingPanel(
                     try {
                         current.stopAndJoin()
                     } finally {
+                        // Mark the gap. Without it the last verdict owns every
+                        // second until monitoring resumes, so a pause reads as
+                        // healthy time, or as an outage if it ended on a loss.
+                        pings.add(Ping.unobserved(TimeSource.Monotonic.markNow()))
                         engine = null
                         running.value = false
                     }

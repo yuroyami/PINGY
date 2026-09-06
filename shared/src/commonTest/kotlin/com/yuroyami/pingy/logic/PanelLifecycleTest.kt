@@ -96,6 +96,27 @@ class PanelLifecycleTest {
     }
 
     @Test
+    fun stopping_marks_the_history_as_unobserved_from_here() = runTest {
+        val engines = mutableListOf<FakeEngine>()
+        val panel = panelWith(engines, testScheduler)
+        try {
+            panel.startPinging()
+            runCurrent()
+            engines[0].stopGate.complete(Unit)
+            panel.stopPingingAndJoin()
+            runCurrent()
+
+            assertEquals(
+                PingKind.UNOBSERVED,
+                panel.pings.last()?.kind,
+                "a stop has to leave a gap marker, or the last verdict owns the pause",
+            )
+        } finally {
+            panel.close()
+        }
+    }
+
+    @Test
     fun starting_twice_keeps_one_engine() = runTest {
         val engines = mutableListOf<FakeEngine>()
         val panel = panelWith(engines, testScheduler)
