@@ -19,9 +19,6 @@ import okio.Path.Companion.toPath
 /** Hard cap on restored panels. Each one owns a socket, a thread and history. */
 const val MAX_PANELS: Int = 24
 
-/** Longest target string worth storing or resolving. */
-private const val MAX_TARGET_LEN = 253
-
 /** Everything a panel needs to be reborn on the next launch. */
 @Serializable
 data class PanelSpec(
@@ -44,9 +41,10 @@ data class PanelSpec(
      * allows. Returns null when the record is not salvageable.
      */
     fun validated(): PanelSpec? {
-        val host = ip.trim()
-        if (host.isEmpty() || host.length > MAX_TARGET_LEN) return null
-        if (host.any { it.isISOControl() }) return null
+        // One parser for typed and restored targets. A hand-edited or legacy
+        // file could otherwise restore a value the UI refuses, such as an
+        // address carrying credentials.
+        val host = (parseTarget(ip) as? TargetParse.Valid)?.host ?: return null
         return copy(
             ip = host,
             intervalMs = sanitizeIntervalMs(intervalMs),
