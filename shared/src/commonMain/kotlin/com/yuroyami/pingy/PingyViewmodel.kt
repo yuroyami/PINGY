@@ -113,12 +113,24 @@ class PingyViewmodel(
     val notice = MutableStateFlow<Notice?>(null)
     private var noticeCounter = 0L
 
+    /** A plain message waiting for an actionable one to finish. */
+    private var heldNotice: Notice? = null
+
     fun notify(text: String, actionLabel: String? = null, action: (() -> Unit)? = null) {
-        notice.value = Notice(++noticeCounter, text, actionLabel, action)
+        val next = Notice(++noticeCounter, text, actionLabel, action)
+        // An unrelated message must not throw away the only way to undo
+        // something. Hold it until the reversible one has had its time.
+        if (notice.value?.action != null && action == null) {
+            heldNotice = next
+            return
+        }
+        notice.value = next
     }
 
     fun dismissNotice(id: Long) {
-        if (notice.value?.id == id) notice.value = null
+        if (notice.value?.id != id) return
+        notice.value = heldNotice
+        heldNotice = null
     }
 
     /**

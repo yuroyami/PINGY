@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -340,12 +341,10 @@ internal fun CompactSlider(
             // 36dp is fine visually but too short to hit reliably; the extra
             // height is padding, so the row still looks the same.
             .heightIn(min = 48.dp)
-            // The label and the value sit in separate Text nodes, so a screen
-            // reader announced a bare "slider" with no name and no units.
-            // Merging them gives it both.
-            .semantics(mergeDescendants = true) {
-                contentDescription = "$label, $valueText"
-            },
+            // Merging here named the row, not the slider. Jumping straight to
+            // the control still found an unnamed slider reporting a raw float,
+            // so the name and units live on the actionable node below instead.
+            ,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Proportional rather than fixed: a translated label or a large text
@@ -363,7 +362,12 @@ internal fun CompactSlider(
             onValueChange = onValueChange,
             valueRange = range,
             steps = steps,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .semantics {
+                    contentDescription = label
+                    stateDescription = valueText
+                },
             colors = SliderDefaults.colors(
                 thumbColor = Paletting.A_MAIN_COLOR,
                 activeTrackColor = Paletting.A_MAIN_COLOR,

@@ -288,18 +288,17 @@ fun MainScreenUI() {
                                     tint = if (current > 0) Paletting.SGN else Paletting.STRIP_BORDER,
                                 )
                             }
-                            repeat(total) { i ->
-                                Box(
-                                    Modifier
-                                        .padding(horizontal = 3.dp)
-                                        .size(8.dp)
-                                        .background(
-                                            color = if (current == i) Paletting.SGN
-                                                    else Paletting.STRIP_BORDER,
-                                            shape = CircleShape,
-                                        )
-                                )
-                            }
+                            // A dot per panel needed 24 by 14dp plus two 48dp
+                            // buttons at the supported cap, which is wider than
+                            // the phones the app supports. A counter is bounded.
+                            Text(
+                                text = s.pagePosition(current + 1, total),
+                                color = Paletting.SGN,
+                                fontSize = 13.sp,
+                                fontFamily = stateFont,
+                                maxLines = 1,
+                                modifier = Modifier.padding(horizontal = 12.dp),
+                            )
                             IconButton(
                                 onClick = {
                                     scope.launch { pagerState.animateScrollToPage((current + 1).coerceAtMost(total - 1)) }
@@ -368,6 +367,17 @@ private fun StoreRecoveryBar(fontFamily: FontFamily) {
     }
 }
 
+/** How long a plain status line stays up. */
+private const val NOTICE_MS = 6_000L
+
+/**
+ * How long a reversible one stays up.
+ *
+ * Longer than the plain case because acting on it is the point, and a person
+ * has to read it, find the action and reach it before it goes.
+ */
+private const val ACTIONABLE_NOTICE_MS = 15_000L
+
 @Composable
 private fun CockpitHeader() {
     val viewmodel = LocalViewmodel.current
@@ -393,7 +403,13 @@ private fun CockpitHeader() {
             NeonWordmark(
                 fontSize = 26.sp,
                 fontFamily = interFont,
-                modifier = Modifier.clickable { viewmodel.backstack.add(Screen.About) },
+                // The wordmark is the only route to About and Legal. Unlabelled
+                // it announced as the brand text twice and read as decoration.
+                modifier = Modifier
+                    .clickable(role = Role.Button, onClickLabel = s.openAbout) {
+                        viewmodel.backstack.add(Screen.About)
+                    }
+                    .semantics(mergeDescendants = true) { contentDescription = s.openAbout },
             )
             Spacer(Modifier.weight(1f))
 
@@ -666,7 +682,7 @@ private fun CockpitHeader() {
             // 2.2s was below the WCAG "enough time" guidance for a message a
             // reader must notice, parse and act on. An actionable notice needs
             // longer still, because acting on it is the point.
-            delay(if (shown.action != null) 10_000 else 6_000)
+            delay(if (shown.action != null) ACTIONABLE_NOTICE_MS else NOTICE_MS)
             viewmodel.dismissNotice(shown.id)
         }
         Box(
@@ -694,6 +710,9 @@ private fun CockpitHeader() {
                             letterSpacing = 0.3.sp,
                             fontFamily = interFont,
                             maxLines = 2,
+                            // Yields to the action beside it. A long hostname
+                            // used to take the whole width and push Undo out.
+                            modifier = Modifier.weight(1f, fill = false),
                         )
                         val label = n.actionLabel
                         val act = n.action
