@@ -878,8 +878,8 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                         strokeWidth = 1.5f,
                     )
                     val chipText = when {
-                        pickLost -> "timeout · ${formatShortAge(pickAgeMs)}"
-                        pickPending -> "in flight · ${formatShortAge(pickAgeMs)}"
+                        pickLost -> "${s.inspectTimeout} · ${formatShortAge(pickAgeMs)}"
+                        pickPending -> "${s.inspectInFlight} · ${formatShortAge(pickAgeMs)}"
                         else -> "$pickValue ms · ${formatShortAge(pickAgeMs)}"
                     }
                     val chip = textMeasurer.measure(AnnotatedString(chipText), chipStyle)
@@ -963,7 +963,6 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                     // inside stays 17dp so the visual density is unchanged.
                     modifier = Modifier.size(48.dp),
                     onClick = {
-                        viewmodel.notify("$ip removed")
                         val removed = viewmodel.removePanel(this@PingGraphView)
                         viewmodel.notify(
                             text = s.panelRemoved(ip),

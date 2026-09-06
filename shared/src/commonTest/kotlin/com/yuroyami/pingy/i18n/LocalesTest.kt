@@ -54,6 +54,19 @@ class LocalesTest {
         "licenseAndNotices" to s.licenseAndNotices,
         "sourceCode" to s.sourceCode,
         "legalTitle" to s.legalTitle,
+        "helpPending" to s.helpPending,
+        "inspectTimeout" to s.inspectTimeout,
+        "inspectInFlight" to s.inspectInFlight,
+        "inspectInterrupted" to s.inspectInterrupted,
+        "inspectUnobserved" to s.inspectUnobserved,
+        "inspectSamples" to s.inspectSamples,
+        "a11yLatestFault" to s.a11yLatestFault,
+        "a11yLatestInterrupted" to s.a11yLatestInterrupted,
+        "paused" to s.paused,
+        "saveFailed" to s.saveFailed,
+        "storeRetry" to s.storeRetry,
+        "storeStartFresh" to s.storeStartFresh,
+        "openAbout" to s.openAbout,
     )
 
     @Test

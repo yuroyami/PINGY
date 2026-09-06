@@ -118,6 +118,29 @@ data class Strings(
     val helpJitter: String,
     val helpLoss: String,
     val helpGone: String,
+    val helpPending: String,
+
+    // Typed probe outcomes, in the inspection chip and spoken aloud
+    val inspectTimeout: String,
+    val inspectInFlight: String,
+    val inspectInterrupted: String,
+    val inspectUnobserved: String,
+    val inspectSamples: String,
+    val sampleRow: (String, String, String) -> String,
+    val a11yLatestFault: String,
+    val a11yLatestInterrupted: String,
+    val a11yPendingProbes: (Int) -> String,
+    val a11yInterrupted: (Int) -> String,
+
+    // Manual pause, saving and store recovery
+    val pauseTarget: (String) -> String,
+    val resumeTarget: (String) -> String,
+    val paused: String,
+    val saveFailed: String,
+    val storeRetry: String,
+    val storeStartFresh: String,
+    val storeQuarantined: (String) -> String,
+    val openAbout: String,
 
     // About and legal
     val back: String,
