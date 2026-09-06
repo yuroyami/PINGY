@@ -148,6 +148,9 @@ class PingEngine(
     @Volatile private var _packetSize: Int = sanitizePayloadSize(packetSize)
     @Volatile private var _intervalMs: Long = sanitizeIntervalMs(intervalMs)
 
+    /** Set when the cadence changes, so the loop can re-anchor its deadline. */
+    @Volatile private var intervalChanged: Boolean = false
+
     /** Per-session identity. Every probe carries it; every reply must return it. */
     private val session: Long = Uuid.random().toLongs { hi, _ -> hi }
 
@@ -185,6 +188,7 @@ class PingEngine(
             var nextSeq = 1
             var fd = -1
             var nextSendAtMs = 0L
+            var lastSentAtMs = -1L
 
             // Re-read power state occasionally rather than per probe: the query
             // crosses into platform services and the state changes slowly.
@@ -265,6 +269,19 @@ class PingEngine(
                             .getOrDefault(PowerState.NORMAL).probeGapFloorMs
                     }
 
+                    // A cadence change has to move the pending deadline too.
+                    // Storing the new interval alone meant a shorter setting
+                    // still waited out whatever the old one had scheduled.
+                    // Anchored on the last real send, so shortening cannot
+                    // fire a burst and lengthening cannot bring a send forward.
+                    if (intervalChanged) {
+                        intervalChanged = false
+                        val iv = _intervalMs
+                        val gap = (if (iv > 0L) iv else ADAPTIVE_WATCHDOG_MS)
+                            .coerceAtLeast(powerFloorMs)
+                        if (lastSentAtMs >= 0L) nextSendAtMs = lastSentAtMs + gap
+                    }
+
                     if (now >= nextSendAtMs) {
                         if (!isActive) break
                         if (outstanding.size < MAX_OUTSTANDING) {
@@ -281,6 +298,7 @@ class PingEngine(
                             // Stamp the send moment AFTER the syscall returns, so
                             // the x position reflects when the packet actually left.
                             val sentMs = nowMs()
+                            lastSentAtMs = sentMs
                             outstanding[seq] = longArrayOf(sendUsec, sentMs)
                             onEvent(PingEvent.Sent(seq, Ping.pending(markAt(sentMs))))
                         }
@@ -390,6 +408,7 @@ class PingEngine(
 
     override fun updateInterval(intervalMs: Long) {
         _intervalMs = sanitizeIntervalMs(intervalMs)
+        intervalChanged = true
     }
 
     override fun updatePacketSize(packetSize: Int) {
