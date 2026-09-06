@@ -140,6 +140,7 @@ class PingEngine(
     val host: String,
     packetSize: Int,
     intervalMs: Long,
+    private val transport: IcmpTransport = PlatformTransport,
 ) {
     private enum class State { IDLE, RUNNING, STOPPED }
 
@@ -194,16 +195,26 @@ class PingEngine(
             fun fault(kind: LocalFault) =
                 onEvent(PingEvent.Fault(Ping.localFault(kind, markAt(nowMs()))))
 
-            fun flushOutstandingAsLost() {
-                outstanding.forEach { (seq, entry) -> resolve(seq, Ping.timeout(markAt(entry[1]))) }
+            /**
+             * Settle every probe still in the air.
+             *
+             * Only the ones whose deadline really passed are losses. The rest
+             * left the device and we simply stopped being able to watch them,
+             * which says nothing about the target.
+             */
+            fun flushOutstanding(now: Long) {
+                outstanding.forEach { (seq, entry) ->
+                    val sentAtMs = entry[1]
+                    val verdict = if (now - sentAtMs >= PING_TIMEOUT_MS) Ping.timeout(markAt(sentAtMs))
+                                  else Ping.interrupted(markAt(sentAtMs))
+                    resolve(seq, verdict)
+                }
                 outstanding.clear()
             }
 
             suspend fun dropSocket(kind: LocalFault) {
-                // In-flight probes died with the socket. Each keeps its own send
-                // moment so the losses spread out truthfully.
-                flushOutstandingAsLost()
-                if (fd >= 0) closeIcmpSocket(fd)
+                flushOutstanding(nowMs())
+                if (fd >= 0) transport.close(fd)
                 fd = -1
                 cachedTarget = null
                 fault(kind)
@@ -211,7 +222,7 @@ class PingEngine(
             }
 
             try {
-                if (!icmpTransportAvailable()) {
+                if (!transport.available()) {
                     // A permanent condition, not a transient one. Report once and
                     // idle instead of manufacturing a loss every 200 ms forever.
                     while (isActive) {
@@ -224,14 +235,14 @@ class PingEngine(
                 while (isActive) {
                     if (fd < 0) {
                         val target = cachedTarget
-                            ?: runCatching { resolveHostToIpv4(host) }.getOrNull()?.also { cachedTarget = it }
+                            ?: runCatching { transport.resolve(host) }.getOrNull()?.also { cachedTarget = it }
                         if (target == null) {
                             if (!isActive) break
                             fault(LocalFault.RESOLVE_FAILED)
                             delay(RESOLVE_RETRY_MS)
                             continue
                         }
-                        fd = runCatching { openIcmpSocket(target) }.getOrDefault(-1)
+                        fd = runCatching { transport.open(target) }.getOrDefault(-1)
                         if (fd < 0) {
                             if (!isActive) break
                             fault(LocalFault.SOCKET_OPEN_FAILED)
@@ -246,7 +257,7 @@ class PingEngine(
 
                     if (powerCheckDue(now, nextPowerCheckAtMs)) {
                         nextPowerCheckAtMs = now + POWER_POLL_MS
-                        powerFloorMs = runCatching { currentPowerState() }
+                        powerFloorMs = runCatching { transport.powerState() }
                             .getOrDefault(PowerState.NORMAL).probeGapFloorMs
                     }
 
@@ -255,7 +266,7 @@ class PingEngine(
                             val seq = nextSeq
                             nextSeq = (nextSeq + 1) and 0xFFFF
                             val sendUsec = runCatching {
-                                icmpSendProbe(fd, session, seq, _packetSize)
+                                transport.send(fd, session, seq, _packetSize)
                             }.getOrDefault(SEND_SOCK_ERR)
                             if (sendUsec < 0) {
                                 if (!isActive) break
@@ -281,7 +292,7 @@ class PingEngine(
                     val budget = (minOf(nextSendAtMs, oldestDeadline) - now)
                         .coerceAtMost(MAX_POLL_SLICE_MS)
                     if (budget > 0) {
-                        val packed = runCatching { icmpAwaitReply(fd, session, budget.toInt()) }
+                        val packed = runCatching { transport.await(fd, session, budget.toInt()) }
                             .getOrDefault(AWAIT_SOCK_ERR)
                         if (!isActive) break
                         when {
@@ -340,8 +351,11 @@ class PingEngine(
                     }
                 }
             } finally {
+                // Settle the pipeline before letting go, so a stopped engine
+                // never leaves a probe pending in the history forever.
+                flushOutstanding(nowMs())
                 // Sole owner: nothing else ever closes this descriptor.
-                if (fd >= 0) closeIcmpSocket(fd)
+                if (fd >= 0) transport.close(fd)
             }
         }
         return true

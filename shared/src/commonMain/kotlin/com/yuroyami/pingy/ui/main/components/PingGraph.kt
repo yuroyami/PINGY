@@ -88,6 +88,7 @@ import com.yuroyami.pingy.i18n.Strings
 import com.yuroyami.pingy.ui.reduceMotion
 import com.yuroyami.pingy.i18n.strings
 import com.yuroyami.pingy.logic.Ping
+import com.yuroyami.pingy.logic.LocalFault
 import com.yuroyami.pingy.logic.PingKind
 import com.yuroyami.pingy.logic.PingPanel
 import com.yuroyami.pingy.theme.Paletting
@@ -534,7 +535,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 fun levelOf(p: Ping, age: Long): Int? = when (p.kind) {
                     PingKind.REPLY -> p.value
                     PingKind.PENDING -> age.coerceIn(0L, PING_TIMEOUT_MS.toLong()).toInt()
-                    PingKind.TIMEOUT, PingKind.LOCAL_FAULT -> null
+                    PingKind.TIMEOUT, PingKind.LOCAL_FAULT, PingKind.INTERRUPTED -> null
                 }
                 fun presenceOf(p: Ping, age: Long): Float {
                     if (p.kind != PingKind.PENDING) return 1f
@@ -551,6 +552,8 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 var pickFound = false
                 var pickLost = false
                 var pickPending = false
+                var pickKind = PingKind.REPLY
+                var pickFault: LocalFault? = null
                 var pickValue = 0
                 var pickAgeMs = 0L
                 var pickLeft = 0f
@@ -622,6 +625,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                                 val diff = abs(age - cursorAgeMs)
                                 if (diff < pickDiff) {
                                     pickDiff = diff; pickFound = true; pickLost = true; pickPending = false
+                                    pickKind = ping.kind; pickFault = ping.fault
                                     pickAgeMs = age; pickLeft = x - 2f; pickWidth = 4f; pickHeight = canvasH
                                 }
                             }
@@ -654,6 +658,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                             if (diff < pickDiff) {
                                 pickDiff = diff; pickFound = true; pickLost = false
                                 pickPending = ping.kind == PingKind.PENDING
+                                pickKind = ping.kind; pickFault = null
                                 pickAgeMs = age; pickLeft = x - 2f; pickWidth = 4f
                                 pickHeight = y; pickValue = level
                             }
@@ -695,6 +700,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                                 val diff = abs(age - cursorAgeMs)
                                 if (diff < pickDiff) {
                                     pickDiff = diff; pickFound = true; pickLost = true; pickPending = false
+                                    pickKind = ping.kind; pickFault = ping.fault
                                     pickAgeMs = age; pickLeft = leftEdgePx - 2f
                                     pickWidth = 4f; pickHeight = canvasH
                                 }
@@ -745,6 +751,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                             if (diff < pickDiff) {
                                 pickDiff = diff; pickFound = true; pickLost = false
                                 pickPending = ping.kind == PingKind.PENDING
+                                pickKind = ping.kind; pickFault = null
                                 pickValue = level; pickAgeMs = age
                                 pickLeft = leftEdgePx; pickWidth = widthPx; pickHeight = y
                             }
@@ -877,10 +884,15 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                         end = Offset(cursorX, canvasH),
                         strokeWidth = 1.5f,
                     )
-                    val chipText = when {
-                        pickLost -> "${s.inspectTimeout} · ${formatShortAge(pickAgeMs)}"
-                        pickPending -> "${s.inspectInFlight} · ${formatShortAge(pickAgeMs)}"
-                        else -> "$pickValue ms · ${formatShortAge(pickAgeMs)}"
+                    // Name the real outcome. Calling a DNS failure or a dead
+                    // socket a "timeout" blames the target for our own trouble.
+                    val age = formatShortAge(pickAgeMs)
+                    val chipText = when (pickKind) {
+                        PingKind.REPLY -> "$pickValue ms · $age"
+                        PingKind.PENDING -> "${s.inspectInFlight} · $age"
+                        PingKind.TIMEOUT -> "${s.inspectTimeout} · $age"
+                        PingKind.INTERRUPTED -> "${s.inspectInterrupted} · $age"
+                        PingKind.LOCAL_FAULT -> "${pickFault?.message(s) ?: s.inspectInterrupted} · $age"
                     }
                     val chip = textMeasurer.measure(AnnotatedString(chipText), chipStyle)
                     val padX = 8.dp.toPx()

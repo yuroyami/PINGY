@@ -32,9 +32,9 @@ class PingPanel(
     /** The whole collection of pings for this panel in a ring buffer, always
      * in send order. Not wrapped in a Flow: the buffer is a single long-lived
      * instance that mutates in place. The draw pass and the throttled samplers
-     * read it directly every frame/tick. Probes left in the air when the
-     * engine stops simply stay pending; the graph fades them like any other
-     * unanswered probe and the statistics ignore them. */
+     * read it directly every frame/tick. Probes still in the air when the
+     * engine stops are settled as interrupted, not as loss: they left the
+     * device, and we merely stopped being able to watch them. */
     val pings = RingBuffer<Ping>(MAX_PINGS)
 
     /** Pinging Parameters */

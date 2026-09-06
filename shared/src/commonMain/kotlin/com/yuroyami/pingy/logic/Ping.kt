@@ -20,6 +20,13 @@ enum class PingKind {
     TIMEOUT,
 
     /**
+     * A probe was sent, then the local socket died before its deadline. We
+     * stopped being able to observe it, so nothing is known about the target.
+     * Never counts as loss.
+     */
+    INTERRUPTED,
+
+    /**
      * No probe left this device: DNS failed, the socket would not open, the
      * send failed, or the platform has no ICMP transport. Never counts as
      * loss, because nothing was ever measured.
@@ -76,6 +83,9 @@ data class Ping(
     /** True while the probe is in the air. Excluded from statistics until resolved. */
     val isPending: Boolean get() = kind == PingKind.PENDING
 
+    /** True when we lost the ability to observe a probe that really left. */
+    val isInterrupted: Boolean get() = kind == PingKind.INTERRUPTED
+
     /** Whether a probe actually left the device, so it belongs in denominators. */
     val wasSent: Boolean get() = kind != PingKind.LOCAL_FAULT
 
@@ -88,6 +98,9 @@ data class Ping(
 
         fun timeout(sentAt: TimeSource.Monotonic.ValueTimeMark) =
             Ping(null, PingKind.TIMEOUT, sentAt)
+
+        fun interrupted(sentAt: TimeSource.Monotonic.ValueTimeMark) =
+            Ping(null, PingKind.INTERRUPTED, sentAt)
 
         fun localFault(fault: LocalFault, at: TimeSource.Monotonic.ValueTimeMark) =
             Ping(null, PingKind.LOCAL_FAULT, at, fault)

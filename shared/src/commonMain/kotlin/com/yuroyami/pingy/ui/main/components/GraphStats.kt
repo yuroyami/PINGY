@@ -48,6 +48,9 @@ internal fun buildGraphSummary(
     if (stats.localFaults > 0) {
         append(". ").append(s.a11yExcludedFaults(stats.localFaults))
     }
+    if (stats.interrupted > 0) {
+        append(". ").append(s.a11yInterrupted(stats.interrupted))
+    }
     append(".")
 }
 
@@ -67,6 +70,8 @@ internal data class WindowStats(
     val count: Int,
     val lost: Int,
     val localFaults: Int,
+    /** Probes that left but whose observation was cut short. Not loss. */
+    val interrupted: Int,
     val avg: Double?,
     val min: Double?,
     val max: Double?,
@@ -76,7 +81,7 @@ internal data class WindowStats(
     val coveredMs: Long,
 ) {
     companion object {
-        val EMPTY = WindowStats(0, 0, 0, null, null, null, null, null, 0L)
+        val EMPTY = WindowStats(0, 0, 0, 0, null, null, null, null, null, 0L)
     }
 }
 
@@ -114,6 +119,7 @@ internal fun computeWindowStats(pings: RingBuffer<Ping>, windowMs: Long): Window
     var count = 0
     var lost = 0
     var localFaults = 0
+    var interrupted = 0
     var sum = 0.0
     var valid = 0
     var min = Double.MAX_VALUE
@@ -145,6 +151,12 @@ internal fun computeWindowStats(pings: RingBuffer<Ping>, windowMs: Long): Window
         }
         // Still in the air: nothing to count yet.
         if (p.isPending) continue
+        // Sent, then the socket died under it. That is our failure to observe,
+        // not the target's failure to answer.
+        if (p.isInterrupted) {
+            interrupted++
+            continue
+        }
 
         count++
         val v = p.rttMs
@@ -177,6 +189,7 @@ internal fun computeWindowStats(pings: RingBuffer<Ping>, windowMs: Long): Window
         count = count,
         lost = lost,
         localFaults = localFaults,
+        interrupted = interrupted,
         avg = if (valid > 0) sum / valid else null,
         min = if (valid > 0) min else null,
         max = if (valid > 0) max else null,

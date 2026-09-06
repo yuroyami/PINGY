@@ -56,6 +56,20 @@ class GraphStatsTest {
     }
 
     @Test
+    fun interrupted_probes_enter_neither_loss_nor_outage() {
+        val ring = ringOf(
+            900L to reply(10.0),
+            600L to Ping.interrupted(now),
+            300L to reply(20.0),
+        )
+        val stats = computeWindowStats(ring, 5_000)
+        assertEquals(2, stats.count, "an interrupted probe has no verdict to count")
+        assertEquals(0, stats.lost)
+        assertEquals(1, stats.interrupted)
+        assertEquals(0f, stats.gonePct)
+    }
+
+    @Test
     fun a_timeout_is_loss_and_a_reply_is_not() {
         val ring = ringOf(900L to reply(10.0), 600L to null, 300L to reply(20.0))
         val stats = computeWindowStats(ring, 5_000)
