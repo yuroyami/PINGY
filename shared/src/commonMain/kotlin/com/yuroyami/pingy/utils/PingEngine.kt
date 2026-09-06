@@ -399,11 +399,16 @@ class PingEngine(
         scope.cancel()
     }
 
-    /** [stop], then suspend until the loop has actually released its socket. */
+    /**
+     * [stop], then suspend until the loop has actually released its socket.
+     *
+     * Cancellation propagates. Swallowing it here let a cancelled caller
+     * believe the socket was released when the loop was still holding it.
+     */
     override suspend fun stopAndJoin() {
         val job = loop
         stop()
-        runCatching { job?.join() }
+        job?.join()
     }
 
     override fun updateInterval(intervalMs: Long) {

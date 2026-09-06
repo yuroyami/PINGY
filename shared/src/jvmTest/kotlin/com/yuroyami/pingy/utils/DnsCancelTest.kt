@@ -3,11 +3,13 @@ package com.yuroyami.pingy.utils
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -46,6 +48,25 @@ class DnsCancelTest {
 
         assertEquals(0, base.opens, "a stopped engine must not open a socket")
         assertEquals(0, base.sends, "a stopped engine must not send a probe")
+    }
+
+    @Test
+    fun a_join_that_is_cancelled_says_so_instead_of_reporting_success() = runBlocking {
+        val release = CountDownLatch(1)
+        val base = ScriptedTransport()
+        val blockingResolver = object : IcmpTransport by base {
+            override fun resolve(host: String): String? {
+                release.await()
+                return base.resolve(host)
+            }
+        }
+        val engine = PingEngine("slow.example", 32, 0L, blockingResolver)
+        engine.start { }
+
+        val finished = withTimeoutOrNull(200) { engine.stopAndJoin() }
+        release.countDown()
+
+        assertNull(finished, "stopAndJoin claimed to finish while the loop still held its socket")
     }
 
     @Test

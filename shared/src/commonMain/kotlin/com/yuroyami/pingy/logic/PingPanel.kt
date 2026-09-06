@@ -160,9 +160,15 @@ class PingPanel(
                     running.value = true
                 }
                 !want && current != null -> {
-                    current.stopAndJoin()
-                    engine = null
-                    running.value = false
+                    // The engine is already told to stop, so it exits either
+                    // way. The bookkeeping runs even if our join is cancelled,
+                    // or the panel would claim to be live with no engine.
+                    try {
+                        current.stopAndJoin()
+                    } finally {
+                        engine = null
+                        running.value = false
+                    }
                 }
                 else -> return@withLock
             }

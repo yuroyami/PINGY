@@ -11,6 +11,7 @@ import com.yuroyami.pingy.utils.loggye
 import com.yuroyami.pingy.utils.pingyDataStoreDir
 import com.yuroyami.pingy.utils.sanitizeIntervalMs
 import com.yuroyami.pingy.utils.sanitizePayloadSize
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -126,25 +127,30 @@ object PingyStore {
         }
     }
 
-    suspend fun load(): StoreLoad = runCatching {
+    // Cancellation is rethrown rather than reported as a read or write fault.
+    // Catching it turned "the caller went away" into "your file is corrupt".
+    suspend fun load(): StoreLoad = try {
         decodeStore(store.data.first())
-    }.getOrElse { e ->
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
         loggye("PingyStore: load failed; keeping the existing file untouched", e)
         StoreLoad.Failed(e.message ?: e::class.simpleName ?: "unknown read failure")
     }
 
     /** Returns true when the write actually landed. */
-    suspend fun save(panels: List<PanelSpec>, graphStyle: String, panelLayout: String): Boolean =
-        runCatching {
-            store.edit { prefs ->
-                prefs[KEY_INITIALIZED] = true
-                prefs[KEY_PANELS] = json.encodeToString(panels.take(MAX_PANELS))
-                prefs[KEY_STYLE] = graphStyle
-                prefs[KEY_LAYOUT] = panelLayout
-            }
-            true
-        }.getOrElse { e ->
-            loggye("PingyStore: save failed", e)
-            false
+    suspend fun save(panels: List<PanelSpec>, graphStyle: String, panelLayout: String): Boolean = try {
+        store.edit { prefs ->
+            prefs[KEY_INITIALIZED] = true
+            prefs[KEY_PANELS] = json.encodeToString(panels.take(MAX_PANELS))
+            prefs[KEY_STYLE] = graphStyle
+            prefs[KEY_LAYOUT] = panelLayout
         }
+        true
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        loggye("PingyStore: save failed", e)
+        false
+    }
 }
