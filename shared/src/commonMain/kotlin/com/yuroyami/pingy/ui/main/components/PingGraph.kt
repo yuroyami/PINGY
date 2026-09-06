@@ -145,7 +145,13 @@ private const val REDUCED_MOTION_TICK_MS = 250L
 
 
 
-/** Drag-to-inspect freeze: ages render relative to [freezeMark] so the conveyor halts. */
+/**
+ * Drag-to-inspect freeze: ages render relative to [freezeMark] so the conveyor
+ * halts, and the statistics and readout are computed against the same moment.
+ *
+ * The live ring keeps filling underneath. A hold long enough to wrap it loses
+ * the oldest frozen samples, which is the one thing this does not preserve.
+ */
 private data class ScrubFreeze(val freezeMark: TimeSource.Monotonic.ValueTimeMark, val cursorX: Float)
 
 // Gesture verdicts for the manual tap / long-press / scrub state machine.
@@ -244,6 +250,9 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
     // while still feeling live. It shows the newest VERDICT in send order:
     // probes still in the air are skipped, so a late loss cannot flip the
     // number a fresher reply already earned.
+    // Declared before the samplers below, which freeze along with it.
+    var scrub by remember { mutableStateOf<ScrubFreeze?>(null) }
+
     var readoutValue by remember { mutableStateOf<Int?>(null) }
     var readoutKind by remember { mutableStateOf<PingKind?>(null) }
     LaunchedEffect(this@PingGraphView, isRunning) {
@@ -253,11 +262,16 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
             pings.forEachNewestFirst { p ->
                 if (p.isPending) true else { latest = p; false }
             }
-            latest?.let { last ->
-                // Keep the outcome type, not just "is there a number". A null
-                // RTT covers a timeout, a DNS failure and a lost socket alike.
-                readoutKind = last.kind
-                if (last.kind == PingKind.REPLY) last.value?.let { readoutValue = it }
+            // Held still while inspecting: a reading that keeps moving under a
+            // frozen graph describes a different moment from the one on screen.
+            if (scrub == null) {
+                latest?.let { last ->
+                    // Keep the outcome type, not just "is there a number". A
+                    // null RTT covers a timeout, a DNS failure and a lost
+                    // socket alike.
+                    readoutKind = last.kind
+                    if (last.kind == PingKind.REPLY) last.value?.let { readoutValue = it }
+                }
             }
             delay(150)
         }
@@ -273,12 +287,16 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
         while (true) {
             val base = timeframeMs.value
             val effective = visibleWindowMs(base, viewmodel.panelLayout.value)
-            windowStats = computeWindowStats(pings, effective)
+            // Anchored to the freeze while inspecting, so the numbers describe
+            // the span the canvas is showing rather than the live edge.
+            windowStats = computeWindowStats(
+                pings,
+                effective,
+                scrub?.freezeMark ?: TimeSource.Monotonic.markNow(),
+            )
             delay(400)
         }
     }
-
-    var scrub by remember { mutableStateOf<ScrubFreeze?>(null) }
 
     // The readout's hue glides between samples; the text itself stays discrete.
     val readoutColor by animateColorAsState(
