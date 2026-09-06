@@ -119,6 +119,9 @@ private const val MAX_POLL_SLICE_MS = 250L
 /** How often the engine re-reads battery and thermal state. */
 private const val POWER_POLL_MS = 15_000L
 
+/** Plain comparison on purpose: subtracting a MIN_VALUE sentinel overflowed and never fired. */
+internal fun powerCheckDue(nowMs: Long, nextCheckAtMs: Long): Boolean = nowMs >= nextCheckAtMs
+
 /** Ceiling on unanswered probes tracked at once. */
 private const val MAX_OUTSTANDING = 64
 
@@ -185,7 +188,7 @@ class PingEngine(
             // Re-read power state occasionally rather than per probe: the query
             // crosses into platform services and the state changes slowly.
             var powerFloorMs = MIN_PROBE_GAP_MS
-            var powerCheckedAtMs = Long.MIN_VALUE
+            var nextPowerCheckAtMs = 0L   // 0 means "on the first turn"
 
             fun resolve(seq: Int, ping: Ping) = onEvent(PingEvent.Resolved(seq, ping))
             fun fault(kind: LocalFault) =
@@ -241,8 +244,8 @@ class PingEngine(
 
                     var now = nowMs()
 
-                    if (now - powerCheckedAtMs >= POWER_POLL_MS) {
-                        powerCheckedAtMs = now
+                    if (powerCheckDue(now, nextPowerCheckAtMs)) {
+                        nextPowerCheckAtMs = now + POWER_POLL_MS
                         powerFloorMs = runCatching { currentPowerState() }
                             .getOrDefault(PowerState.NORMAL).probeGapFloorMs
                     }
