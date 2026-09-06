@@ -155,6 +155,33 @@ kotlin {
     }
 }
 
+// Protocol tests for the shared C core, with ASan and UBSan on. The Kotlin
+// suites cover the engine; this covers the packet code underneath it, where an
+// alignment or bounds mistake is invisible until it corrupts something.
+val nativeTest = tasks.register<Exec>("nativeTest") {
+    group = "verification"
+    description = "Compile and run the icmp_core protocol tests under ASan and UBSan"
+
+    val source = layout.projectDirectory.file("native/test/icmp_core_test.c")
+    val header = layout.projectDirectory.file("native/icmp_core.h")
+    val binary = layout.buildDirectory.file("nativeTest/icmp_core_test")
+
+    inputs.file(source)
+    inputs.file(header)
+    outputs.file(binary)
+
+    doFirst { binary.get().asFile.parentFile.mkdirs() }
+
+    commandLine(
+        "sh", "-c",
+        "cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined " +
+            "-I${projectDir}/native -o ${binary.get().asFile} ${source.asFile} && " +
+            "${binary.get().asFile}",
+    )
+}
+
+tasks.named("check") { dependsOn(nativeTest) }
+
 // Host-OS compile of the unprivileged-ICMP JNI shim for the JVM target.
 // Android compiles the same C source via CMake/NDK (see
 // `androidApp/src/main/cpp/CMakeLists.txt`); here we just shell out to `cc`,

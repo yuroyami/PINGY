@@ -235,6 +235,11 @@ static inline int pingy_open_socket(const char *ipv4) {
     int flags = fcntl(fd, F_GETFD, 0);
     if (flags >= 0) (void)fcntl(fd, F_SETFD, flags | FD_CLOEXEC);
 
+    /* Non-blocking: a blocking send or recv can park the engine's thread past
+     * the poll deadline it advertises, where it cannot notice cancellation. */
+    int fl = fcntl(fd, F_GETFL, 0);
+    if (fl >= 0) (void)fcntl(fd, F_SETFL, fl | O_NONBLOCK);
+
     struct sockaddr_in dest;
     memset(&dest, 0, sizeof(dest));
     dest.sin_family = AF_INET;
@@ -251,9 +256,17 @@ static inline void pingy_close_socket(int fd) {
     if (fd >= 0) close(fd);
 }
 
+/* Longest we will wait for a full send buffer to drain. Matches the engine's
+ * poll slice, so a send cannot sit outside the stop latency it promises. */
+#define PINGY_SEND_BUDGET_MS 250
+
 /*
  * Send one request. Returns its monotonic send time in microseconds, or -1.
- * The timestamp is taken as late as possible, immediately before send().
+ * The timestamp is taken as late as possible, immediately before the send()
+ * that actually succeeds.
+ *
+ * The socket is non-blocking, so a full send buffer surfaces as EAGAIN. We wait
+ * for writability against an absolute deadline instead of blocking forever.
  */
 static inline int64_t pingy_send_probe(
     int fd, int64_t session, int seq, int payload_size
@@ -267,11 +280,28 @@ static inline int64_t pingy_send_probe(
     );
     if (n < 0) return -1;
 
-    const int64_t send_us = pingy_now_usec();
-    ssize_t w;
-    do { w = send(fd, packet, (size_t)n, 0); } while (w < 0 && errno == EINTR);
-    if (w < 0) return -1;
-    return send_us;
+    const int64_t deadline_us = pingy_now_usec() + PINGY_SEND_BUDGET_MS * 1000LL;
+    for (;;) {
+        const int64_t send_us = pingy_now_usec();
+        const ssize_t w = send(fd, packet, (size_t)n, 0);
+        if (w >= 0) return send_us;
+        if (errno == EINTR) continue;
+        if (errno != EAGAIN && errno != EWOULDBLOCK) return -1;
+
+        const int64_t now_us = pingy_now_usec();
+        if (now_us >= deadline_us) return -1;
+        int wait_ms = (int)((deadline_us - now_us + 999) / 1000);
+        if (wait_ms <= 0) wait_ms = 1;
+
+        struct pollfd pfd;
+        pfd.fd = fd;
+        pfd.events = POLLOUT;
+        pfd.revents = 0;
+        const int pr = poll(&pfd, 1, wait_ms);
+        if (pr < 0 && errno == EINTR) continue;
+        if (pr <= 0) return -1;
+        if (pfd.revents & (POLLERR | POLLNVAL)) return -1;
+    }
 }
 
 /*
