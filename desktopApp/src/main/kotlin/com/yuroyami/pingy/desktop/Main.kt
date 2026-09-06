@@ -12,6 +12,11 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.yuroyami.pingy.PingyLifecycle
 import com.yuroyami.pingy.ui.adam.AdamScreenUI
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
+
+/** Longest a quit will wait for the preferences write before giving up on it. */
+private const val QUIT_FLUSH_TIMEOUT_MS = 3_000L
 
 /**
  * Desktop shell.
@@ -27,22 +32,25 @@ fun main() = application {
         height = 940.dp,
     )
 
+    // Wait for the write before the process goes away. The old code launched
+    // it and exited immediately, so the very flush meant to protect a recent
+    // edit was the one most likely to lose it. Bounded, because a stuck disk
+    // must not turn quitting into hanging.
+    val quit: () -> Unit = {
+        runBlocking { withTimeoutOrNull(QUIT_FLUSH_TIMEOUT_MS) { PingyLifecycle.flushPendingWrites() } }
+        exitApplication()
+    }
+
     Window(
-        onCloseRequest = {
-            // The process is about to end; a debounced save that has not fired
-            // yet would simply be lost.
-            PingyLifecycle.flushPendingWrites()
-            exitApplication()
-        },
+        onCloseRequest = quit,
         title = "Pingy",
         state = windowState,
         onKeyEvent = { event ->
-            val quit = event.type == KeyEventType.KeyDown &&
+            val isQuit = event.type == KeyEventType.KeyDown &&
                 event.key == Key.Q &&
                 (event.isMetaPressed || event.isCtrlPressed)
-            if (quit) {
-                PingyLifecycle.flushPendingWrites()
-                exitApplication()
+            if (isQuit) {
+                quit()
                 true
             } else {
                 false

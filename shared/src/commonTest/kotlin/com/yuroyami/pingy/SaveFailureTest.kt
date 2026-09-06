@@ -7,8 +7,10 @@ import com.yuroyami.pingy.logic.StoreApi
 import com.yuroyami.pingy.logic.StoreLoad
 import com.yuroyami.pingy.utils.ProbeEngine
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -43,6 +45,23 @@ internal class FlakyStore(private val failFirst: Int) : StoreApi {
         saves++
         lastPanels = panels
         return saves > failFirst
+    }
+}
+
+/** A store whose writes take a known amount of time to land. */
+internal class SlowStore(private val writeMs: Long) : StoreApi {
+    var saves = 0; private set
+
+    override suspend fun load(): StoreLoad = StoreLoad.Loaded(emptyList(), null, null, 0)
+
+    override suspend fun save(
+        panels: List<PanelSpec>,
+        graphStyle: String,
+        panelLayout: String,
+    ): Boolean {
+        kotlinx.coroutines.delay(writeMs)
+        saves++
+        return true
     }
 }
 
@@ -94,6 +113,23 @@ class SaveFailureTest {
             assertTrue(notice != null, "nothing told the user their panels are not being saved")
             assertEquals(EnStrings.saveFailed, notice.text)
             assertTrue(notice.action != null, "the notice has to offer a retry")
+        } finally {
+            vm.panels.toList().forEach { vm.removePanel(it) }
+        }
+    }
+
+    @Test
+    fun flush_and_wait_does_not_return_until_the_write_lands() = runTest {
+        val store = SlowStore(writeMs = 200)
+        val vm = PingyViewmodel(store) { _, _, _ -> InertEngine() }
+        try {
+            advanceUntilIdle()
+            val flush = async { vm.flushAndWait() }
+            advanceTimeBy(150)
+            assertTrue(!flush.isCompleted, "the flush returned before the disk had it")
+            advanceUntilIdle()
+            assertTrue(flush.await(), "the flush should report success")
+            assertEquals(1, store.saves)
         } finally {
             vm.panels.toList().forEach { vm.removePanel(it) }
         }

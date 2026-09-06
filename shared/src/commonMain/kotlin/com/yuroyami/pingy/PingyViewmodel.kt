@@ -343,9 +343,25 @@ class PingyViewmodel(
         pausedPanels.clear()
     }
 
-    /** Flush pending edits now, for example when the host is going away. */
+    /**
+     * Write the current state now and wait for the disk.
+     *
+     * Returns whether it landed. Callers that can wait, such as a desktop quit,
+     * should use this; the debounced autosave has not fired yet at that point
+     * and the process is about to take the edit with it.
+     */
+    suspend fun flushAndWait(): Boolean {
+        if (savingBlocked) return true
+        return store.save(
+            panels = panels.filter { it.persistAcrossSessions.value }.map { it.toSpec() },
+            graphStyle = graphStyle.value.name,
+            panelLayout = panelLayout.value.name,
+        )
+    }
+
+    /** Fire and forget, for shells that cannot wait on a background transition. */
     fun flushNow() {
-        viewModelScope.launch { persist() }
+        viewModelScope.launch { flushAndWait() }
     }
 
     override fun onCleared() {

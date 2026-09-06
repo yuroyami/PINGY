@@ -16,7 +16,8 @@ object PingyLifecycle {
         internal set
 
     /**
-     * Write pending preference edits now.
+     * Write pending preference edits and wait for the disk. Returns whether
+     * they landed, so a shell that is about to exit can decide what to do.
      *
      * Exposed here rather than making shells reach for the view model directly:
      * `PingyViewmodel` extends `androidx.lifecycle.ViewModel`, which is an
@@ -24,7 +25,10 @@ object PingyLifecycle {
      * compile classpath. A shell should not need that type just to say "I am
      * about to go away".
      */
-    fun flushPendingWrites() {
+    suspend fun flushPendingWrites(): Boolean = viewmodel?.flushAndWait() ?: true
+
+    /** Same, without waiting. For transitions that cannot block, like Android onStop. */
+    fun flushPendingWritesAsync() {
         viewmodel?.flushNow()
     }
 
