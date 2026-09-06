@@ -188,9 +188,16 @@ class GraphStatsTest {
         // A loss lands at its send moment, one timeout in the past. A window
         // narrower than that could never render one.
         assertTrue(visibleWindowMs(1_000, PanelLayout.COLUMN) >= PING_TIMEOUT_MS)
-        assertTrue(visibleWindowMs(5_000, PanelLayout.GRID) >= PING_TIMEOUT_MS)
-        // Above the floor, the grid still halves as intended.
-        assertEquals(10_000, visibleWindowMs(20_000, PanelLayout.GRID))
-        assertEquals(20_000, visibleWindowMs(20_000, PanelLayout.COLUMN))
+        assertTrue(visibleWindowMs(1_000, PanelLayout.GRID) >= PING_TIMEOUT_MS)
+    }
+
+    @Test
+    fun the_chosen_window_is_the_same_in_every_layout() {
+        // Switching layout must not change the period being compared, or the
+        // Window setting stops describing what is on screen.
+        PanelLayout.entries.forEach { layout ->
+            assertEquals(20_000, visibleWindowMs(20_000, layout), "layout $layout changed the window")
+            assertEquals(10_000, visibleWindowMs(10_000, layout), "layout $layout changed the window")
+        }
     }
 }

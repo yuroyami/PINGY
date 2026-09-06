@@ -499,15 +499,10 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                     } ?: 0L
                 }
 
-                // Grid cells are half as wide, so they show half the window:
-                // pixels per millisecond stay constant and the stored
-                // preference is untouched.
-                //
-                // A window narrower than the timeout can never contain a
-                // timed-out probe, because the loss lands at its send moment,
-                // 3s in the past and already off the left edge. Halving the 5s
-                // default would give 2.5s and hide every timeout, so
-                // visibleWindowMs floors the result at the timeout.
+                // The window the user chose, in every layout. A window
+                // narrower than the timeout can never contain a timed-out
+                // probe, because the loss lands at its send moment, 3s in the
+                // past and already off the left edge, so the value is floored.
                 val thresholdMs = visibleWindowMs(timeframeMsVal, layoutVal)
                 val canvasW = size.width
                 val canvasH = size.height

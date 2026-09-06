@@ -142,15 +142,17 @@ internal fun exponentialize(x: Float, f: Float, zoomFactor: Float): Double {
 /**
  * The window actually drawn, in milliseconds.
  *
- * Grid cells are half as wide, so they show half the window to keep pixels per
- * millisecond constant. That is fine right up until the result drops below
- * [PING_TIMEOUT_MS], at which point no probe can be watched all the way to its
- * deadline, and the graph quietly disagrees with the loss counter beside it.
+ * The same for every layout. The grid used to halve it to keep pixels per
+ * millisecond constant, which silently changed the period being compared when
+ * a person switched layout, and the Window slider went on showing the value
+ * they had chosen. The grid is adaptive anyway, so cell width already varies
+ * and pixels per millisecond were never actually constant.
+ *
+ * Floored at [PING_TIMEOUT_MS]: a loss lands at its send moment, one timeout in
+ * the past, so a narrower window could never contain one.
  */
-internal fun visibleWindowMs(timeframeMs: Long, layout: PanelLayout): Long {
-    val scaled = if (layout == PanelLayout.GRID) timeframeMs / 2 else timeframeMs
-    return scaled.coerceAtLeast(PING_TIMEOUT_MS.toLong())
-}
+internal fun visibleWindowMs(timeframeMs: Long, layout: PanelLayout): Long =
+    timeframeMs.coerceAtLeast(PING_TIMEOUT_MS.toLong())
 
 /** Calculates a ping height on the current panel based on its value. */
 internal fun calculatePingY(ping: Int, panelHeight: Float, pingMaxVal: Float, zoomFactor: Float): Float {
