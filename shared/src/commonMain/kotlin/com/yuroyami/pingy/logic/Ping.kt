@@ -112,17 +112,28 @@ data class Ping(
 /**
  * What the engine tells its listener. One [Sent] per probe, later exactly one
  * [Resolved] carrying the same [seq]; [Fault] stands alone because no probe
- * left the device.
+ * left the device. [Endpoint] is news about the target rather than a probe.
  */
 sealed interface PingEvent {
-    val ping: Ping
+
+    /** Everything that concerns one probe and belongs in the history. */
+    sealed interface Probe : PingEvent {
+        val ping: Ping
+    }
 
     /** A probe left. [ping] is [PingKind.PENDING], stamped with the send moment. */
-    data class Sent(val seq: Int, override val ping: Ping) : PingEvent
+    data class Sent(val seq: Int, override val ping: Ping) : Probe
 
     /** The probe announced under [seq] got its verdict: a reply or a timeout. */
-    data class Resolved(val seq: Int, override val ping: Ping) : PingEvent
+    data class Resolved(val seq: Int, override val ping: Ping) : Probe
 
     /** A local failure. Appended as its own entry, never tied to a probe. */
-    data class Fault(override val ping: Ping) : PingEvent
+    data class Fault(override val ping: Ping) : Probe
+
+    /**
+     * The address this engine is probing now, announced after every
+     * resolution. A hostname can move, and a measurement is only meaningful
+     * next to the endpoint that produced it.
+     */
+    data class Endpoint(val ipv4: String) : PingEvent
 }

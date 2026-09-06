@@ -118,6 +118,10 @@ class PingPanel(
     val faultCode: StateFlow<Int>
         field = MutableStateFlow(0)
 
+    /** The address currently being probed, once a lookup has produced one. */
+    val resolvedAddress: StateFlow<String?>
+        field = MutableStateFlow<String?>(null)
+
     /** True while an engine is live. Only [reconcile] writes it. */
     val running: StateFlow<Boolean>
         field = MutableStateFlow(false)
@@ -199,6 +203,7 @@ class PingPanel(
                             faultCode.value = 0
                         }
                         is PingEvent.Resolved -> Unit
+                        is PingEvent.Endpoint -> resolvedAddress.value = event.ipv4
                     }
                 } catch (e: Exception) {
                     loggye("PingPanel[$ip]: engine callback failed", e)

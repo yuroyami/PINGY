@@ -38,7 +38,7 @@ class PingEngineTest {
         host: String,
         count: Int,
         timeoutMs: Long,
-        wanted: (PingEvent) -> Boolean = { it !is PingEvent.Sent },
+        wanted: (PingEvent) -> Boolean = { it is PingEvent.Resolved || it is PingEvent.Fault },
     ): List<PingEvent> = withContext(Dispatchers.Default) {
         val channel = Channel<PingEvent>(Channel.UNLIMITED)
         val engine = PingEngine(host = host, packetSize = 32, intervalMs = 0L)
@@ -55,7 +55,10 @@ class PingEngineTest {
 
     /** Verdicts and faults only, the shape the older tests were written against. */
     private suspend fun collect(host: String, count: Int, timeoutMs: Long): List<Ping> =
-        collectEvents(host, count, timeoutMs).filter { it !is PingEvent.Sent }.map { it.ping }
+        collectEvents(host, count, timeoutMs)
+            .filterIsInstance<PingEvent.Probe>()
+            .filter { it !is PingEvent.Sent }
+            .map { it.ping }
 
     @Test
     fun every_probe_is_announced_at_send_time_before_its_verdict() = runTest(timeout = 90.seconds) {

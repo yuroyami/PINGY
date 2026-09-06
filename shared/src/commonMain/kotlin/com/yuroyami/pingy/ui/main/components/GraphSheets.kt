@@ -205,6 +205,7 @@ internal fun PingPanel.SettingsSheet(fontFamily: FontFamily) {
     val timeframeMsVal by timeframeMs.collectAsState()
     val canvasHeightFractionVal by canvasHeightFraction.collectAsState()
     val persistVal by persistAcrossSessions.collectAsState()
+    val resolvedVal by resolvedAddress.collectAsState()
 
     Column(
         modifier = Modifier
@@ -216,10 +217,13 @@ internal fun PingPanel.SettingsSheet(fontFamily: FontFamily) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = ip,
+                // Which address the measurements actually came from. A name can
+                // point somewhere new without anything else on screen changing.
+                text = resolvedVal?.takeIf { it != ip }?.let { "$ip ($it)" } ?: ip,
                 color = StatsSubColor,
                 fontSize = 10.sp,
                 fontFamily = fontFamily,
+                maxLines = 1,
                 modifier = Modifier.weight(1f),
             )
             Text(

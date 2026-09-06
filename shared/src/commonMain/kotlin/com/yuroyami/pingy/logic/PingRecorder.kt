@@ -21,6 +21,7 @@ internal class PingRecorder(private val pings: RingBuffer<Ping>) {
                 pings.replace(claim.slot, claim.pending, event.ping)
             }
             is PingEvent.Fault -> pings.add(event.ping)
+            is PingEvent.Endpoint -> Unit   // not a probe, nothing to record
         }
     }
 }

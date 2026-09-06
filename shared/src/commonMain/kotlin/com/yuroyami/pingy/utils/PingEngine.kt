@@ -109,6 +109,15 @@ private const val UNSUPPORTED_RETRY_MS = 30_000L
 private const val ADAPTIVE_WATCHDOG_MS = 250L
 
 /**
+ * Consecutive timeouts, with no reply between them, before we suspect the
+ * address rather than the target and look it up again.
+ */
+private const val REFRESH_AFTER_TIMEOUTS = 5
+
+/** Floor on how often that re-resolution may happen. */
+private const val REFRESH_MIN_GAP_MS = 30_000L
+
+/**
  * Longest single `poll` wait. Also the worst-case stop latency.
  *
  * The loop is the only owner of its descriptor. Closing it from another thread
@@ -199,6 +208,8 @@ class PingEngine(
             var nextPowerCheckAtMs = 0L   // 0 means "on the first turn"
 
             var openFailures = 0
+            var silentTimeouts = 0
+            var lastRefreshAtMs = -REFRESH_MIN_GAP_MS
 
             fun resolve(seq: Int, ping: Ping) = onEvent(PingEvent.Resolved(seq, ping))
             fun fault(kind: LocalFault, code: Int = 0) =
@@ -243,13 +254,17 @@ class PingEngine(
 
                 while (isActive) {
                     if (fd < 0) {
-                        val target = cachedTarget
-                            ?: runCatching { transport.resolve(host) }.getOrNull()?.also { cachedTarget = it }
+                        val cached = cachedTarget
+                        val target = cached ?: runCatching { transport.resolve(host) }.getOrNull()
                         // Platform resolution blocks and cannot be interrupted,
                         // so cancellation can only take effect here, on the way
                         // out. Without this a stopped engine still opened a
                         // socket and put one more probe on the wire.
                         if (!isActive) break
+                        if (target != null && cached == null) {
+                            cachedTarget = target
+                            onEvent(PingEvent.Endpoint(target))
+                        }
                         if (target == null) {
                             fault(LocalFault.RESOLVE_FAILED)
                             delay(RESOLVE_RETRY_MS)
@@ -361,6 +376,7 @@ class PingEngine(
                                         resolve(seq, Ping.timeout(markAt(sentAtMs)))
                                     } else {
                                         resolve(seq, Ping.reply(rttMs, markAt(sentAtMs)))
+                                        silentTimeouts = 0
                                     }
                                     // Adaptive mode pulls the next send forward only
                                     // once the pipeline is drained, otherwise every
@@ -384,7 +400,24 @@ class PingEngine(
                         if (now - sentAtMs >= PING_TIMEOUT_MS) {
                             iterator.remove()
                             resolve(seq, Ping.timeout(markAt(sentAtMs)))
+                            silentTimeouts++
                         } else break
+                    }
+
+                    // Sustained silence with no socket error looks the same
+                    // whether the target died or its address moved. Nothing
+                    // else here would ever ask DNS again, so a host that came
+                    // back at a new address stayed red until a manual restart.
+                    if (fd >= 0 &&
+                        silentTimeouts >= REFRESH_AFTER_TIMEOUTS &&
+                        now - lastRefreshAtMs >= REFRESH_MIN_GAP_MS
+                    ) {
+                        lastRefreshAtMs = now
+                        silentTimeouts = 0
+                        flushOutstanding(now)
+                        transport.close(fd)
+                        fd = -1
+                        cachedTarget = null
                     }
                 }
             } finally {
