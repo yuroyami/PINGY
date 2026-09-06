@@ -236,15 +236,19 @@ class PingEngine(
                     if (fd < 0) {
                         val target = cachedTarget
                             ?: runCatching { transport.resolve(host) }.getOrNull()?.also { cachedTarget = it }
+                        // Platform resolution blocks and cannot be interrupted,
+                        // so cancellation can only take effect here, on the way
+                        // out. Without this a stopped engine still opened a
+                        // socket and put one more probe on the wire.
+                        if (!isActive) break
                         if (target == null) {
-                            if (!isActive) break
                             fault(LocalFault.RESOLVE_FAILED)
                             delay(RESOLVE_RETRY_MS)
                             continue
                         }
                         fd = runCatching { transport.open(target) }.getOrDefault(-1)
+                        if (!isActive) break
                         if (fd < 0) {
-                            if (!isActive) break
                             fault(LocalFault.SOCKET_OPEN_FAILED)
                             cachedTarget = null
                             delay(SOCK_ERR_BACKOFF_MS)
@@ -262,6 +266,7 @@ class PingEngine(
                     }
 
                     if (now >= nextSendAtMs) {
+                        if (!isActive) break
                         if (outstanding.size < MAX_OUTSTANDING) {
                             val seq = nextSeq
                             nextSeq = (nextSeq + 1) and 0xFFFF
@@ -362,8 +367,13 @@ class PingEngine(
     }
 
     /**
-     * Stop probing. Idempotent. The loop closes its own socket and exits within
-     * [MAX_POLL_SLICE_MS]; use [stopAndJoin] when that must be observed.
+     * Stop probing. Idempotent.
+     *
+     * The loop notices cancellation and closes its own socket within
+     * [MAX_POLL_SLICE_MS] of the current platform call returning. Name
+     * resolution is the exception: it blocks uninterruptibly, so a stuck
+     * resolver delays the exit by however long it takes to answer. Nothing is
+     * opened or sent in the meantime. Use [stopAndJoin] to observe the exit.
      */
     fun stop() {
         if (state == State.STOPPED) return
