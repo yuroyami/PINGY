@@ -94,6 +94,7 @@ val FaStrings = Strings(
     helpGone = "قطعی، سهمی از زمان مشاهده‌شده است که کاوشگرهای گم‌شده آن را پوشانده‌اند.",
     helpPending = "میله خاکستری کاوشی است که هنوز منتظر پاسخ است. ارتفاع آن مدت انتظار است، نه اندازه‌گیری.",
 
+    inspectReply = "پاسخ",
     inspectTimeout = "مهلت تمام شد",
     inspectInFlight = "در راه",
     inspectInterrupted = "قطع شد",

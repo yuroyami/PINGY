@@ -66,6 +66,9 @@ class PingPanel(
     /** Deck content mode: stats (false) or settings (true). Toggled by the gear button. */
     val showSettings = MutableStateFlow(false)
 
+    /** Whether the deck shows the recent-sample list instead of the statistics. */
+    val showSamples = MutableStateFlow(false)
+
     /** Time window (ms) of pings to keep visible on the canvas. */
     val timeframeMs = MutableStateFlow(DEFAULT_TIMEFRAME_MS)
 

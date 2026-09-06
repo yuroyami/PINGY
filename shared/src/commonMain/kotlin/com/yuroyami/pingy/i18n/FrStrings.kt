@@ -94,6 +94,7 @@ val FrStrings = Strings(
     helpGone = "COUPÉ est la part du temps observé couverte par des sondes perdues.",
     helpPending = "Une barre grise est une sonde qui attend encore sa réponse. Sa hauteur est le temps d'attente, pas une mesure.",
 
+    inspectReply = "réponse",
     inspectTimeout = "délai dépassé",
     inspectInFlight = "en vol",
     inspectInterrupted = "interrompu",

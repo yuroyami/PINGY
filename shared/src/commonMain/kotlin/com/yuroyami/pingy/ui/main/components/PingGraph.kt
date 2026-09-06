@@ -10,6 +10,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -28,6 +29,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Close
@@ -144,8 +146,11 @@ private const val MAX_CANVAS_FONT_SCALE = 1.35f
 /** Redraw cadence when the platform asks for reduced motion. */
 private const val REDUCED_MOTION_TICK_MS = 250L
 
-/** Width of the floating control row: three 48dp touch targets. */
-private const val CONTROL_ROW_WIDTH_DP = 144
+/** Width of the floating control row: four 48dp touch targets. */
+private const val CONTROL_ROW_WIDTH_DP = 192
+
+/** What the deck below the graph is showing. */
+private enum class DeckMode { STATS, SAMPLES, SETTINGS }
 
 
 
@@ -199,6 +204,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
     val layoutVal by viewmodel.panelLayout.collectAsState()
     val expanded by expanded.collectAsState()
     val showSettings by showSettings.collectAsState()
+    val showSamples by showSamples.collectAsState()
 
     val roofVal by roof.collectAsState()
     val angleOfAttackVal by angleOfAttack.collectAsState()
@@ -380,9 +386,12 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(canvasHeight)
+                // Focusable, but not a live region: the summary changes several
+                // times a second, and announcing every change buried the rest of
+                // the screen. The fault banner and the notice line still speak.
+                .focusable()
                 .semantics(mergeDescendants = true) {
                     contentDescription = a11ySummary
-                    liveRegion = LiveRegionMode.Polite
                 }
         ) {
             Canvas(
@@ -1009,12 +1018,30 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                     )
                 }
                 IconButton(
+                    // Reaches the history without a drag gesture, which is the
+                    // only way a keyboard or screen reader can inspect a sample.
+                    modifier = Modifier.size(48.dp),
+                    onClick = {
+                        this@PingGraphView.expanded.value = true
+                        this@PingGraphView.showSettings.value = false
+                        this@PingGraphView.showSamples.update { !it }
+                    },
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.List,
+                        contentDescription = s.inspectSamples,
+                        tint = if (showSamples && expanded) Paletting.SGN else Color.White.copy(alpha = 0.72f),
+                        modifier = Modifier.size(17.dp)
+                    )
+                }
+                IconButton(
                     // 48dp meets the Android and iOS minimum touch target; the icon
                     // inside stays 17dp so the visual density is unchanged.
                     modifier = Modifier.size(48.dp),
                     onClick = {
+                        this@PingGraphView.expanded.value = true
+                        this@PingGraphView.showSamples.value = false
                         if (!expanded) {
-                            this@PingGraphView.expanded.value = true
                             this@PingGraphView.showSettings.value = true
                         } else {
                             this@PingGraphView.showSettings.update { !it }
@@ -1069,11 +1096,16 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                         .height(1.dp)
                         .background(Color.White.copy(alpha = 0.20f))
                 )
-                AnimatedContent(targetState = showSettings) { isSettings ->
-                    if (isSettings) {
-                        SettingsSheet(fontFamily = interFont)
-                    } else {
-                        StatsSheet(stats = windowStats, fontFamily = interFont)
+                val deckMode = when {
+                    showSettings -> DeckMode.SETTINGS
+                    showSamples -> DeckMode.SAMPLES
+                    else -> DeckMode.STATS
+                }
+                AnimatedContent(targetState = deckMode) { mode ->
+                    when (mode) {
+                        DeckMode.SETTINGS -> SettingsSheet(fontFamily = interFont)
+                        DeckMode.SAMPLES -> RecentSamples(pings = pings, fontFamily = interFont)
+                        DeckMode.STATS -> StatsSheet(stats = windowStats, fontFamily = interFont)
                     }
                 }
             }

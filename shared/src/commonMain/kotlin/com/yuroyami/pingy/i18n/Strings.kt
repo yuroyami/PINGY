@@ -121,6 +121,7 @@ data class Strings(
     val helpPending: String,
 
     // Typed probe outcomes, in the inspection chip and spoken aloud
+    val inspectReply: String,
     val inspectTimeout: String,
     val inspectInFlight: String,
     val inspectInterrupted: String,

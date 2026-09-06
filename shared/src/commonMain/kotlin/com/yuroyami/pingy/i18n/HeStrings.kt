@@ -94,6 +94,7 @@ val HeStrings = Strings(
     helpGone = "ניתוק הוא חלק הזמן הנצפה שכוסה על ידי בדיקות שאבדו.",
     helpPending = "פס אפור הוא בדיקה שעדיין ממתינה לתשובה. הגובה שלו הוא זמן ההמתנה, לא מדידה.",
 
+    inspectReply = "תשובה",
     inspectTimeout = "פג הזמן",
     inspectInFlight = "בדרך",
     inspectInterrupted = "הופסק",

@@ -94,6 +94,7 @@ val EnStrings = Strings(
     helpGone = "GONE is the share of the observed time that was covered by lost probes.",
     helpPending = "A grey bar is a probe still waiting for its reply. Its height is how long it has waited, not a measurement.",
 
+    inspectReply = "reply",
     inspectTimeout = "timeout",
     inspectInFlight = "in flight",
     inspectInterrupted = "interrupted",

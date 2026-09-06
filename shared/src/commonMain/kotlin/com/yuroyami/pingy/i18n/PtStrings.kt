@@ -94,6 +94,7 @@ val PtStrings = Strings(
     helpGone = "QUEDA é a parcela do tempo observado coberta por sondas perdidas.",
     helpPending = "Uma barra cinza é uma sonda que ainda espera resposta. A altura é o tempo de espera, não uma medição.",
 
+    inspectReply = "resposta",
     inspectTimeout = "tempo esgotado",
     inspectInFlight = "a caminho",
     inspectInterrupted = "interrompido",

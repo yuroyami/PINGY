@@ -94,6 +94,7 @@ val DeStrings = Strings(
     helpGone = "AUSFALL ist der Anteil der beobachteten Zeit, der von verlorenen Sonden abgedeckt wurde.",
     helpPending = "Ein grauer Balken ist eine Messung, die noch auf Antwort wartet. Seine Höhe zeigt die Wartezeit, keinen Messwert.",
 
+    inspectReply = "Antwort",
     inspectTimeout = "Zeitüberschreitung",
     inspectInFlight = "unterwegs",
     inspectInterrupted = "unterbrochen",

@@ -94,6 +94,7 @@ val RuStrings = Strings(
     helpGone = "ПРОСТОЙ — доля наблюдаемого времени, покрытая потерянными зондами.",
     helpPending = "Серый столбик это пакет, который ещё ждёт ответа. Его высота показывает время ожидания, а не измерение.",
 
+    inspectReply = "ответ",
     inspectTimeout = "тайм-аут",
     inspectInFlight = "в пути",
     inspectInterrupted = "прервано",

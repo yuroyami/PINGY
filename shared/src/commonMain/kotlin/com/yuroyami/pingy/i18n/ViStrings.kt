@@ -94,6 +94,7 @@ val ViStrings = Strings(
     helpGone = "GIÁN ĐOẠN là phần thời gian quan sát được bị các gói mất chiếm chỗ.",
     helpPending = "Thanh xám là gói tin vẫn đang chờ trả lời. Chiều cao là thời gian chờ, không phải kết quả đo.",
 
+    inspectReply = "phản hồi",
     inspectTimeout = "hết thời gian",
     inspectInFlight = "đang gửi",
     inspectInterrupted = "bị gián đoạn",

@@ -94,6 +94,7 @@ val KoStrings = Strings(
     helpGone = "중단은 관측된 시간 중 손실 프로브가 차지한 비율입니다.",
     helpPending = "회색 막대는 아직 응답을 기다리는 탐침입니다. 높이는 기다린 시간이며 측정값이 아닙니다.",
 
+    inspectReply = "응답",
     inspectTimeout = "시간 초과",
     inspectInFlight = "전송 중",
     inspectInterrupted = "중단됨",

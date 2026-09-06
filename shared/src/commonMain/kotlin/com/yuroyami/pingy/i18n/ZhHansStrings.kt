@@ -94,6 +94,7 @@ val ZhHansStrings = Strings(
     helpGone = "中断是观测时间中被丢失探测包覆盖的比例。",
     helpPending = "灰色柱表示仍在等待回复的探测。高度是等待时长，不是测量值。",
 
+    inspectReply = "回复",
     inspectTimeout = "超时",
     inspectInFlight = "发送中",
     inspectInterrupted = "已中断",

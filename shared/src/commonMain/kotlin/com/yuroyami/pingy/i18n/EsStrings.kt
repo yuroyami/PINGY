@@ -94,6 +94,7 @@ val EsStrings = Strings(
     helpGone = "CAÍDA es la parte del tiempo observado cubierta por sondas perdidas.",
     helpPending = "Una barra gris es un sondeo que todavía espera respuesta. Su altura es el tiempo de espera, no una medición.",
 
+    inspectReply = "respuesta",
     inspectTimeout = "tiempo agotado",
     inspectInFlight = "en camino",
     inspectInterrupted = "interrumpido",

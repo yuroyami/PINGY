@@ -94,6 +94,7 @@ val ItStrings = Strings(
     helpGone = "ASSENZA è la quota di tempo osservato coperta da sonde perse.",
     helpPending = "Una barra grigia è una sonda che aspetta ancora risposta. La sua altezza è l'attesa, non una misura.",
 
+    inspectReply = "risposta",
     inspectTimeout = "tempo scaduto",
     inspectInFlight = "in volo",
     inspectInterrupted = "interrotto",

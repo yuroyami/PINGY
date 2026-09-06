@@ -94,6 +94,7 @@ val PlStrings = Strings(
     helpGone = "PRZERWA to część obserwowanego czasu pokryta utraconymi sondami.",
     helpPending = "Szary słupek to pakiet, który wciąż czeka na odpowiedź. Jego wysokość to czas oczekiwania, nie pomiar.",
 
+    inspectReply = "odpowiedź",
     inspectTimeout = "przekroczono czas",
     inspectInFlight = "w drodze",
     inspectInterrupted = "przerwano",

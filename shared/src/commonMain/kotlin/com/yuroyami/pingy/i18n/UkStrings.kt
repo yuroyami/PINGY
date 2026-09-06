@@ -94,6 +94,7 @@ val UkStrings = Strings(
     helpGone = "ПРОСТІЙ — частка спостереженого часу, покрита втраченими зондами.",
     helpPending = "Сірий стовпчик це пакет, який ще чекає відповіді. Його висота показує час очікування, а не вимір.",
 
+    inspectReply = "відповідь",
     inspectTimeout = "тайм-аут",
     inspectInFlight = "у дорозі",
     inspectInterrupted = "перервано",

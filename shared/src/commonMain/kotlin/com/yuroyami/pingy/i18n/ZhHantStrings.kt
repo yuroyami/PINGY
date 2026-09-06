@@ -94,6 +94,7 @@ val ZhHantStrings = Strings(
     helpGone = "中斷是觀測時間中被遺失探測封包覆蓋的比例。",
     helpPending = "灰色長條代表仍在等待回覆的探測。高度是等待時間，不是測量值。",
 
+    inspectReply = "回覆",
     inspectTimeout = "逾時",
     inspectInFlight = "傳送中",
     inspectInterrupted = "已中斷",

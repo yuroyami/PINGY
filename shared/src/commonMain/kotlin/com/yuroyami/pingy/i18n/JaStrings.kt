@@ -94,6 +94,7 @@ val JaStrings = Strings(
     helpGone = "断絶は、観測した時間のうち損失プローブが占めた割合です。",
     helpPending = "灰色のバーは応答待ちの送信です。高さは待ち時間であり、測定値ではありません。",
 
+    inspectReply = "応答",
     inspectTimeout = "タイムアウト",
     inspectInFlight = "送信中",
     inspectInterrupted = "中断",

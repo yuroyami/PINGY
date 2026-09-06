@@ -55,6 +55,7 @@ class LocalesTest {
         "sourceCode" to s.sourceCode,
         "legalTitle" to s.legalTitle,
         "helpPending" to s.helpPending,
+        "inspectReply" to s.inspectReply,
         "inspectTimeout" to s.inspectTimeout,
         "inspectInFlight" to s.inspectInFlight,
         "inspectInterrupted" to s.inspectInterrupted,

@@ -94,6 +94,7 @@ val TrStrings = Strings(
     helpGone = "KESİNTİ, gözlenen sürenin kayıp sondalarla kaplanan oranıdır.",
     helpPending = "Gri çubuk hâlâ yanıt bekleyen bir sondadır. Yüksekliği bekleme süresidir, ölçüm değil.",
 
+    inspectReply = "yanıt",
     inspectTimeout = "zaman aşımı",
     inspectInFlight = "yolda",
     inspectInterrupted = "kesildi",

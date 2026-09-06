@@ -94,6 +94,7 @@ val NlStrings = Strings(
     helpGone = "UITVAL is het deel van de waargenomen tijd dat door verloren probes werd gedekt.",
     helpPending = "Een grijze balk is een meting die nog op antwoord wacht. De hoogte is de wachttijd, geen meetwaarde.",
 
+    inspectReply = "antwoord",
     inspectTimeout = "time-out",
     inspectInFlight = "onderweg",
     inspectInterrupted = "onderbroken",

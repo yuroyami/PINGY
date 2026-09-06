@@ -94,6 +94,7 @@ val ArStrings = Strings(
     helpGone = "الانقطاع هو نسبة الزمن المرصود الذي غطته فحوص مفقودة.",
     helpPending = "الشريط الرمادي هو محاولة ما زالت تنتظر ردًا. ارتفاعه يمثل مدة الانتظار وليس قياسًا.",
 
+    inspectReply = "رد",
     inspectTimeout = "انتهت المهلة",
     inspectInFlight = "قيد الإرسال",
     inspectInterrupted = "انقطعت",

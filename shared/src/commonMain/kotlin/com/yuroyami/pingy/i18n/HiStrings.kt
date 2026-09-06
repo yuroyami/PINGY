@@ -94,6 +94,7 @@ val HiStrings = Strings(
     helpGone = "बंद देखे गए समय का वह हिस्सा है जो खोए प्रोब से ढका था।",
     helpPending = "स्लेटी पट्टी वह जाँच है जो अब भी जवाब का इंतज़ार कर रही है। उसकी ऊँचाई इंतज़ार का समय है, माप नहीं।",
 
+    inspectReply = "उत्तर",
     inspectTimeout = "समय समाप्त",
     inspectInFlight = "रास्ते में",
     inspectInterrupted = "बाधित",

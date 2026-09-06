@@ -94,6 +94,7 @@ val IdStrings = Strings(
     helpGone = "PUTUS adalah bagian waktu teramati yang tertutup oleh probe yang hilang.",
     helpPending = "Batang abu-abu adalah uji yang masih menunggu balasan. Tingginya adalah lama menunggu, bukan hasil ukur.",
 
+    inspectReply = "balasan",
     inspectTimeout = "waktu habis",
     inspectInFlight = "dalam perjalanan",
     inspectInterrupted = "terputus",
