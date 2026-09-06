@@ -2,6 +2,7 @@ package com.yuroyami.pingy.ui.main.components
 
 import com.yuroyami.pingy.i18n.Strings
 import com.yuroyami.pingy.logic.Ping
+import com.yuroyami.pingy.logic.PingKind
 import com.yuroyami.pingy.logic.RingBuffer
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -24,26 +25,34 @@ import kotlin.time.TimeSource
  */
 internal fun buildGraphSummary(
     ip: String,
-    latest: Int?,
-    lost: Boolean,
+    latestKind: PingKind?,
+    latestRtt: Int?,
     stats: WindowStats,
     windowMs: Long,
     s: Strings,
 ): String = buildString {
     append(ip).append(". ")
-    when {
-        lost -> append(s.a11yLatestTimedOut).append(' ')
-        latest != null -> append(s.a11yLatestRtt(latest)).append(' ')
-        else -> append(s.a11yNoReading).append(' ')
+    // Name the outcome we actually have. Saying "timed out" for a DNS failure
+    // blames the target for something that never left this device.
+    when (latestKind) {
+        PingKind.TIMEOUT -> append(s.a11yLatestTimedOut)
+        PingKind.LOCAL_FAULT -> append(s.a11yLatestFault)
+        PingKind.INTERRUPTED -> append(s.a11yLatestInterrupted)
+        PingKind.REPLY -> append(latestRtt?.let { s.a11yLatestRtt(it) } ?: s.a11yNoReading)
+        else -> append(s.a11yNoReading)
     }
+    append(' ')
     append(s.a11yOverLastSeconds(windowMs / 1000)).append(' ')
-    if (stats.count == 0) {
-        append(s.a11yNoProbesSent)
-    } else {
-        append(s.a11ySentLost(stats.count, stats.lost))
-        stats.avg?.let { append(s.a11yAverage(it.roundToInt())) }
-        stats.min?.let { append(s.a11yBest(it.roundToInt())) }
-        stats.max?.let { append(s.a11yWorst(it.roundToInt())) }
+    when {
+        // "No probes sent" while probes are in the air is simply untrue.
+        stats.count == 0 && stats.pending == 0 -> append(s.a11yNoProbesSent)
+        stats.count == 0 -> append(s.a11yPendingProbes(stats.pending))
+        else -> {
+            append(s.a11ySentLost(stats.count, stats.lost))
+            stats.avg?.let { append(s.a11yAverage(it.roundToInt())) }
+            stats.min?.let { append(s.a11yBest(it.roundToInt())) }
+            stats.max?.let { append(s.a11yWorst(it.roundToInt())) }
+        }
     }
     if (stats.localFaults > 0) {
         append(". ").append(s.a11yExcludedFaults(stats.localFaults))

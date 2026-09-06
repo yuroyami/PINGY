@@ -245,7 +245,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
     // probes still in the air are skipped, so a late loss cannot flip the
     // number a fresher reply already earned.
     var readoutValue by remember { mutableStateOf<Int?>(null) }
-    var readoutLost by remember { mutableStateOf(false) }
+    var readoutKind by remember { mutableStateOf<PingKind?>(null) }
     LaunchedEffect(this@PingGraphView, isRunning) {
         if (!isRunning) return@LaunchedEffect
         while (true) {
@@ -254,9 +254,10 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 if (p.isPending) true else { latest = p; false }
             }
             latest?.let { last ->
-                val v = last.value
-                readoutLost = v == null || v < 0
-                if (v != null && v >= 0) readoutValue = v
+                // Keep the outcome type, not just "is there a number". A null
+                // RTT covers a timeout, a DNS failure and a lost socket alike.
+                readoutKind = last.kind
+                if (last.kind == PingKind.REPLY) last.value?.let { readoutValue = it }
             }
             delay(150)
         }
@@ -281,12 +282,23 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
 
     // The readout's hue glides between samples; the text itself stays discrete.
     val readoutColor by animateColorAsState(
-        targetValue = when {
-            readoutLost -> FizzleColor
-            else -> readoutValue?.let(::calcPingColor) ?: StatsDimColor
+        targetValue = when (readoutKind) {
+            PingKind.REPLY -> readoutValue?.let(::calcPingColor) ?: StatsDimColor
+            PingKind.TIMEOUT, PingKind.LOCAL_FAULT -> FizzleColor
+            else -> StatsDimColor
         },
         animationSpec = tween(durationMillis = 300),
     )
+
+    // What the plate says. A local fault gets its own mark: nothing was
+    // measured, so a red cross meaning "the target did not answer" would lie.
+    val readoutText = when (readoutKind) {
+        PingKind.REPLY -> readoutValue?.let { "$it ms" }
+        PingKind.TIMEOUT -> "×"
+        PingKind.LOCAL_FAULT -> "!"
+        PingKind.INTERRUPTED, PingKind.UNOBSERVED -> "?"
+        PingKind.PENDING, null -> null
+    }
 
     val inter = Font(Res.font.Inter_Regular)
     val interFont = remember(inter) { FontFamily(inter) }
@@ -319,8 +331,8 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
         // region so a reader hears it update instead of having to re-navigate.
         val a11ySummary = buildGraphSummary(
             ip = ip,
-            latest = readoutValue,
-            lost = readoutLost,
+            latestKind = readoutKind,
+            latestRtt = readoutValue,
             stats = windowStats,
             windowMs = visibleWindowMs(timeframeMsVal, layoutVal),
             s = s,
@@ -831,9 +843,9 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 // it never strobes; its color tweens between samples instead
                 // of snapping. A host that has only ever timed out still earns
                 // its red ×.
-                if (readoutLost || readoutValue != null) {
+                if (readoutText != null) {
                     val neonColor = readoutColor
-                    val neonText = if (readoutLost) "×" else "$readoutValue ms"
+                    val neonText = readoutText
                     val neon = textMeasurer.measure(
                         buildAnnotatedString {
                             withStyle(

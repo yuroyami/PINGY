@@ -1,12 +1,15 @@
 package com.yuroyami.pingy.ui.main.components
 
 import com.yuroyami.pingy.PanelLayout
+import com.yuroyami.pingy.i18n.EnStrings
 import com.yuroyami.pingy.logic.Ping
+import com.yuroyami.pingy.logic.PingKind
 import com.yuroyami.pingy.logic.LocalFault
 import com.yuroyami.pingy.logic.RingBuffer
 import com.yuroyami.pingy.utils.PING_TIMEOUT_MS
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -208,6 +211,35 @@ class GraphStatsTest {
         )
         val gone = assertNotNull(computeWindowStats(ring, 5_000).gonePct)
         assertEquals(300f / 700f * 100f, gone, 1.5f)
+    }
+
+    @Test
+    fun a_local_fault_is_never_announced_as_a_timeout() {
+        val text = buildGraphSummary("h", PingKind.LOCAL_FAULT, null, WindowStats.EMPTY, 5_000, EnStrings)
+        assertFalse(text.contains(EnStrings.a11yLatestTimedOut), "a DNS failure was called a timeout")
+        assertTrue(text.contains(EnStrings.a11yLatestFault))
+    }
+
+    @Test
+    fun probes_in_the_air_are_not_announced_as_no_probes_sent() {
+        val stats = WindowStats.EMPTY.copy(pending = 2)
+        val text = buildGraphSummary("h", null, null, stats, 5_000, EnStrings)
+        assertFalse(text.contains(EnStrings.a11yNoProbesSent), "claimed nothing was sent with 2 in flight")
+        assertTrue(text.contains(EnStrings.a11yPendingProbes(2)))
+    }
+
+    @Test
+    fun a_truly_idle_panel_still_says_no_probes_sent() {
+        val text = buildGraphSummary("h", null, null, WindowStats.EMPTY, 5_000, EnStrings)
+        assertTrue(text.contains(EnStrings.a11yNoProbesSent))
+    }
+
+    @Test
+    fun interrupted_probes_are_mentioned_separately_from_loss() {
+        val stats = WindowStats.EMPTY.copy(count = 4, lost = 1, interrupted = 2)
+        val text = buildGraphSummary("h", PingKind.REPLY, 12, stats, 5_000, EnStrings)
+        assertTrue(text.contains(EnStrings.a11ySentLost(4, 1)))
+        assertTrue(text.contains(EnStrings.a11yInterrupted(2)))
     }
 
     @Test
