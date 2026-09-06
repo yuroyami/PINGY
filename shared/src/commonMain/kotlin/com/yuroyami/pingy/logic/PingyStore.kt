@@ -118,8 +118,21 @@ internal fun decodeStore(prefs: Preferences): StoreLoad {
     )
 }
 
+/**
+ * Reading and writing the saved cockpit.
+ *
+ * An interface so the view model can be tested against a store that fails,
+ * stalls or corrupts on demand, which is where the interesting bugs are.
+ */
+interface StoreApi {
+    suspend fun load(): StoreLoad
+
+    /** Returns true when the write actually landed. */
+    suspend fun save(panels: List<PanelSpec>, graphStyle: String, panelLayout: String): Boolean
+}
+
 /** Preferences DataStore wrapper. One instance per process. */
-object PingyStore {
+object PingyStore : StoreApi {
 
     private val store: DataStore<Preferences> by lazy {
         PreferenceDataStoreFactory.createWithPath {
@@ -129,7 +142,7 @@ object PingyStore {
 
     // Cancellation is rethrown rather than reported as a read or write fault.
     // Catching it turned "the caller went away" into "your file is corrupt".
-    suspend fun load(): StoreLoad = try {
+    override suspend fun load(): StoreLoad = try {
         decodeStore(store.data.first())
     } catch (e: CancellationException) {
         throw e
@@ -138,8 +151,11 @@ object PingyStore {
         StoreLoad.Failed(e.message ?: e::class.simpleName ?: "unknown read failure")
     }
 
-    /** Returns true when the write actually landed. */
-    suspend fun save(panels: List<PanelSpec>, graphStyle: String, panelLayout: String): Boolean = try {
+    override suspend fun save(
+        panels: List<PanelSpec>,
+        graphStyle: String,
+        panelLayout: String,
+    ): Boolean = try {
         store.edit { prefs ->
             prefs[KEY_INITIALIZED] = true
             prefs[KEY_PANELS] = json.encodeToString(panels.take(MAX_PANELS))

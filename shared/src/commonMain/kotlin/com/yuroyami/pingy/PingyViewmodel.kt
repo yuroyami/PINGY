@@ -9,7 +9,10 @@ import com.yuroyami.pingy.logic.MAX_PANELS
 import com.yuroyami.pingy.logic.PanelSpec
 import com.yuroyami.pingy.logic.PingPanel
 import com.yuroyami.pingy.logic.PingyStore
+import com.yuroyami.pingy.logic.StoreApi
 import com.yuroyami.pingy.logic.StoreLoad
+import com.yuroyami.pingy.utils.EngineFactory
+import com.yuroyami.pingy.utils.PingEngine
 import com.yuroyami.pingy.logic.canonicalTargetKey
 import com.yuroyami.pingy.ui.Screen
 import kotlinx.coroutines.FlowPreview
@@ -17,6 +20,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
@@ -59,6 +63,12 @@ data class Notice(
     val action: (() -> Unit)? = null,
 )
 
+/** How many times a failed save is retried before the user is told. */
+private const val MAX_SAVE_ATTEMPTS = 3
+
+/** Grows with each attempt, so a full disk is not hammered. */
+private const val SAVE_RETRY_STEP_MS = 500L
+
 /**
  * Everything Undo needs to put a removed panel back the way it was.
  *
@@ -90,7 +100,12 @@ sealed interface CockpitState {
 }
 
 @OptIn(FlowPreview::class)
-class PingyViewmodel : ViewModel() {
+class PingyViewmodel(
+    private val store: StoreApi = PingyStore,
+    private val engineFactory: EngineFactory = { host, packetSize, intervalMs ->
+        PingEngine(host, packetSize, intervalMs)
+    },
+) : ViewModel() {
 
     val backstack = mutableStateListOf<Screen>(Screen.Main)
 
@@ -145,7 +160,7 @@ class PingyViewmodel : ViewModel() {
     init {
         PingyLifecycle.viewmodel = this
         viewModelScope.launch {
-            when (val loaded = PingyStore.load()) {
+            when (val loaded = store.load()) {
                 is StoreLoad.NotInitialized -> {
                     // First launch is network-inert: no panel, no socket, no
                     // packet. Seeding a default target here would mean opening
@@ -200,7 +215,7 @@ class PingyViewmodel : ViewModel() {
         val key = canonicalTargetKey(ip)
         if (panels.any { canonicalTargetKey(it.ip) == key }) return AddResult.Duplicate
 
-        val panel = PingPanel(ip = ip)
+        val panel = PingPanel(ip = ip, engineFactory = engineFactory)
         spec?.let(panel::applySpec)
         panel.startPinging()
         panels.add(at.coerceIn(0, panels.size), panel)
@@ -273,13 +288,33 @@ class PingyViewmodel : ViewModel() {
         saveSignal.tryEmit(Unit)
     }
 
+    /** How many times the current revision has failed to reach the disk. */
+    private var saveAttempt = 0
+
     private suspend fun persist() {
         if (savingBlocked) return
-        PingyStore.save(
+        val ok = store.save(
             panels = panels.filter { it.persistAcrossSessions.value }.map { it.toSpec() },
             graphStyle = graphStyle.value.name,
             panelLayout = panelLayout.value.name,
         )
+        if (ok) {
+            saveAttempt = 0
+            return
+        }
+        // A failed write used to end here, silently, and nothing tried again
+        // until the user happened to edit something else. Retry the newest
+        // state a few times, then say so and offer the retry by hand.
+        saveAttempt++
+        if (saveAttempt <= MAX_SAVE_ATTEMPTS) {
+            delay(SAVE_RETRY_STEP_MS * saveAttempt)
+            markDirty()
+        } else {
+            notify(strings.saveFailed, actionLabel = strings.retry) {
+                saveAttempt = 0
+                markDirty()
+            }
+        }
     }
 
     /**
