@@ -114,6 +114,10 @@ class PingPanel(
     /** Most recent local failure, or null while probing is healthy. */
     val fault = MutableStateFlow<LocalFault?>(null)
 
+    /** Platform errno behind [fault], or 0 when the platform gave none. */
+    val faultCode: StateFlow<Int>
+        field = MutableStateFlow(0)
+
     /** True while an engine is live. Only [reconcile] writes it. */
     val running: StateFlow<Boolean>
         field = MutableStateFlow(false)
@@ -185,8 +189,15 @@ class PingPanel(
                 try {
                     recorder.accept(event)
                     when (event) {
-                        is PingEvent.Fault -> fault.value = event.ping.fault
-                        is PingEvent.Sent -> fault.value = null   // a probe left, so the socket works
+                        is PingEvent.Fault -> {
+                            fault.value = event.ping.fault
+                            faultCode.value = event.ping.faultCode
+                        }
+                        // A probe left, so the socket works.
+                        is PingEvent.Sent -> {
+                            fault.value = null
+                            faultCode.value = 0
+                        }
                         is PingEvent.Resolved -> Unit
                     }
                 } catch (e: Exception) {

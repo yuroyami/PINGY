@@ -64,6 +64,28 @@ class EngineFaultTest {
     }
 
     @Test
+    fun repeated_open_failures_back_off_and_carry_their_errno() = runTest(timeout = 30.seconds) {
+        withContext(Dispatchers.Default) {
+            val transport = ScriptedTransport(openResult = -13)   // EACCES
+            val faults = Channel<PingEvent.Fault>(Channel.UNLIMITED)
+            val engine = PingEngine("example.invalid", 32, 0L, transport)
+            engine.start { if (it is PingEvent.Fault) faults.trySend(it) }
+            try {
+                val first = withTimeoutOrNull(2_000) { faults.receive() }
+                assertNotNull(first, "no fault was reported at all")
+                assertEquals(13, first.ping.faultCode, "the errno has to ride along with the fault")
+
+                // 200 then 400 then 800 ms. A flat 200 ms retry would fit far more.
+                val seen = mutableListOf<PingEvent.Fault>()
+                withTimeoutOrNull(1_500) { while (true) seen += faults.receive() }
+                assertTrue(seen.size <= 3, "backoff is not widening: ${seen.size} faults in 1.5 s")
+            } finally {
+                engine.stopAndJoin()
+            }
+        }
+    }
+
+    @Test
     fun a_healthy_reply_still_comes_back_as_a_reply() = runTest(timeout = 30.seconds) {
         val transport = ScriptedTransport()
         transport.replyTo = { _, sendUsec -> sendUsec + 2_500 }

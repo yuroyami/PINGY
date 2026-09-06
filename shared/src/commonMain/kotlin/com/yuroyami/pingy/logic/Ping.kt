@@ -70,6 +70,8 @@ data class Ping(
     val kind: PingKind,
     val timestamp: TimeSource.Monotonic.ValueTimeMark,
     val fault: LocalFault? = null,
+    /** Platform errno behind a local fault, or 0 when there is none to give. */
+    val faultCode: Int = 0,
 ) {
     /** Rounded RTT for drawing and readouts. Null unless this is a reply. */
     val value: Int? get() = rttMs?.roundToInt()
@@ -102,8 +104,8 @@ data class Ping(
         fun interrupted(sentAt: TimeSource.Monotonic.ValueTimeMark) =
             Ping(null, PingKind.INTERRUPTED, sentAt)
 
-        fun localFault(fault: LocalFault, at: TimeSource.Monotonic.ValueTimeMark) =
-            Ping(null, PingKind.LOCAL_FAULT, at, fault)
+        fun localFault(fault: LocalFault, at: TimeSource.Monotonic.ValueTimeMark, code: Int = 0) =
+            Ping(null, PingKind.LOCAL_FAULT, at, fault, code)
     }
 }
 

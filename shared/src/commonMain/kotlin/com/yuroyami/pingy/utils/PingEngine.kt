@@ -51,8 +51,8 @@ fun sanitizePayloadSize(raw: Int): Int = raw.coerceIn(16, 480)
 
 /**
  * Open an unprivileged ICMP socket connected to [ipv4]. Returns the platform
- * descriptor, or -1 on failure. Hostnames are refused; callers resolve once via
- * [resolveHostToIpv4].
+ * descriptor, or a negative errno on failure. Hostnames are refused; callers
+ * resolve once via [resolveHostToIpv4].
  */
 expect fun openIcmpSocket(ipv4: String): Int
 
@@ -93,8 +93,11 @@ private const val USEC_MASK: Long = (1L shl 47) - 1
 /** Resolve a host to an IPv4 literal, or null. IPv4 literals short-circuit. */
 expect fun resolveHostToIpv4(host: String): String?
 
-/** Backoff after a socket-level error, so a rejecting firewall cannot spin. */
+/** First backoff after a socket-level error, so a rejecting firewall cannot spin. */
 private const val SOCK_ERR_BACKOFF_MS = 200L
+
+/** Ceiling for the doubling backoff. A permanent refusal settles here. */
+private const val SOCK_ERR_BACKOFF_MAX_MS = 6_400L
 
 /** Retry cadence while a host refuses to resolve. Never cached as permanent. */
 private const val RESOLVE_RETRY_MS = 1_000L
@@ -195,9 +198,11 @@ class PingEngine(
             var powerFloorMs = MIN_PROBE_GAP_MS
             var nextPowerCheckAtMs = 0L   // 0 means "on the first turn"
 
+            var openFailures = 0
+
             fun resolve(seq: Int, ping: Ping) = onEvent(PingEvent.Resolved(seq, ping))
-            fun fault(kind: LocalFault) =
-                onEvent(PingEvent.Fault(Ping.localFault(kind, markAt(nowMs()))))
+            fun fault(kind: LocalFault, code: Int = 0) =
+                onEvent(PingEvent.Fault(Ping.localFault(kind, markAt(nowMs()), code)))
 
             /**
              * Settle every probe still in the air.
@@ -250,14 +255,23 @@ class PingEngine(
                             delay(RESOLVE_RETRY_MS)
                             continue
                         }
-                        fd = runCatching { transport.open(target) }.getOrDefault(-1)
+                        val opened = runCatching { transport.open(target) }.getOrDefault(-1)
                         if (!isActive) break
-                        if (fd < 0) {
-                            fault(LocalFault.SOCKET_OPEN_FAILED)
+                        if (opened < 0) {
+                            // Carry the errno so the UI can say "permission
+                            // denied" instead of a generic failure, and double
+                            // the wait so a device that always refuses is not
+                            // asked five times a second forever.
+                            fault(LocalFault.SOCKET_OPEN_FAILED, code = -opened)
                             cachedTarget = null
-                            delay(SOCK_ERR_BACKOFF_MS)
+                            val wait = (SOCK_ERR_BACKOFF_MS shl openFailures.coerceAtMost(5))
+                                .coerceAtMost(SOCK_ERR_BACKOFF_MAX_MS)
+                            openFailures++
+                            delay(wait)
                             continue
                         }
+                        openFailures = 0
+                        fd = opened
                         nextSendAtMs = nowMs()
                     }
 

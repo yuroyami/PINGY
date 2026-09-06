@@ -326,9 +326,10 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
             s = s,
         )
         val faultVal by fault.collectAsState()
+        val faultCodeVal by faultCode.collectAsState()
         faultVal?.let { f ->
             Text(
-                text = f.message(s),
+                text = if (faultCodeVal > 0) "${f.message(s)} (errno $faultCodeVal)" else f.message(s),
                 color = Color(0xFFFF8A80),
                 fontSize = 11.sp,
                 fontFamily = interFont,

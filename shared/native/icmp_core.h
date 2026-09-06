@@ -220,12 +220,16 @@ static inline int pingy_parse_reply(
  *
  * connect() pins the 4-tuple, which skips the per-packet route lookup and, on
  * Darwin, also filters out replies from other peers.
+ *
+ * Returns the descriptor, or a NEGATIVE ERRNO. A caller that only sees -1
+ * cannot tell "this device forbids ping sockets" from "there is no route",
+ * which are very different things to show a person.
  */
 static inline int pingy_open_socket(const char *ipv4) {
-    if (ipv4 == NULL) return -1;
+    if (ipv4 == NULL) return -EINVAL;
 
     int fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_ICMP);
-    if (fd < 0) return -1;
+    if (fd < 0) return errno > 0 ? -errno : -1;
 
     /* Close-on-exec: a forked child must not inherit a live probe socket. */
     int flags = fcntl(fd, F_GETFD, 0);
@@ -234,8 +238,12 @@ static inline int pingy_open_socket(const char *ipv4) {
     struct sockaddr_in dest;
     memset(&dest, 0, sizeof(dest));
     dest.sin_family = AF_INET;
-    if (inet_pton(AF_INET, ipv4, &dest.sin_addr) != 1) { close(fd); return -1; }
-    if (connect(fd, (struct sockaddr *)&dest, sizeof(dest)) < 0) { close(fd); return -1; }
+    if (inet_pton(AF_INET, ipv4, &dest.sin_addr) != 1) { close(fd); return -EINVAL; }
+    if (connect(fd, (struct sockaddr *)&dest, sizeof(dest)) < 0) {
+        const int err = errno;
+        close(fd);
+        return err > 0 ? -err : -1;
+    }
     return fd;
 }
 
