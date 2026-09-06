@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -318,6 +319,7 @@ internal fun PingPanel.SettingsSheet(fontFamily: FontFamily) {
                     }
                     .padding(vertical = 14.dp, horizontal = 4.dp),
             )
+            Spacer(Modifier.weight(1f))
             // Stopping a target used to mean deleting it, which throws away the
             // very history someone pauses in order to read.
             Text(

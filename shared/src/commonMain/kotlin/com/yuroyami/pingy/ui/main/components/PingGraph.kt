@@ -264,7 +264,10 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
     // Declared before the samplers below, which freeze along with it.
     var scrub by remember { mutableStateOf<ScrubFreeze?>(null) }
 
-    var readoutValue by remember { mutableStateOf<Int?>(null) }
+    // Kept as the measured double, not a rounded integer: rounding here made
+    // every sub-millisecond LAN reading show as "0 ms" on the most prominent
+    // number in the panel, while the strip beside it said 0.19ms.
+    var readoutRtt by remember { mutableStateOf<Double?>(null) }
     var readoutKind by remember { mutableStateOf<PingKind?>(null) }
     LaunchedEffect(this@PingGraphView, isRunning) {
         if (!isRunning) return@LaunchedEffect
@@ -281,7 +284,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                     // null RTT covers a timeout, a DNS failure and a lost
                     // socket alike.
                     readoutKind = last.kind
-                    if (last.kind == PingKind.REPLY) last.value?.let { readoutValue = it }
+                    if (last.kind == PingKind.REPLY) last.rttMs?.let { readoutRtt = it }
                 }
             }
             delay(150)
@@ -314,7 +317,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
         targetValue = when {
             !isRunning -> StatsDimColor
             readoutKind == PingKind.REPLY ->
-                readoutValue?.let(::readablePingTextColor) ?: StatsDimColor
+                readoutRtt?.let { readablePingTextColor(it.roundToInt()) } ?: StatsDimColor
             readoutKind == PingKind.TIMEOUT || readoutKind == PingKind.LOCAL_FAULT -> FizzleColor
             else -> StatsDimColor
         },
@@ -328,7 +331,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
         s.paused
     } else {
         when (readoutKind) {
-            PingKind.REPLY -> readoutValue?.let { "$it ms" }
+            PingKind.REPLY -> readoutRtt?.let { "${formatRtt(it)} ms" }
             PingKind.TIMEOUT -> "×"
             PingKind.LOCAL_FAULT -> "!"
             PingKind.INTERRUPTED, PingKind.UNOBSERVED -> "?"
@@ -368,7 +371,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
         val a11ySummary = buildGraphSummary(
             ip = ip,
             latestKind = readoutKind,
-            latestRtt = readoutValue,
+            latestRtt = readoutRtt?.roundToInt(),
             stats = windowStats,
             windowMs = visibleWindowMs(timeframeMsVal, layoutVal),
             s = s,
