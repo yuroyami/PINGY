@@ -37,13 +37,15 @@ internal fun formatShortAge(ms: Long): String = if (ms < 60_000) {
  * target does not read as a flat "0ms"; anything above 10 ms rounds to a whole
  * millisecond, which is all the precision a reader can use.
  */
-internal fun formatRtt(ms: Double): String = when {
-    ms < 1.0 -> {
-        val hundredths = (ms * 100).roundToInt()
-        "0.${(hundredths % 100).toString().padStart(2, '0')}"
+internal fun formatRtt(ms: Double): String {
+    // Decide the branch on the ROUNDED value: 0.996 rounds to 100 hundredths,
+    // which is one millisecond, not "0.00".
+    val hundredths = (ms * 100).roundToInt()
+    return when {
+        hundredths < 100 -> "0.${hundredths.toString().padStart(2, '0')}"
+        ms < 10.0 -> formatFloat1(ms.toFloat())
+        else -> ms.roundToInt().toString()
     }
-    ms < 10.0 -> formatFloat1(ms.toFloat())
-    else -> ms.roundToInt().toString()
 }
 
 /** One-decimal formatter without depending on platform `Locale` / `String.format`. */
