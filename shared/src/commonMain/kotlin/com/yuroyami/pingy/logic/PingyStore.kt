@@ -27,6 +27,14 @@ import okio.Path.Companion.toPath
 /** Hard cap on restored panels. Each one owns a socket, a thread and history. */
 const val MAX_PANELS: Int = 24
 
+/**
+ * Ceiling on the encoded panel list before it is parsed.
+ *
+ * Twenty-four full records run to a few thousand characters, so this leaves a
+ * wide margin over anything the app itself writes.
+ */
+private const val MAX_PANELS_JSON_CHARS = 64_000
+
 /** Everything a panel needs to be reborn on the next launch. */
 @Serializable
 data class PanelSpec(
@@ -112,7 +120,15 @@ internal fun decodeStore(prefs: Preferences): StoreLoad {
         prefs[KEY_PANELS] != null || prefs[KEY_STYLE] != null || prefs[KEY_LAYOUT] != null
     if (prefs[KEY_INITIALIZED] != true && !hasLegacyKeys) return StoreLoad.NotInitialized
 
-    val raw = prefs[KEY_PANELS]
+    val encoded = prefs[KEY_PANELS]
+    // The 24 panel cap is applied after the whole list is parsed and mapped, so
+    // an oversized file would be materialized in full before anything rejected
+    // it. A normal save cannot come close to this bound.
+    if (encoded != null && encoded.length > MAX_PANELS_JSON_CHARS) {
+        return StoreLoad.Failed("saved panel list is too large to trust")
+    }
+
+    val raw = encoded
         ?.let { json.decodeFromString<List<PanelSpec>>(it) }
         ?: emptyList()
     val valid = raw.mapNotNull { it.validated() }.take(MAX_PANELS)

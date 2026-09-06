@@ -46,6 +46,21 @@ class PingyStoreDecodeTest {
     }
 
     @Test
+    fun an_oversized_panel_list_is_refused_before_it_is_parsed() {
+        val huge = "[" + List(4_000) { """{"ip":"1.1.1.1"}""" }.joinToString(",") + "]"
+        assertIs<StoreLoad.Failed>(decodeStore(preferencesOf(KEY_INITIALIZED to true, KEY_PANELS to huge)))
+    }
+
+    @Test
+    fun a_full_cockpit_is_nowhere_near_the_bound() {
+        val full = "[" + List(24) {
+            """{"ip":"host$it.example.com","intervalMs":250,"packetSize":480,"roof":2000,"angleOfAttack":15.0,"timeframeMs":30000,"canvasHeightFraction":0.45,"style":"MOUNTAIN_SLOPES"}"""
+        }.joinToString(",") + "]"
+        val loaded = assertIs<StoreLoad.Loaded>(decodeStore(preferencesOf(KEY_INITIALIZED to true, KEY_PANELS to full)))
+        assertEquals(24, loaded.panels.size)
+    }
+
+    @Test
     fun unreadable_records_are_dropped_and_counted() {
         val prefs = preferencesOf(
             KEY_INITIALIZED to true,
