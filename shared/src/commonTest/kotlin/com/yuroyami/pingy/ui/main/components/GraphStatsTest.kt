@@ -56,6 +56,46 @@ class GraphStatsTest {
     }
 
     @Test
+    fun a_timeout_that_just_expired_is_still_counted_at_the_minimum_window() {
+        // A verdict only lands three seconds after its send, by which point the
+        // send is past a three second horizon. Dropping the boundary sample hid
+        // every loss on a failing link at the shortest setting.
+        val ring = ringOf(3_010L to null, 10L to Ping.pending(now))
+        val stats = computeWindowStats(ring, PING_TIMEOUT_MS.toLong(), now)
+        assertEquals(1, stats.count, "the expired timeout has to stay visible")
+        assertEquals(1, stats.lost)
+        assertEquals(1, stats.pending)
+    }
+
+    @Test
+    fun the_slot_crossing_the_left_edge_is_clipped_rather_than_dropped() {
+        // Sent 5.1 s ago and lost, so four of the five visible seconds are dark.
+        val ring = ringOf(5_100L to null, 1_000L to reply(1.0))
+        val stats = computeWindowStats(ring, 5_000, now)
+        assertEquals(2, stats.count)
+        assertEquals(1, stats.lost)
+        assertEquals(80f, assertNotNull(stats.gonePct), 0.5f)
+        assertEquals(5_000L, stats.coveredMs)
+    }
+
+    @Test
+    fun outage_share_moves_continuously_as_a_slot_leaves_the_window() {
+        // Slide the same fixed history across the horizon: no cliff.
+        var previous = -1f
+        for (window in 4_000L..6_000L step 100L) {
+            val ring = ringOf(5_100L to null, 1_000L to reply(1.0))
+            val gone = assertNotNull(computeWindowStats(ring, window, now).gonePct)
+            if (previous >= 0f) {
+                assertTrue(
+                    kotlin.math.abs(gone - previous) < 5f,
+                    "outage jumped from $previous to $gone at window $window",
+                )
+            }
+            previous = gone
+        }
+    }
+
+    @Test
     fun interrupted_probes_enter_neither_loss_nor_outage() {
         val ring = ringOf(
             900L to reply(10.0),

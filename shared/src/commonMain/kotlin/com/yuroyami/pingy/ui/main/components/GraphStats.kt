@@ -72,6 +72,8 @@ internal data class WindowStats(
     val localFaults: Int,
     /** Probes that left but whose observation was cut short. Not loss. */
     val interrupted: Int,
+    /** Probes still in the air. Sent, but with nothing to say yet. */
+    val pending: Int,
     val avg: Double?,
     val min: Double?,
     val max: Double?,
@@ -81,7 +83,7 @@ internal data class WindowStats(
     val coveredMs: Long,
 ) {
     companion object {
-        val EMPTY = WindowStats(0, 0, 0, 0, null, null, null, null, null, 0L)
+        val EMPTY = WindowStats(0, 0, 0, 0, 0, null, null, null, null, null, 0L)
     }
 }
 
@@ -95,18 +97,28 @@ internal data class WindowStats(
  * to the next send (the newest owns up to now), and a slot counts as gone
  * when its probe was lost. Slots whose probe is still in the air, or whose
  * entry is a local fault, are unknown territory and enter neither side. */
-internal fun computeWindowStats(pings: RingBuffer<Ping>, windowMs: Long): WindowStats {
-    val now = TimeSource.Monotonic.markNow()
-
+internal fun computeWindowStats(
+    pings: RingBuffer<Ping>,
+    windowMs: Long,
+    now: TimeSource.Monotonic.ValueTimeMark = TimeSource.Monotonic.markNow(),
+): WindowStats {
     // The ring is in send order; an age that drops means the writer lapped
     // this walk, and the walk ends there.
+    //
+    // The walk keeps one sample past the horizon, exactly as the canvas does.
+    // Its slot still covers part of the window, and dropping it censored every
+    // completed timeout at the shortest setting: a verdict only arrives three
+    // seconds after its send, by which time the send itself is off the edge.
     val window = ArrayList<Ping>(256)
     var prevAge = Long.MIN_VALUE
     pings.forEachNewestFirst { p ->
         val age = (now - p.timestamp).inWholeMilliseconds
         when {
             age < prevAge -> false
-            age > windowMs -> false
+            age > windowMs -> {
+                window.add(p)
+                false
+            }
             else -> {
                 if (age >= 0) window.add(p)
                 prevAge = age
@@ -120,6 +132,7 @@ internal fun computeWindowStats(pings: RingBuffer<Ping>, windowMs: Long): Window
     var lost = 0
     var localFaults = 0
     var interrupted = 0
+    var pending = 0
     var sum = 0.0
     var valid = 0
     var min = Double.MAX_VALUE
@@ -130,14 +143,6 @@ internal fun computeWindowStats(pings: RingBuffer<Ping>, windowMs: Long): Window
     var olderWasValid = false
     var spanTotal = 0L
     var spanGone = 0L
-
-    // The oldest sample in the window may be the oldest we HAVE, not the oldest
-    // there was. Attributing everything back to the window edge invented outage
-    // time that was never observed: two failures a second apart could report
-    // 100% gone across a five second window the app had not even been running
-    // for. Coverage starts at the oldest sample we actually hold.
-    val oldestAge = window.firstOrNull()?.let { (now - it.timestamp).inWholeMilliseconds }
-    val coveredMs = oldestAge?.coerceAtMost(windowMs) ?: 0L
 
     for (i in window.indices) {
         val p = window[i]
@@ -150,7 +155,10 @@ internal fun computeWindowStats(pings: RingBuffer<Ping>, windowMs: Long): Window
             continue
         }
         // Still in the air: nothing to count yet.
-        if (p.isPending) continue
+        if (p.isPending) {
+            pending++
+            continue
+        }
         // Sent, then the socket died under it. That is our failure to observe,
         // not the target's failure to answer.
         if (p.isInterrupted) {
@@ -158,17 +166,20 @@ internal fun computeWindowStats(pings: RingBuffer<Ping>, windowMs: Long): Window
             continue
         }
 
+        // Each probe owns the stretch from its own send to the next send, and
+        // the oldest one is clipped to the horizon rather than dropped, so the
+        // share moves continuously as it crosses the edge instead of jumping.
+        val age = (now - p.timestamp).inWholeMilliseconds.coerceAtMost(windowMs)
+        val slotEnd = if (i + 1 < window.size) (now - window[i + 1].timestamp).inWholeMilliseconds else 0L
+        val span = age - slotEnd
+        if (span <= 0) continue
+
         count++
         val v = p.rttMs
         val isLost = p.isLoss
 
-        val age = (now - p.timestamp).inWholeMilliseconds
-        val slotEnd = if (i + 1 < window.size) (now - window[i + 1].timestamp).inWholeMilliseconds else 0L
-        val span = age - slotEnd
-        if (span > 0) {
-            spanTotal += span
-            if (isLost) spanGone += span
-        }
+        spanTotal += span
+        if (isLost) spanGone += span
         if (isLost || v == null) {
             lost++
             olderWasValid = false
@@ -190,11 +201,13 @@ internal fun computeWindowStats(pings: RingBuffer<Ping>, windowMs: Long): Window
         lost = lost,
         localFaults = localFaults,
         interrupted = interrupted,
+        pending = pending,
         avg = if (valid > 0) sum / valid else null,
         min = if (valid > 0) min else null,
         max = if (valid > 0) max else null,
         jitter = if (jitterCount > 0) jitterSum / jitterCount else null,
         gonePct = if (spanTotal > 0) spanGone * 100f / spanTotal else null,
-        coveredMs = coveredMs,
+        // Only the time we actually watched. Unknown stretches are in neither.
+        coveredMs = spanTotal,
     )
 }
