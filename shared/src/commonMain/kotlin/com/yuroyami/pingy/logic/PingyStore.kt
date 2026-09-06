@@ -84,36 +84,52 @@ sealed interface StoreLoad {
     data class Failed(val message: String) : StoreLoad
 }
 
+/** File name of the preferences store, shared by the platform directory actuals. */
+const val STORE_FILE_NAME: String = "pingy.preferences_pb"
+
+internal val json = Json { ignoreUnknownKeys = true }
+
+internal val KEY_PANELS = stringPreferencesKey("panels")
+internal val KEY_STYLE = stringPreferencesKey("graph_style")
+internal val KEY_LAYOUT = stringPreferencesKey("panel_layout")
+internal val KEY_INITIALIZED = booleanPreferencesKey("initialized")
+
+/**
+ * Turn a decoded preferences map into a [StoreLoad].
+ *
+ * Files written before the marker existed hold panels but no marker. They are
+ * an initialized store, not a first run, so the upgrade must not report them
+ * as empty and then overwrite them on the next save.
+ */
+internal fun decodeStore(prefs: Preferences): StoreLoad {
+    val hasLegacyKeys =
+        prefs[KEY_PANELS] != null || prefs[KEY_STYLE] != null || prefs[KEY_LAYOUT] != null
+    if (prefs[KEY_INITIALIZED] != true && !hasLegacyKeys) return StoreLoad.NotInitialized
+
+    val raw = prefs[KEY_PANELS]
+        ?.let { json.decodeFromString<List<PanelSpec>>(it) }
+        ?: emptyList()
+    val valid = raw.mapNotNull { it.validated() }.take(MAX_PANELS)
+
+    return StoreLoad.Loaded(
+        panels = valid,
+        graphStyle = prefs[KEY_STYLE],
+        panelLayout = prefs[KEY_LAYOUT],
+        droppedRecords = raw.size - valid.size,
+    )
+}
+
 /** Preferences DataStore wrapper. One instance per process. */
 object PingyStore {
-    private val json = Json { ignoreUnknownKeys = true }
-
-    private val KEY_PANELS = stringPreferencesKey("panels")
-    private val KEY_STYLE = stringPreferencesKey("graph_style")
-    private val KEY_LAYOUT = stringPreferencesKey("panel_layout")
-    private val KEY_INITIALIZED = booleanPreferencesKey("initialized")
 
     private val store: DataStore<Preferences> by lazy {
         PreferenceDataStoreFactory.createWithPath {
-            "${pingyDataStoreDir()}/pingy.preferences_pb".toPath()
+            "${pingyDataStoreDir()}/$STORE_FILE_NAME".toPath()
         }
     }
 
     suspend fun load(): StoreLoad = runCatching {
-        val prefs = store.data.first()
-        if (prefs[KEY_INITIALIZED] != true) return@runCatching StoreLoad.NotInitialized
-
-        val raw = prefs[KEY_PANELS]
-            ?.let { json.decodeFromString<List<PanelSpec>>(it) }
-            ?: emptyList()
-        val valid = raw.mapNotNull { it.validated() }.take(MAX_PANELS)
-
-        StoreLoad.Loaded(
-            panels = valid,
-            graphStyle = prefs[KEY_STYLE],
-            panelLayout = prefs[KEY_LAYOUT],
-            droppedRecords = raw.size - valid.size,
-        )
+        decodeStore(store.data.first())
     }.getOrElse { e ->
         loggye("PingyStore: load failed; keeping the existing file untouched", e)
         StoreLoad.Failed(e.message ?: e::class.simpleName ?: "unknown read failure")
