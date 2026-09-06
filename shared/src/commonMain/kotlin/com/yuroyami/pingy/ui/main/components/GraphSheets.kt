@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.ui.text.TextStyle
@@ -149,10 +148,13 @@ internal fun StatsSheet(stats: WindowStats, fontFamily: FontFamily) {
     ) {
         BasicText(
             text = line,
-            maxLines = 1,
-            softWrap = false,
+            // Wrapping to a second line beats shrinking to 6sp, which is what
+            // the old single-line fit did in a narrow cell or at a large text
+            // setting: asking for bigger text produced smaller text.
+            maxLines = 2,
+            softWrap = true,
             style = TextStyle(fontFamily = fontFamily, fontSize = 15.sp, color = SettingsTextColor),
-            autoSize = TextAutoSize.StepBased(minFontSize = 6.sp, maxFontSize = 15.sp, stepSize = 0.25.sp),
+            autoSize = TextAutoSize.StepBased(minFontSize = 11.sp, maxFontSize = 15.sp, stepSize = 0.25.sp),
         )
     }
 
@@ -346,13 +348,15 @@ internal fun CompactSlider(
             },
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Proportional rather than fixed: a translated label or a large text
+        // setting overflowed a 58dp column and clipped mid-word.
         Text(
             text = label,
             color = StatsLabelColor,
             fontSize = 11.sp,
             fontFamily = fontFamily,
-            maxLines = 1,
-            modifier = Modifier.width(58.dp),
+            maxLines = 2,
+            modifier = Modifier.weight(0.3f),
         )
         Slider(
             value = value,
@@ -373,9 +377,9 @@ internal fun CompactSlider(
             color = SettingsTextColor,
             fontSize = 11.sp,
             fontFamily = fontFamily,
-            maxLines = 1,
+            maxLines = 2,
             textAlign = TextAlign.End,
-            modifier = Modifier.width(62.dp),
+            modifier = Modifier.weight(0.3f),
         )
     }
 }

@@ -70,6 +70,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -141,6 +143,9 @@ private const val MAX_CANVAS_FONT_SCALE = 1.35f
 
 /** Redraw cadence when the platform asks for reduced motion. */
 private const val REDUCED_MOTION_TICK_MS = 250L
+
+/** Width of the floating control row: three 48dp touch targets. */
+private const val CONTROL_ROW_WIDTH_DP = 144
 
 
 
@@ -841,6 +846,9 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 // right edge stays clear at every scale, and the x is measured
                 // rather than assumed.
                 for (y in landMarksVal) {
+                    // Above the ceiling every landmark clamps to the same top
+                    // pixel, so they stack into an unreadable pile.
+                    if (y > roofVal) continue
                     val h = calculatePingY(y.toInt(), canvasH, roofVal.toFloat(), angleOfAttackVal)
                     val axisStyle = TextStyle(fontSize = (8 * canvasSp).sp, color = Color(200, 200, 220, 170))
                     val measured = textMeasurer.measure(AnnotatedString(y.toInt().toString()), axisStyle)
@@ -864,6 +872,12 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 if (readoutText != null) {
                     val neonColor = readoutColor
                     val neonText = readoutText
+                    // Keep the plate clear of the three controls in the top
+                    // right. A long host used to draw straight through them and
+                    // off the edge; the full name is in the settings sheet and
+                    // in the spoken summary.
+                    val plateMaxWidth = (canvasW - CONTROL_ROW_WIDTH_DP.dp.toPx() - 20.dp.toPx())
+                        .coerceAtLeast(48.dp.toPx())
                     val neon = textMeasurer.measure(
                         buildAnnotatedString {
                             withStyle(
@@ -878,7 +892,10 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                                 SpanStyle(color = StatsLabelColor, fontSize = (11 * canvasSp).sp)
                             ) { append("   $ip") }
                         },
-                        TextStyle(fontFamily = interFont),
+                        style = TextStyle(fontFamily = interFont),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        constraints = Constraints(maxWidth = plateMaxWidth.toInt()),
                     )
                     // Dark HUD plate so the number stays readable when bars of
                     // the same color rise behind it.
