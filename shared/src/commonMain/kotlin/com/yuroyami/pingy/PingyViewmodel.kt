@@ -143,6 +143,14 @@ class PingyViewmodel(
     /** Cockpit arrangement, cycled from the header. */
     val panelLayout = MutableStateFlow(PanelLayout.COLUMN)
 
+    /**
+     * The app's own reduce-motion switch, on top of whatever the platform says.
+     *
+     * Desktop reports no platform signal at all, so without this those users
+     * have no way to stop a canvas that moves continuously.
+     */
+    val reduceMotionOverride = MutableStateFlow(false)
+
     // replay = 1 so the first markDirty, which happens during init before the
     // debounce collector exists, is handed to the late collector instead of lost.
     private val saveSignal = MutableSharedFlow<Unit>(
@@ -173,7 +181,11 @@ class PingyViewmodel(
             loadStore()
 
             launch {
-                merge(graphStyle.map { }, panelLayout.map { }).drop(2).collect { markDirty() }
+                merge(
+                    graphStyle.map { },
+                    panelLayout.map { },
+                    reduceMotionOverride.map { },
+                ).drop(3).collect { markDirty() }
             }
             launch {
                 saveSignal.debounce(400).collect { persist() }
@@ -210,6 +222,7 @@ class PingyViewmodel(
                 loaded.panelLayout
                     ?.let { name -> PanelLayout.entries.firstOrNull { it.name == name } }
                     ?.let { panelLayout.value = it }
+                reduceMotionOverride.value = loaded.reduceMotion
 
                 // A duplicate or an over-capacity record is skipped just as
                 // silently as an unreadable one, so count them the same way.
@@ -338,6 +351,7 @@ class PingyViewmodel(
             panels = panels.filter { it.persistAcrossSessions.value }.map { it.toSpec() },
             graphStyle = graphStyle.value.name,
             panelLayout = panelLayout.value.name,
+            reduceMotion = reduceMotionOverride.value,
         )
         if (ok) {
             saveAttempt = 0
@@ -399,6 +413,7 @@ class PingyViewmodel(
             panels = panels.filter { it.persistAcrossSessions.value }.map { it.toSpec() },
             graphStyle = graphStyle.value.name,
             panelLayout = panelLayout.value.name,
+            reduceMotion = reduceMotionOverride.value,
         )
     }
 

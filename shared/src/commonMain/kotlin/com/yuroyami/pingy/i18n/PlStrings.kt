@@ -114,6 +114,7 @@ val PlStrings = Strings(
     storeStartFresh = "Zacznij od nowa",
     storeQuarantined = { name -> "Stary plik zachowano jako ${name}" },
     openAbout = "O Pingy",
+    reduceMotionSetting = "Ogranicz ruch",
 
     back = "Wstecz",
     aboutTagline = "Panele pingu na żywo dla każdego celu, który ma znaczenie.",

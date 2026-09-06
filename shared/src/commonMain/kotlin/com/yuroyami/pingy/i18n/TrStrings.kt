@@ -114,6 +114,7 @@ val TrStrings = Strings(
     storeStartFresh = "Sıfırdan başla",
     storeQuarantined = { name -> "Eski dosya ${name} adıyla saklandı" },
     openAbout = "Pingy hakkında",
+    reduceMotionSetting = "Hareketi azalt",
 
     back = "Geri",
     aboutTagline = "Önemsediğiniz her hedef için canlı ping panelleri.",

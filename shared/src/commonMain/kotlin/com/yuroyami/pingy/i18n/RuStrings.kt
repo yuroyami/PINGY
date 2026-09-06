@@ -114,6 +114,7 @@ val RuStrings = Strings(
     storeStartFresh = "Начать заново",
     storeQuarantined = { name -> "Старый файл сохранён как ${name}" },
     openAbout = "О Pingy",
+    reduceMotionSetting = "Меньше движения",
 
     back = "Назад",
     aboutTagline = "Живые панели пинга для каждой важной цели.",

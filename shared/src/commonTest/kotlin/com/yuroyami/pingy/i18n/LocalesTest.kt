@@ -68,6 +68,7 @@ class LocalesTest {
         "storeRetry" to s.storeRetry,
         "storeStartFresh" to s.storeStartFresh,
         "openAbout" to s.openAbout,
+        "reduceMotionSetting" to s.reduceMotionSetting,
     )
 
     @Test

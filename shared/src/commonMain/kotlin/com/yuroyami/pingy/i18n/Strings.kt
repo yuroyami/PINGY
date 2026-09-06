@@ -142,6 +142,7 @@ data class Strings(
     val storeStartFresh: String,
     val storeQuarantined: (String) -> String,
     val openAbout: String,
+    val reduceMotionSetting: String,
 
     // About and legal
     val back: String,

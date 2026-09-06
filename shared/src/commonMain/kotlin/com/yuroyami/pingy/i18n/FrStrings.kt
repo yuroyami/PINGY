@@ -114,6 +114,7 @@ val FrStrings = Strings(
     storeStartFresh = "Repartir de zéro",
     storeQuarantined = { name -> "Ancien fichier conservé sous ${name}" },
     openAbout = "À propos de Pingy",
+    reduceMotionSetting = "Réduire les animations",
 
     back = "Retour",
     aboutTagline = "Des panneaux de ping en direct pour chaque cible qui compte.",

@@ -114,6 +114,7 @@ val ViStrings = Strings(
     storeStartFresh = "Bắt đầu lại",
     storeQuarantined = { name -> "Tệp cũ được giữ với tên ${name}" },
     openAbout = "Giới thiệu Pingy",
+    reduceMotionSetting = "Giảm chuyển động",
 
     back = "Quay lại",
     aboutTagline = "Bảng ping trực tiếp cho mọi mục tiêu bạn quan tâm.",

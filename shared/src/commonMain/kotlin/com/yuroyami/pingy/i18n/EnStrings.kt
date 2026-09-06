@@ -114,6 +114,7 @@ val EnStrings = Strings(
     storeStartFresh = "Start fresh",
     storeQuarantined = { name -> "Old file kept as ${name}" },
     openAbout = "About Pingy",
+    reduceMotionSetting = "Reduce motion",
 
     back = "Back",
     aboutTagline = "Live ping panels for every target you care about.",

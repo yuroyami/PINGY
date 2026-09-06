@@ -114,6 +114,7 @@ val ArStrings = Strings(
     storeStartFresh = "البدء من جديد",
     storeQuarantined = { name -> "تم الاحتفاظ بالملف القديم باسم ${name}" },
     openAbout = "حول Pingy",
+    reduceMotionSetting = "تقليل الحركة",
 
     back = "رجوع",
     aboutTagline = "لوحات فحص حية لكل هدف يهمك.",

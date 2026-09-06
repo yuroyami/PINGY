@@ -114,6 +114,7 @@ val HiStrings = Strings(
     storeStartFresh = "नए सिरे से शुरू करें",
     storeQuarantined = { name -> "पुरानी फ़ाइल ${name} नाम से रखी गई" },
     openAbout = "Pingy के बारे में",
+    reduceMotionSetting = "गति कम करें",
 
     back = "वापस",
     aboutTagline = "हर उस लक्ष्य के लिए लाइव पिंग पैनल जो आपके लिए मायने रखता है।",

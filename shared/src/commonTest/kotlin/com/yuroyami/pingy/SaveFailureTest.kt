@@ -41,6 +41,7 @@ internal class FlakyStore(private val failFirst: Int) : StoreApi {
         panels: List<PanelSpec>,
         graphStyle: String,
         panelLayout: String,
+        reduceMotion: Boolean,
     ): Boolean {
         saves++
         lastPanels = panels
@@ -60,6 +61,7 @@ internal class SlowStore(private val writeMs: Long) : StoreApi {
         panels: List<PanelSpec>,
         graphStyle: String,
         panelLayout: String,
+        reduceMotion: Boolean,
     ): Boolean {
         kotlinx.coroutines.delay(writeMs)
         saves++
@@ -82,6 +84,7 @@ internal class GatedStore(private val panels: List<PanelSpec>) : StoreApi {
         panels: List<PanelSpec>,
         graphStyle: String,
         panelLayout: String,
+        reduceMotion: Boolean,
     ): Boolean = true
 
     override suspend fun quarantine(): String? = null

@@ -19,11 +19,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -54,6 +61,7 @@ fun AboutScreenUI() {
     val viewmodel = LocalViewmodel.current
     val inter = Font(Res.font.Inter_Regular)
     val interFont = remember(inter) { FontFamily(inter) }
+    val reduceMotionOn by viewmodel.reduceMotionOverride.collectAsState()
 
     Box(
         Modifier
@@ -127,6 +135,29 @@ fun AboutScreenUI() {
                 fontSize = 12.sp,
                 fontFamily = interFont,
             )
+
+            Spacer(Modifier.height(26.dp))
+            // Desktop reports no platform reduce-motion signal, so without this
+            // switch those users have no way to stop a canvas that never stops.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.semantics(mergeDescendants = true) {
+                    contentDescription = s.reduceMotionSetting
+                },
+            ) {
+                Text(
+                    text = s.reduceMotionSetting,
+                    color = Color(0xFFC9D2DD),
+                    fontSize = 13.sp,
+                    fontFamily = interFont,
+                )
+                Switch(
+                    modifier = Modifier.scale(0.7f),
+                    checked = reduceMotionOn,
+                    onCheckedChange = { viewmodel.reduceMotionOverride.value = it },
+                    colors = SwitchDefaults.colors(checkedTrackColor = Paletting.SGN2),
+                )
+            }
 
             Spacer(Modifier.height(30.dp))
             // Store policy expects a privacy route inside the app, and an AGPL

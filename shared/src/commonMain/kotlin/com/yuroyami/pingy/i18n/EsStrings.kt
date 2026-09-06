@@ -114,6 +114,7 @@ val EsStrings = Strings(
     storeStartFresh = "Empezar de cero",
     storeQuarantined = { name -> "Archivo antiguo guardado como ${name}" },
     openAbout = "Acerca de Pingy",
+    reduceMotionSetting = "Reducir movimiento",
 
     back = "Atrás",
     aboutTagline = "Paneles de ping en vivo para cada objetivo que te importa.",

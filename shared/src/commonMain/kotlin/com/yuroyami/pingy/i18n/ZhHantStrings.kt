@@ -114,6 +114,7 @@ val ZhHantStrings = Strings(
     storeStartFresh = "重新開始",
     storeQuarantined = { name -> "舊檔已保留為 ${name}" },
     openAbout = "關於 Pingy",
+    reduceMotionSetting = "減少動態效果",
 
     back = "返回",
     aboutTagline = "為你在意的每個目標提供即時 ping 面板。",

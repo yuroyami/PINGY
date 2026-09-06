@@ -92,6 +92,7 @@ sealed interface StoreLoad {
         val graphStyle: String?,
         val panelLayout: String?,
         val droppedRecords: Int,
+        val reduceMotion: Boolean = false,
     ) : StoreLoad
 
     /** The store exists but could not be read or decoded. Never overwrite it. */
@@ -107,6 +108,7 @@ internal val KEY_PANELS = stringPreferencesKey("panels")
 internal val KEY_STYLE = stringPreferencesKey("graph_style")
 internal val KEY_LAYOUT = stringPreferencesKey("panel_layout")
 internal val KEY_INITIALIZED = booleanPreferencesKey("initialized")
+internal val KEY_REDUCE_MOTION = booleanPreferencesKey("reduce_motion")
 
 /**
  * Turn a decoded preferences map into a [StoreLoad].
@@ -138,6 +140,7 @@ internal fun decodeStore(prefs: Preferences): StoreLoad {
         graphStyle = prefs[KEY_STYLE],
         panelLayout = prefs[KEY_LAYOUT],
         droppedRecords = raw.size - valid.size,
+        reduceMotion = prefs[KEY_REDUCE_MOTION] == true,
     )
 }
 
@@ -151,7 +154,12 @@ interface StoreApi {
     suspend fun load(): StoreLoad
 
     /** Returns true when the write actually landed. */
-    suspend fun save(panels: List<PanelSpec>, graphStyle: String, panelLayout: String): Boolean
+    suspend fun save(
+        panels: List<PanelSpec>,
+        graphStyle: String,
+        panelLayout: String,
+        reduceMotion: Boolean,
+    ): Boolean
 
     /**
      * Move an unreadable store aside so a fresh one can be written, and return
@@ -204,12 +212,14 @@ object PingyStore : StoreApi {
         panels: List<PanelSpec>,
         graphStyle: String,
         panelLayout: String,
+        reduceMotion: Boolean,
     ): Boolean = try {
         store.edit { prefs ->
             prefs[KEY_INITIALIZED] = true
             prefs[KEY_PANELS] = json.encodeToString(panels.take(MAX_PANELS))
             prefs[KEY_STYLE] = graphStyle
             prefs[KEY_LAYOUT] = panelLayout
+            prefs[KEY_REDUCE_MOTION] = reduceMotion
         }
         true
     } catch (e: CancellationException) {

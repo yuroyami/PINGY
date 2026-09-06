@@ -114,6 +114,7 @@ val KoStrings = Strings(
     storeStartFresh = "새로 시작",
     storeQuarantined = { name -> "이전 파일을 ${name}(으)로 보관했습니다" },
     openAbout = "Pingy 정보",
+    reduceMotionSetting = "동작 줄이기",
 
     back = "뒤로",
     aboutTagline = "신경 쓰는 모든 대상을 실시간 핑 패널로.",

@@ -114,6 +114,7 @@ val UkStrings = Strings(
     storeStartFresh = "Почати заново",
     storeQuarantined = { name -> "Старий файл збережено як ${name}" },
     openAbout = "Про Pingy",
+    reduceMotionSetting = "Менше руху",
 
     back = "Назад",
     aboutTagline = "Живі панелі пінгу для кожної важливої цілі.",

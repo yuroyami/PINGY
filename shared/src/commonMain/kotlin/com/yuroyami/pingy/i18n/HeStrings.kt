@@ -114,6 +114,7 @@ val HeStrings = Strings(
     storeStartFresh = "להתחיל מחדש",
     storeQuarantined = { name -> "הקובץ הישן נשמר בשם ${name}" },
     openAbout = "על Pingy",
+    reduceMotionSetting = "הפחתת תנועה",
 
     back = "חזרה",
     aboutTagline = "לוחות ping חיים לכל יעד שחשוב לך.",

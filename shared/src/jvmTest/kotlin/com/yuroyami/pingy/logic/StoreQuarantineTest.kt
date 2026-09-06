@@ -48,7 +48,7 @@ class StoreQuarantineTest {
             "after quarantine the app should start over rather than stay broken",
         )
 
-        assertTrue(PingyStore.save(listOf(PanelSpec(ip = "1.1.1.1")), "PINGLETTES", "COLUMN"))
+        assertTrue(PingyStore.save(listOf(PanelSpec(ip = "1.1.1.1")), "PINGLETTES", "COLUMN", false))
         val reloaded = assertIs<StoreLoad.Loaded>(PingyStore.load())
         assertEquals(listOf("1.1.1.1"), reloaded.panels.map { it.ip })
 

@@ -452,8 +452,11 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                                     // Hand the frozen offset to the glide so the
                                     // conveyor eases back to now instead of jumping.
                                     scrub?.let { frozen ->
-                                        glide.fromOffsetMs = frozen.freezeMark.elapsedNow().inWholeMilliseconds
-                                        glide.startMark = TimeSource.Monotonic.markNow()
+                                        if (animateGraph) {
+                                            glide.fromOffsetMs =
+                                                frozen.freezeMark.elapsedNow().inWholeMilliseconds
+                                            glide.startMark = TimeSource.Monotonic.markNow()
+                                        }
                                     }
                                     scrub = null
                                 }
@@ -681,7 +684,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                         var y = calculatePingY(level, canvasH, roofVal.toFloat(), angleOfAttackVal)
                             .coerceAtLeast(minBarPx)
                         var c = if (isPending) pendingColor(level) else calcPingColor(level)
-                        if (ping.kind == PingKind.REPLY && activeScrub == null && age < BIRTH_MS) {
+                        if (animateGraph && ping.kind == PingKind.REPLY && activeScrub == null && age < BIRTH_MS) {
                             val life = age / BIRTH_MS
                             y = (y * (1f + BIRTH_OVERSHOOT * sin(PI * life).toFloat())).coerceAtMost(canvasH)
                             c = lerp(c, Color.White, BIRTH_BRIGHTEN * (1f - life))
@@ -773,7 +776,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                         // overshoots its true height and carries extra
                         // brightness, both easing back to truth. Skipped while
                         // frozen: a scrubbed past shouldn't wiggle.
-                        if (ping.kind == PingKind.REPLY && activeScrub == null && age < BIRTH_MS) {
+                        if (animateGraph && ping.kind == PingKind.REPLY && activeScrub == null && age < BIRTH_MS) {
                             val life = age / BIRTH_MS
                             y = (y * (1f + BIRTH_OVERSHOOT * sin(PI * life).toFloat())).coerceAtMost(canvasH)
                             color = lerp(color, Color.White, BIRTH_BRIGHTEN * (1f - life))
@@ -822,7 +825,9 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 // scrubbing: frozen time has no live edge.
                 if (activeScrub == null) {
                     auraColor?.let { target ->
-                        val chase = 1f - exp(-dtSec * 10f)
+                        // Snapped under reduced motion: the chase is decoration,
+                        // and the value it lands on is the same either way.
+                        val chase = if (animateGraph) 1f - exp(-dtSec * 10f) else 1f
                         val smoothed = auraSmooth.color?.let { lerp(it, target, chase) } ?: target
                         auraSmooth.color = smoothed
                         val auraW = 28.dp.toPx()
@@ -842,10 +847,12 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                 // Peak-hold: rises instantly to the tallest visible bar, then
                 // falls at a steady rate like a VU meter needle at rest.
                 if (activeScrub == null) {
-                    peakHold.fraction = maxOf(
-                        maxTopFraction,
-                        peakHold.fraction - PEAK_DECAY_PER_SEC * dtSec,
-                    )
+                    peakHold.fraction = if (animateGraph) {
+                        maxOf(maxTopFraction, peakHold.fraction - PEAK_DECAY_PER_SEC * dtSec)
+                    } else {
+                        // No falling needle: it just shows the current peak.
+                        maxTopFraction
+                    }
                 }
                 if (peakHold.fraction > 0.02f) {
                     val peakY = canvasH - peakHold.fraction * canvasH

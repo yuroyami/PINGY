@@ -114,6 +114,7 @@ val FaStrings = Strings(
     storeStartFresh = "شروع تازه",
     storeQuarantined = { name -> "فایل قدیمی با نام ${name} نگه داشته شد" },
     openAbout = "درباره Pingy",
+    reduceMotionSetting = "کاهش حرکت",
 
     back = "بازگشت",
     aboutTagline = "پنل‌های زندهٔ پینگ برای هر هدفی که برایتان مهم است.",

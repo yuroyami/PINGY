@@ -114,6 +114,7 @@ val IdStrings = Strings(
     storeStartFresh = "Mulai dari awal",
     storeQuarantined = { name -> "Berkas lama disimpan sebagai ${name}" },
     openAbout = "Tentang Pingy",
+    reduceMotionSetting = "Kurangi gerak",
 
     back = "Kembali",
     aboutTagline = "Panel ping langsung untuk setiap target yang Anda pedulikan.",

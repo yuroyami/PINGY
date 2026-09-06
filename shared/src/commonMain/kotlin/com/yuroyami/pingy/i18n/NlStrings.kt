@@ -114,6 +114,7 @@ val NlStrings = Strings(
     storeStartFresh = "Opnieuw beginnen",
     storeQuarantined = { name -> "Oud bestand bewaard als ${name}" },
     openAbout = "Over Pingy",
+    reduceMotionSetting = "Beweging beperken",
 
     back = "Terug",
     aboutTagline = "Live ping-panelen voor elk doel dat je belangrijk vindt.",

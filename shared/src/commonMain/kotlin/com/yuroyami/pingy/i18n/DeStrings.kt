@@ -114,6 +114,7 @@ val DeStrings = Strings(
     storeStartFresh = "Neu anfangen",
     storeQuarantined = { name -> "Alte Datei als ${name} behalten" },
     openAbout = "Über Pingy",
+    reduceMotionSetting = "Bewegung reduzieren",
 
     back = "Zurück",
     aboutTagline = "Live-Ping-Panels für jedes Ziel, das dir wichtig ist.",

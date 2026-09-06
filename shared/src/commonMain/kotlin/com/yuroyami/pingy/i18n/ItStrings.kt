@@ -114,6 +114,7 @@ val ItStrings = Strings(
     storeStartFresh = "Ricomincia da capo",
     storeQuarantined = { name -> "Vecchio file conservato come ${name}" },
     openAbout = "Informazioni su Pingy",
+    reduceMotionSetting = "Riduci il movimento",
 
     back = "Indietro",
     aboutTagline = "Pannelli di ping in tempo reale per ogni destinazione che ti interessa.",

@@ -114,6 +114,7 @@ val JaStrings = Strings(
     storeStartFresh = "最初からやり直す",
     storeQuarantined = { name -> "古いファイルを ${name} として保存しました" },
     openAbout = "Pingy について",
+    reduceMotionSetting = "視差効果を減らす",
 
     back = "戻る",
     aboutTagline = "気になるターゲットすべてをリアルタイムに表示します。",
