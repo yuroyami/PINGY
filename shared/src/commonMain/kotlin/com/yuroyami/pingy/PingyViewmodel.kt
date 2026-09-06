@@ -60,6 +60,18 @@ data class Notice(
 )
 
 /**
+ * Everything Undo needs to put a removed panel back the way it was.
+ *
+ * Not the persisted [PanelSpec]: that deliberately omits the Remember flag and
+ * the panel's position, both of which a removal has to restore.
+ */
+class RemovedPanel internal constructor(
+    internal val spec: PanelSpec,
+    internal val remember: Boolean,
+    internal val index: Int,
+)
+
+/**
  * Where the cockpit is in its startup, so the UI can tell these apart instead
  * of rendering all of them as an identical blank screen.
  */
@@ -183,7 +195,7 @@ class PingyViewmodel : ViewModel() {
      * spellings of one address would otherwise open two sockets to the same
      * peer, which is exactly the situation reply identity has to defend against.
      */
-    fun addPanel(ip: String, spec: PanelSpec? = null): AddResult {
+    fun addPanel(ip: String, spec: PanelSpec? = null, at: Int = panels.size): AddResult {
         if (panels.size >= MAX_PANELS) return AddResult.AtCapacity
         val key = canonicalTargetKey(ip)
         if (panels.any { canonicalTargetKey(it.ip) == key }) return AddResult.Duplicate
@@ -191,7 +203,7 @@ class PingyViewmodel : ViewModel() {
         val panel = PingPanel(ip = ip)
         spec?.let(panel::applySpec)
         panel.startPinging()
-        panels.add(panel)
+        panels.add(at.coerceIn(0, panels.size), panel)
         if (cockpitState.value is CockpitState.FirstRun) cockpitState.value = CockpitState.Ready
 
         watchers[panel] = viewModelScope.launch {
@@ -216,18 +228,25 @@ class PingyViewmodel : ViewModel() {
      * panel the user just removed would be worse. The configuration comes back
      * as the return value, so the caller can offer an undo that rebuilds it.
      */
-    fun removePanel(panel: PingPanel): PanelSpec {
-        val spec = panel.toSpec()
+    fun removePanel(panel: PingPanel): RemovedPanel {
+        val removed = RemovedPanel(
+            spec = panel.toSpec(),
+            remember = panel.persistAcrossSessions.value,
+            index = panels.indexOf(panel).coerceAtLeast(0),
+        )
         watchers.remove(panel)?.cancel()
         panels.remove(panel)
         panel.close()
         markDirty()
-        return spec
+        return removed
     }
 
-    /** Recreate a panel from a snapshot, for undoing a removal. */
-    fun restorePanel(spec: PanelSpec) {
-        addPanel(spec.ip, spec)
+    /** Recreate a removed panel, for undoing a removal. */
+    fun restorePanel(removed: RemovedPanel) {
+        if (addPanel(removed.spec.ip, removed.spec, at = removed.index) != AddResult.Added) return
+        // Remember is session state, not part of the persisted spec, so it has
+        // to be put back by hand or Undo silently turns it on.
+        panels.firstOrNull { it.ip == removed.spec.ip }?.persistAcrossSessions?.value = removed.remember
     }
 
     /**
