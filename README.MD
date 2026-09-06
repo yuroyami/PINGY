@@ -52,7 +52,7 @@ lands, and disappears the moment the probe times out.
 |:---|:---|
 | **Android** | 8.0 (API 26) and above |
 | **iOS** | 16.0 and above |
-| **Desktop (JVM)** | macOS and Linux. A Compose Desktop app builds and runs; `packageDistributionForCurrentOS` produces a DMG or DEB. Windows is out: Winsock has no unprivileged ICMP socket, so there is no MSI target. |
+| **Desktop (JVM)** | macOS and Linux. A Compose Desktop app builds and runs; `packageDistributionForCurrentOS` produces a DMG or DEB. Monitoring pauses while the window is minimized, the same as leaving the foreground on mobile. Sleep and wake are not detected, so a machine suspending shows up as an ordinary gap. Windows is out: Winsock has no unprivileged ICMP socket, so there is no MSI target. |
 
 ## Privacy
 

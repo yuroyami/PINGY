@@ -5,10 +5,13 @@ import kotlin.concurrent.Volatile
 /**
  * The bridge platform shells use to pause and resume monitoring.
  *
- * Each shell owns its own foreground signal (Android activity callbacks, an iOS
- * scene phase, a desktop window listener), but they all need the same view
- * model. Registering it once here keeps that wiring in one place instead of
- * every shell reaching for a different global.
+ * Each shell owns its own signal for this: Android activity callbacks, an iOS
+ * scene phase, and on desktop the window's minimized state. They all need the
+ * same view model, so registering it once here keeps that wiring in one place
+ * instead of every shell reaching for a different global.
+ *
+ * Desktop sleep and wake are not detected. A machine suspending shows up as an
+ * ordinary gap in the history rather than a session boundary.
  */
 object PingyLifecycle {
     @Volatile

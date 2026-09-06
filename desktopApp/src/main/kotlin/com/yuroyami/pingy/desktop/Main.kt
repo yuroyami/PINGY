@@ -1,5 +1,6 @@
 package com.yuroyami.pingy.desktop
 
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -60,6 +61,18 @@ fun main() = application {
         // Below roughly this width the two-column grid and the settings sheet
         // stop being usable. The adaptive grid handles everything above it.
         window.minimumSize = java.awt.Dimension(420, 520)
+
+        // Monitoring follows the window, the way it follows the foreground on
+        // Android and iOS. Minimized, the app was still probing at full rate
+        // with nothing on screen to hint at it.
+        LaunchedEffect(windowState.isMinimized) {
+            if (windowState.isMinimized) {
+                PingyLifecycle.pauseMonitoring()
+            } else {
+                PingyLifecycle.resumeMonitoring()
+            }
+        }
+
         AdamScreenUI()
     }
 }
