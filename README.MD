@@ -31,7 +31,7 @@ lands, and disappears the moment the probe times out.
 
 ## Features
 
-- **Many hosts at once**: one panel per host, as many as you want side by side.
+- **Many hosts at once**: one panel per host, up to 24 side by side.
 - **Live sliders**: packet size (16 to 480 bytes), time window (1 to 30 s), graph
   ceiling, graph height, zoom curve. Every change applies to the very next probe.
   Nothing restarts.
@@ -64,7 +64,7 @@ leaves your device beyond those probes. Targets you mark as remembered are store
 locally in app-private storage. Full details in
 [PRIVACY_POLICY.md](PRIVACY_POLICY.md).
 
-Android permissions are limited to `INTERNET` and `ACCESS_NETWORK_STATE`. No
+Android asks for one permission, `INTERNET`. No
 credentials or keystore files are ever committed: `local.properties`, `*.jks`, and
 the `keystore/` directory are all `.gitignore`d.
 
@@ -74,8 +74,9 @@ the `keystore/` directory are all `.gitignore`d.
 
 - Android Studio 2025.3.1+ (Kotlin 2.4, Gradle 9.4)
 - JDK 21 (the Gradle toolchain fetches it for you)
-- Xcode 16.3+ for iOS (Compose Multiplatform 1.11 needs an SDK that provides
-  `UIUtilities`; Xcode 16.4 does not)
+- Xcode 26+ for iOS. Compose Multiplatform 1.11 links against `UIUtilities`,
+  which the Xcode 16.x SDKs do not ship. The simulator target is arm64 only, so
+  building for a simulator needs an Apple Silicon Mac.
 - CMake 3.22.1+ (the NDK manages it on Android)
 
 **Android**
@@ -85,8 +86,8 @@ the `keystore/` directory are all `.gitignore`d.
 ```
 
 Release signing reads three keys from `local.properties`, which is `.gitignore`d:
-`keystore.keyAlias`, `keystore.keyPassword`, `keystore.storePassword`. Unsigned
-debug builds need no keystore at all.
+`keystore.keyAlias`, `keystore.keyPassword`, `keystore.storePassword`. Debug
+builds use the automatic debug key and need no keystore.
 
 **iOS**
 

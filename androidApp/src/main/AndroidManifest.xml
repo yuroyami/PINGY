@@ -2,11 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- INTERNET is the only permission this app actually needs: we open
-         unprivileged ICMP sockets from our own UID. ACCESS_NETWORK_STATE is
-         kept for future "which network am I on" display (Wi-Fi vs. cell). -->
+    <!-- The only permission this app needs: we open unprivileged ICMP sockets
+         from our own UID. -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
         android:allowBackup="false"

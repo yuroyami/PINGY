@@ -45,12 +45,21 @@ Pingy keeps a small preferences file in its own private storage:
 - the app-wide graph style and panel layout
 
 Measurements themselves are held in memory only and are lost when the app
-closes. Nothing is uploaded. On Android this file lives in app-private storage
-with backup disabled. On iOS it lives in Application Support. On desktop it
-lives in `~/.pingy`, restricted to your user account.
+closes. Nothing is uploaded.
 
-Deleting the app removes this file. Removing a target, or switching "Remember"
-off for it, drops it from the file at the next save.
+Where the file lives, and what happens to it, differs by platform:
+
+- **Android**: app-private storage, with system backup disabled. Deleting the
+  app removes it.
+- **iOS**: Application Support. Deleting the app removes it. This folder is
+  included in normal iCloud and iTunes device backups, so a copy of your
+  remembered targets can travel with your backup.
+- **Desktop**: `~/.pingy`, restricted to your user account. This is outside the
+  application itself, so it stays behind after you delete the app. Remove that
+  folder by hand if you want it gone.
+
+Removing a target, or switching "Remember" off for it, drops it from the file
+at the next save.
 
 ## Diagnostic logs
 
@@ -72,9 +81,7 @@ licenses ships with the app and is in `THIRD_PARTY_NOTICES.md`.
 
 ## Permissions
 
-- **Android**: `INTERNET` and `ACCESS_NETWORK_STATE`. `INTERNET` is required to
-  send probes. `ACCESS_NETWORK_STATE` is used to describe the connection you are
-  on.
+- **Android**: `INTERNET`, required to send probes. That is the only one.
 - **iOS**: local network access, requested by the system the first time you
   monitor a device on your own network, such as your router.
 
