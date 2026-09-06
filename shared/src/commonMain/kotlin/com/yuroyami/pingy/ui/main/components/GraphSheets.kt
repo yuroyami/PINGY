@@ -91,7 +91,7 @@ internal fun StatsSheet(stats: WindowStats, fontFamily: FontFamily) {
         label(s.statAverage + " ")
         value(
             stats.avg?.let { "${formatRtt(it)}ms" } ?: "—",
-            stats.avg?.let { calcPingColor(it.roundToInt()) } ?: StatsDimColor,
+            stats.avg?.let { readablePingTextColor(it.roundToInt()) } ?: StatsDimColor,
             stats.avg != null,
         )
         // Mean absolute successive difference between consecutive replies.

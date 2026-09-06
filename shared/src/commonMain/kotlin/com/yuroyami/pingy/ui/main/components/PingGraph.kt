@@ -306,7 +306,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
     // The readout's hue glides between samples; the text itself stays discrete.
     val readoutColor by animateColorAsState(
         targetValue = when (readoutKind) {
-            PingKind.REPLY -> readoutValue?.let(::calcPingColor) ?: StatsDimColor
+            PingKind.REPLY -> readoutValue?.let(::readablePingTextColor) ?: StatsDimColor
             PingKind.TIMEOUT, PingKind.LOCAL_FAULT -> FizzleColor
             else -> StatsDimColor
         },
@@ -946,7 +946,7 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
                     val chipH = chip.size.height + padY * 2
                     val chipLeft = (cursorX - chipW / 2f).coerceIn(4f, (canvasW - chipW - 4f).coerceAtLeast(4f))
                     val chipTop = 44.dp.toPx().coerceAtMost(canvasH - chipH - 4f)
-                    val chipColor = if (pickLost) FizzleColor else calcPingColor(pickValue)
+                    val chipColor = if (pickLost) FizzleColor else readablePingTextColor(pickValue)
                     drawRoundRect(
                         color = Color(0xE6141414),
                         topLeft = Offset(chipLeft, chipTop),

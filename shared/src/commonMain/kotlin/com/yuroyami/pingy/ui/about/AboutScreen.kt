@@ -109,7 +109,7 @@ fun AboutScreenUI() {
             Spacer(Modifier.height(14.dp))
             Text(
                 text = "v${BuildConfig.versionName}",
-                color = Color(0xFF7C8794),
+                color = Color(0xFF8A95A3),
                 fontSize = 14.sp,
                 fontFamily = interFont,
             )
@@ -123,7 +123,7 @@ fun AboutScreenUI() {
             Spacer(Modifier.height(6.dp))
             Text(
                 text = s.aboutTech,
-                color = Color(0xFF5E6874),
+                color = Color(0xFF8A95A3),
                 fontSize = 12.sp,
                 fontFamily = interFont,
             )
