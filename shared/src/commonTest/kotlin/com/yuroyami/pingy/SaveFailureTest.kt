@@ -46,6 +46,8 @@ internal class FlakyStore(private val failFirst: Int) : StoreApi {
         lastPanels = panels
         return saves > failFirst
     }
+
+    override suspend fun quarantine(): String? = null
 }
 
 /** A store whose writes take a known amount of time to land. */
@@ -63,6 +65,8 @@ internal class SlowStore(private val writeMs: Long) : StoreApi {
         saves++
         return true
     }
+
+    override suspend fun quarantine(): String? = null
 }
 
 /**

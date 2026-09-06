@@ -160,39 +160,7 @@ class PingyViewmodel(
     init {
         PingyLifecycle.viewmodel = this
         viewModelScope.launch {
-            when (val loaded = store.load()) {
-                is StoreLoad.NotInitialized -> {
-                    // First launch is network-inert: no panel, no socket, no
-                    // packet. Seeding a default target here would mean opening
-                    // the app quietly starts an unattended stream to someone
-                    // else's resolver, which nothing on screen would admit to.
-                    cockpitState.value = CockpitState.FirstRun
-                }
-
-                is StoreLoad.Failed -> {
-                    // Never overwrite a file we failed to read: the old behaviour
-                    // turned a transient read error into permanent data loss on
-                    // the next autosave.
-                    savingBlocked = true
-                    cockpitState.value = CockpitState.LoadFailed(loaded.message)
-                    notify(strings.storeUnreadable)
-                }
-
-                is StoreLoad.Loaded -> {
-                    loaded.graphStyle
-                        ?.let { name -> GraphStyle.entries.firstOrNull { it.name == name } }
-                        ?.let { graphStyle.value = it }
-                    loaded.panelLayout
-                        ?.let { name -> PanelLayout.entries.firstOrNull { it.name == name } }
-                        ?.let { panelLayout.value = it }
-
-                    loaded.panels.forEach { spec -> addPanel(spec.ip, spec) }
-                    if (loaded.droppedRecords > 0) {
-                        notify(strings.skippedRecords(loaded.droppedRecords))
-                    }
-                    cockpitState.value = CockpitState.Ready
-                }
-            }
+            loadStore()
 
             launch {
                 merge(graphStyle.map { }, panelLayout.map { }).drop(2).collect { markDirty() }
@@ -200,6 +168,64 @@ class PingyViewmodel(
             launch {
                 saveSignal.debounce(400).collect { persist() }
             }
+        }
+    }
+
+    /** Read the store and put the cockpit into the state it describes. */
+    private suspend fun loadStore() {
+        when (val loaded = store.load()) {
+            is StoreLoad.NotInitialized -> {
+                savingBlocked = false
+                // First launch is network-inert: no panel, no socket, no packet.
+                // Seeding a default target here would mean opening the app
+                // quietly starts an unattended stream to someone else's
+                // resolver, which nothing on screen would admit to.
+                cockpitState.value = CockpitState.FirstRun
+            }
+
+            is StoreLoad.Failed -> {
+                // Never overwrite a file we failed to read: the old behaviour
+                // turned a transient read error into permanent data loss on the
+                // next autosave.
+                savingBlocked = true
+                cockpitState.value = CockpitState.LoadFailed(loaded.message)
+                notify(strings.storeUnreadable)
+            }
+
+            is StoreLoad.Loaded -> {
+                savingBlocked = false
+                loaded.graphStyle
+                    ?.let { name -> GraphStyle.entries.firstOrNull { it.name == name } }
+                    ?.let { graphStyle.value = it }
+                loaded.panelLayout
+                    ?.let { name -> PanelLayout.entries.firstOrNull { it.name == name } }
+                    ?.let { panelLayout.value = it }
+
+                loaded.panels.forEach { spec -> addPanel(spec.ip, spec) }
+                if (loaded.droppedRecords > 0) {
+                    notify(strings.skippedRecords(loaded.droppedRecords))
+                }
+                cockpitState.value = CockpitState.Ready
+            }
+        }
+    }
+
+    /** Try reading the store again, for instance after fixing a permission. */
+    fun retryLoad() {
+        viewModelScope.launch { loadStore() }
+    }
+
+    /**
+     * Move an unreadable store aside and start over.
+     *
+     * The old bytes are kept, never deleted: they are the only copy of whatever
+     * the user had, and a failed read is not proof that the content is gone.
+     */
+    fun resetStore() {
+        viewModelScope.launch {
+            store.quarantine()?.let { notify(strings.storeQuarantined(it)) }
+            savingBlocked = false
+            loadStore()
         }
     }
 

@@ -11,10 +11,17 @@ import com.yuroyami.pingy.utils.loggye
 import com.yuroyami.pingy.utils.pingyDataStoreDir
 import com.yuroyami.pingy.utils.sanitizeIntervalMs
 import com.yuroyami.pingy.utils.sanitizePayloadSize
+import kotlin.concurrent.Volatile
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import okio.FileSystem
 import okio.Path.Companion.toPath
 
 /** Hard cap on restored panels. Each one owns a socket, a thread and history. */
@@ -129,16 +136,42 @@ interface StoreApi {
 
     /** Returns true when the write actually landed. */
     suspend fun save(panels: List<PanelSpec>, graphStyle: String, panelLayout: String): Boolean
+
+    /**
+     * Move an unreadable store aside so a fresh one can be written, and return
+     * the name it was kept under. Never deletes: the old bytes are the only
+     * copy of whatever the user had.
+     */
+    suspend fun quarantine(): String?
 }
 
 /** Preferences DataStore wrapper. One instance per process. */
 object PingyStore : StoreApi {
 
-    private val store: DataStore<Preferences> by lazy {
-        PreferenceDataStoreFactory.createWithPath {
-            "${pingyDataStoreDir()}/$STORE_FILE_NAME".toPath()
+    private val storeDir: String by lazy { pingyDataStoreDir() }
+
+    /** Where the preferences live. Exposed for tests that stage a broken file. */
+    internal val storeFilePath: String get() = "$storeDir/$STORE_FILE_NAME"
+
+    // Held rather than lazy, so quarantining a broken file can drop the cached
+    // instance. DataStore caches its read, so a fresh one is the only way to
+    // see that the file underneath is gone. Each instance owns a scope, because
+    // DataStore refuses a second instance for a file until the first one's
+    // scope has completed.
+    @Volatile
+    private var instance: DataStore<Preferences>? = null
+
+    @Volatile
+    private var instanceScope: CoroutineScope? = null
+
+    private val store: DataStore<Preferences>
+        get() = instance ?: run {
+            val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+            instanceScope = scope
+            PreferenceDataStoreFactory
+                .createWithPath(scope = scope) { storeFilePath.toPath() }
+                .also { instance = it }
         }
-    }
 
     // Cancellation is rethrown rather than reported as a read or write fault.
     // Catching it turned "the caller went away" into "your file is corrupt".
@@ -168,5 +201,38 @@ object PingyStore : StoreApi {
     } catch (e: Exception) {
         loggye("PingyStore: save failed", e)
         false
+    }
+
+    override suspend fun quarantine(): String? = try {
+        val fs = FileSystem.SYSTEM
+        val from = storeFilePath.toPath()
+        val moved = if (fs.exists(from)) {
+            var name = "$STORE_FILE_NAME.bak"
+            var n = 1
+            while (fs.exists("$storeDir/$name".toPath())) {
+                name = "$STORE_FILE_NAME.bak$n"
+                n++
+            }
+            fs.atomicMove(from, "$storeDir/$name".toPath())
+            name
+        } else {
+            null
+        }
+        // Always start the reader over, whether or not there was a file: a
+        // cached instance would go on serving the read that failed.
+        releaseInstance()
+        moved
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        loggye("PingyStore: could not move the unreadable store aside", e)
+        null
+    }
+
+    /** Drop the cached instance so the next read opens the file again. */
+    private fun releaseInstance() {
+        instanceScope?.cancel()
+        instanceScope = null
+        instance = null
     }
 }

@@ -52,16 +52,21 @@ class DnsCancelTest {
 
     @Test
     fun a_join_that_is_cancelled_says_so_instead_of_reporting_success() = runBlocking {
+        val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
         val base = ScriptedTransport()
         val blockingResolver = object : IcmpTransport by base {
             override fun resolve(host: String): String? {
+                entered.countDown()
                 release.await()
                 return base.resolve(host)
             }
         }
         val engine = PingEngine("slow.example", 32, 0L, blockingResolver)
         engine.start { }
+        // The loop shares a bounded dispatcher with every other engine in the
+        // suite, so wait until it is really inside the resolver.
+        assertTrue(entered.await(10, TimeUnit.SECONDS), "the engine never reached the resolver")
 
         val finished = withTimeoutOrNull(200) { engine.stopAndJoin() }
         release.countDown()

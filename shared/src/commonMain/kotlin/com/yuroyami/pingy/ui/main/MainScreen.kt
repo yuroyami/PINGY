@@ -196,14 +196,22 @@ fun MainScreenUI() {
             val layout by viewmodel.panelLayout.collectAsState()
             val cockpit by viewmodel.cockpitState.collectAsState()
 
-            // Consume the whole PaddingValues. Only the top was applied before,
-            // so the last panel sat under the home indicator.
-            val contentModifier = Modifier
-                .fillMaxSize()
-                .padding(pv)
-
             val inter = Font(Res.font.Inter_Regular)
             val stateFont = remember(inter) { FontFamily(inter) }
+
+            // Consume the whole PaddingValues. Only the top was applied before,
+            // so the last panel sat under the home indicator.
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .padding(pv)
+            ) {
+            // A failed read used to be visible only on the empty screen, so
+            // adding a panel hid it and every later save went nowhere in
+            // silence. The bar stays until the store is readable again.
+            if (cockpit is CockpitState.LoadFailed) StoreRecoveryBar(stateFont)
+
+            val contentModifier = Modifier.fillMaxSize()
 
             if (viewmodel.panels.isEmpty()) {
                 Box(contentModifier) {
@@ -214,7 +222,7 @@ fun MainScreenUI() {
                         is CockpitState.Ready -> CockpitEmpty(stateFont)
                     }
                 }
-                return@Scaffold
+                return@Column
             }
 
             when (layout) {
@@ -308,7 +316,55 @@ fun MainScreenUI() {
                     }
                 }
             }
+            }
         }
+    }
+}
+
+/**
+ * Shown while the saved cockpit could not be read.
+ *
+ * Saving is blocked in that state so the unreadable file is never overwritten,
+ * which is right, but there was no way out of it: the user could build a whole
+ * cockpit that was silently never saved.
+ */
+@Composable
+private fun StoreRecoveryBar(fontFamily: FontFamily) {
+    val viewmodel = LocalViewmodel.current
+    val s = strings
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0x33FF5252))
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = s.storeUnreadable,
+            color = Color(0xFFFF8A80),
+            fontSize = 11.sp,
+            fontFamily = fontFamily,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        Text(
+            text = s.storeRetry,
+            color = Paletting.SGN,
+            fontSize = 12.sp,
+            fontFamily = fontFamily,
+            modifier = Modifier
+                .clickable(role = Role.Button) { viewmodel.retryLoad() }
+                .padding(horizontal = 10.dp, vertical = 12.dp),
+        )
+        Text(
+            text = s.storeStartFresh,
+            color = Paletting.SGN,
+            fontSize = 12.sp,
+            fontFamily = fontFamily,
+            modifier = Modifier
+                .clickable(role = Role.Button) { viewmodel.resetStore() }
+                .padding(horizontal = 10.dp, vertical = 12.dp),
+        )
     }
 }
 
