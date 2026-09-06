@@ -24,3 +24,15 @@ exists. There is no bounty.
 
 For ordinary bugs and feature requests, use
 <https://github.com/yuroyami/PINGY/issues>.
+
+## Release key custody
+
+The Android release key lives at `keystore/pingykey.jks` with its passwords in
+`local.properties`. Both are ignored by Git and both must be mode 0600. The
+build prints a warning if the keystore is readable by other accounts on the
+machine.
+
+Keep one encrypted backup of the key outside the working copy. Google Play ties
+an app's identity to its signing key: losing it without Play App Signing
+enrolment means publishing under a new application id, and every existing
+install stops receiving updates.

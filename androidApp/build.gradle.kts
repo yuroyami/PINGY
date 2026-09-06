@@ -1,4 +1,5 @@
 import com.android.build.api.variant.AndroidComponentsExtension
+import java.nio.file.Files
 import java.util.Properties
 import javax.inject.Inject
 
@@ -23,6 +24,18 @@ android {
         file("${rootDir}/keystore/pingykey.jks").takeIf { it.exists() }?.let { keystoreFile ->
             create("keystore") {
                 storeFile = keystoreFile
+
+                // Mode 0644 lets any other account on the machine read the key
+                // whenever the directories above it allow a traverse.
+                runCatching {
+                    val perms = Files.getPosixFilePermissions(keystoreFile.toPath())
+                    if (perms.any { p -> p.name.startsWith("GROUP") || p.name.startsWith("OTHERS") }) {
+                        logger.warn(
+                            "keystore/pingykey.jks is readable by other accounts. " +
+                                "Run: chmod 600 keystore/pingykey.jks"
+                        )
+                    }
+                }
 
                 val localProperties = Properties().apply {
                     val file = File("local.properties")
