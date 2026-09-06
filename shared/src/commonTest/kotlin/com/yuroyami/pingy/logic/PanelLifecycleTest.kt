@@ -117,6 +117,31 @@ class PanelLifecycleTest {
     }
 
     @Test
+    fun a_panel_paused_by_hand_stays_paused_across_a_foreground_cycle() = runTest {
+        val engines = mutableListOf<FakeEngine>()
+        val panel = panelWith(engines, testScheduler)
+        try {
+            panel.startPinging()
+            runCurrent()
+            engines[0].stopGate.complete(Unit)
+
+            panel.stopPingingAndJoin()      // the user paused this target
+            runCurrent()
+            assertFalse(panel.wantsToRun)
+
+            // The app leaves the foreground and comes back. A pause records
+            // intent, so a manually stopped panel is not among the ones it
+            // stopped, and coming back must not start it.
+            panel.stopPingingAndJoin()
+            runCurrent()
+            assertFalse(panel.wantsToRun, "a hand paused target must not come back on its own")
+            assertEquals(1, engines.size)
+        } finally {
+            panel.close()
+        }
+    }
+
+    @Test
     fun starting_twice_keeps_one_engine() = runTest {
         val engines = mutableListOf<FakeEngine>()
         val panel = panelWith(engines, testScheduler)

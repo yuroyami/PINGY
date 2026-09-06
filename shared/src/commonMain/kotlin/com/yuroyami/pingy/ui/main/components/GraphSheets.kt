@@ -209,6 +209,7 @@ internal fun PingPanel.SettingsSheet(fontFamily: FontFamily) {
     val canvasHeightFractionVal by canvasHeightFraction.collectAsState()
     val persistVal by persistAcrossSessions.collectAsState()
     val resolvedVal by resolvedAddress.collectAsState()
+    val runningVal by running.collectAsState()
 
     Column(
         modifier = Modifier
@@ -292,26 +293,46 @@ internal fun PingPanel.SettingsSheet(fontFamily: FontFamily) {
             steps = 18, // 100ms steps
             fontFamily = fontFamily,
         ) { roof.value = it.toInt() }
-        // Reset needs a control that can be seen and read out. A long press on
-        // the graph alone is invisible to a screen reader and hints at nothing.
-        Text(
-            text = s.resetPanelSettings,
-            color = Paletting.SGN,
-            fontSize = 12.sp,
-            fontFamily = fontFamily,
-            modifier = Modifier
-                .padding(top = 6.dp)
-                .clickable(role = Role.Button) {
-                    val before = preferenceSnapshot()
-                    resetPreferences()
-                    viewmodel.notify(
-                        text = s.settingsWereReset,
-                        actionLabel = s.undo,
-                        action = { restorePreferences(before) },
-                    )
-                }
-                .padding(vertical = 14.dp, horizontal = 4.dp),
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Reset needs a control that can be seen and read out. A long press
+            // on the graph alone is invisible to a screen reader and hints at
+            // nothing.
+            Text(
+                text = s.resetPanelSettings,
+                color = Paletting.SGN,
+                fontSize = 12.sp,
+                fontFamily = fontFamily,
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .clickable(role = Role.Button) {
+                        val before = preferenceSnapshot()
+                        resetPreferences()
+                        viewmodel.notify(
+                            text = s.settingsWereReset,
+                            actionLabel = s.undo,
+                            action = { restorePreferences(before) },
+                        )
+                    }
+                    .padding(vertical = 14.dp, horizontal = 4.dp),
+            )
+            // Stopping a target used to mean deleting it, which throws away the
+            // very history someone pauses in order to read.
+            Text(
+                text = if (runningVal) s.pauseTarget(ip) else s.resumeTarget(ip),
+                color = Paletting.SGN,
+                fontSize = 12.sp,
+                fontFamily = fontFamily,
+                textAlign = TextAlign.End,
+                modifier = Modifier
+                    .clickable(role = Role.Button) {
+                        if (runningVal) stopPinging() else startPinging()
+                    }
+                    .padding(vertical = 14.dp, horizontal = 4.dp),
+            )
+        }
 
         CompactSlider(
             label = s.settingHeight,

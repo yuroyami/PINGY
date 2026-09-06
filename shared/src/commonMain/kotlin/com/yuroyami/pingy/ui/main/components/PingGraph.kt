@@ -311,9 +311,11 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
 
     // The readout's hue glides between samples; the text itself stays discrete.
     val readoutColor by animateColorAsState(
-        targetValue = when (readoutKind) {
-            PingKind.REPLY -> readoutValue?.let(::readablePingTextColor) ?: StatsDimColor
-            PingKind.TIMEOUT, PingKind.LOCAL_FAULT -> FizzleColor
+        targetValue = when {
+            !isRunning -> StatsDimColor
+            readoutKind == PingKind.REPLY ->
+                readoutValue?.let(::readablePingTextColor) ?: StatsDimColor
+            readoutKind == PingKind.TIMEOUT || readoutKind == PingKind.LOCAL_FAULT -> FizzleColor
             else -> StatsDimColor
         },
         animationSpec = tween(durationMillis = 300),
@@ -321,12 +323,17 @@ fun PingPanel.PingGraphView(modifier: Modifier = Modifier) {
 
     // What the plate says. A local fault gets its own mark: nothing was
     // measured, so a red cross meaning "the target did not answer" would lie.
-    val readoutText = when (readoutKind) {
-        PingKind.REPLY -> readoutValue?.let { "$it ms" }
-        PingKind.TIMEOUT -> "×"
-        PingKind.LOCAL_FAULT -> "!"
-        PingKind.INTERRUPTED, PingKind.UNOBSERVED -> "?"
-        PingKind.PENDING, null -> null
+    val readoutText = if (!isRunning) {
+        // A paused instrument and a stalled one look identical otherwise.
+        s.paused
+    } else {
+        when (readoutKind) {
+            PingKind.REPLY -> readoutValue?.let { "$it ms" }
+            PingKind.TIMEOUT -> "×"
+            PingKind.LOCAL_FAULT -> "!"
+            PingKind.INTERRUPTED, PingKind.UNOBSERVED -> "?"
+            PingKind.PENDING, null -> null
+        }
     }
 
     val inter = Font(Res.font.Inter_Regular)
