@@ -1,15 +1,14 @@
 # Where these licenses come from
 
-These are the master copies of every license text that ships inside Pingy on
-both platforms. The Android copies under
-`androidApp/src/main/assets/legal/licenses` must stay byte-for-byte identical,
-and CI checks every `*.txt` file for that. The iOS project ships this directory
-as a folder resource.
+These are the master copies of every license text that ships inside Pingy.
+The Android build copies them into the packaged assets at build time, and CI
+checks the copies inside the APK against these files. The iOS and desktop
+artifacts do not ship them yet.
 
 ## Native graphics inventory
 
-Compose Multiplatform `1.11.1` resolves Skiko `0.144.6`. That Skiko release
-pins JetBrains Skia tag `m144-22f58c9fd4`, full commit
+Compose Multiplatform `1.11.0-beta02` resolves Skiko `0.144.5`. The inventory
+below was taken against Skia tag `m144-22f58c9fd4`, full commit
 `22f58c9fd43d55bde818821c04b48fda5d7ec939`. The Apple arm64 bundle that was
 opened and inspected to produce this inventory is:
 
@@ -19,7 +18,7 @@ SHA-256 995b795675795e8d8127f6ca882a1a3bdf72648ab2dd21134f758c01eaa3710c
 ```
 
 Two sources feed this list. The linked libraries come from Skiko's native task
-configuration at tag `v0.144.6`, and the pinned source revisions come from the
+configuration, and the pinned source revisions come from the
 Skia tag's `DEPS` file. Reading the static libraries inside the archive is a
 third, independent check that Skia, HarfBuzz, ICU, PNG, JPEG, WebP, Wuffs,
 Expat, zlib, PIEX, and DNG are all really in there.

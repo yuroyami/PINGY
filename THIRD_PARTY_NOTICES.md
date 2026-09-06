@@ -4,9 +4,11 @@ Pingy bundles the open-source components listed below. Every one of them is
 licensed under the **Apache License, Version 2.0**; the full text is in
 [licenses/APACHE-2.0.txt](licenses/APACHE-2.0.txt).
 
-This list is generated from the Android release runtime classpath after Gradle
-resolves it, so it names what actually ships, not only what the build files ask
-for directly. Regenerate it whenever the dependency set changes.
+The component list is generated from the Android release runtime classpath
+after Gradle resolves it, so it names what actually ships, not only what the
+build files ask for directly. The desktop and iOS builds add the native
+graphics stack listed under "Rendering engine". Regenerate all of it whenever
+the dependency set changes.
 
 Pingy itself is licensed under the GNU Affero General Public License v3.0; see
 [LICENSE](LICENSE) and [NOTICE](NOTICE).
@@ -58,6 +60,14 @@ Apache-2.0. 128 modules across 41 groups:
 - `androidx.versionedparcelable`: `versionedparcelable`
 - `androidx.viewpager`: `viewpager`
 - `androidx.window`: `window`, `window-core`, `window-core-android`
+
+### Cafe Adriel
+
+Apache-2.0. 1 module in 1 group:
+
+- `cafe.adriel.lyricist`: `lyricist` (with its `lyricist-core` and per-platform
+  artifacts). Supplies the runtime translation lookup for the 21 language
+  catalogues.
 
 ### Compose Multiplatform (JetBrains)
 
@@ -121,6 +131,14 @@ Apache-2.0. 4 modules in 1 group:
 Apache-2.0. 13 modules in 1 group:
 
 - `org.jetbrains.kotlinx`: `atomicfu`, `atomicfu-jvm`, `kotlinx-coroutines-android`, `kotlinx-coroutines-bom`, `kotlinx-coroutines-core`, `kotlinx-coroutines-core-jvm`, `kotlinx-datetime`, `kotlinx-datetime-jvm`, `kotlinx-serialization-bom`, `kotlinx-serialization-core`, `kotlinx-serialization-core-jvm`, `kotlinx-serialization-json`, `kotlinx-serialization-json-jvm`
+
+### Rendering engine (desktop and iOS)
+
+Compose Multiplatform `1.11.0-beta02` resolves Skiko `0.144.5`, which is not on
+the Android classpath and therefore not in the list above. Skiko is Apache-2.0
+and embeds Skia together with HarfBuzz, ICU, libpng, libjpeg-turbo, WebP,
+Wuffs, Expat, zlib, PIEX and the Adobe DNG SDK. Their license texts are in
+`licenses/`, one file per component.
 
 ## Native code
 
